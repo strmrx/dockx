@@ -10,23 +10,28 @@ cannot do it. No shipped plugin does it. The Qt framework OBS is built on suppor
 ## The product
 A native OBS plugin that flips that switch and then productizes layout freedom:
 
-**v0.1 (prototype, built 2026-07-29):** enable dock nesting + Tools > DockX status dialog.
-Goal: prove nested drag-and-drop works and survives OBS restarts (Qt saves/restores
-nested layouts through the same saveState mechanism OBS already uses).
+**v0.1 (2026-07-29): VALIDATED.** Dock nesting works on Joey's rig, clean and not janky.
+The one existential risk is retired. Full vertical chat + stacked column achieved.
 
-**Risk to retire first:** nesting may make interactive resizing glitchy (likely why OBS
-ships with it off). The prototype verdict decides everything downstream.
+**v0.3 (2026-07-29, shipped same day):** saved dock layouts (apply/rename/delete/undo +
+per-layout hotkeys), search bars injected into the native Scenes and Sources panels,
+scene name color coding, and a Tools > DockX dialog with visible settings for everything.
 
-## Roadmap candidates (post-prototype, in rough order)
-- Layout presets: save/restore named dock layouts, one click (jrDockie exists but is
-  clunky; ours would be branded, polished, and layout-nesting aware)
+**Direction (Joey, 2026-07-29): DockX replaces LoadoutX.** The native plugin does
+everything the browser dock did, better, with zero setup (no websocket password dance).
+LoadoutX is frozen; its features migrate here.
+
+## Roadmap (in rough order)
 - Starter layouts gallery: "Chat right, tools left", "Podcast", "Just Chatting" etc.
-- A settings toggle (on/off without uninstalling), per Joey's options-get-visible-settings rule
+- Layout export/share (streamers trading layouts = the community moment + marketing)
+- Port LoadoutX features natively: source loadouts (save/restore source positions),
+  one click scene lock, profile/collection switching
 - Guided drag hints (first-run tip explaining edge drops vs center drops = tabs)
 - macOS build (template supports it; needs a Mac or CI to compile)
 - Distribution: obsproject.com forum resource (free, the funnel) + strmrx.com page;
   GPL means source is public, the moat is polish + first-mover + StrmrX brand
-- Possible tie-in: LoadoutX advertises DockX (and vice versa); both are "your OBS, your way"
+- The real name: "DockX" is a working title; by feature parity it's bigger than docks
+  ("your OBS, your way" is the mission statement, and it was LoadoutX's tagline)
 
 ## Business notes (Joey, 2026-07-29)
 Joey's read: nobody has done this = there is a business here. First good tool for a job
