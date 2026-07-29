@@ -24,3 +24,9 @@
 
 # Exclude CMake build number cache
 /cmake/.CMakeBuildNumber
+
+# StrmrX project files
+!buildx.json
+!CLAUDE.md
+!handoff.md
+!/docs

@@ -1,0 +1,7 @@
+{
+  "blurb": "Unlock OBS dock layouts: a native OBS plugin that lets docks sit in real columns, like a full height chat beside a stacked panel column. The layout OBS itself refuses to do.",
+  "stack": "Native OBS plugin (C++ / Qt) · obs-plugintemplate",
+  "status": "prototype",
+  "category": "tool",
+  "url": ""
+}
