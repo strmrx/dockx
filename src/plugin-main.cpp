@@ -34,6 +34,9 @@ static void on_frontend_event(enum obs_frontend_event event, void *)
 		dockx::panels::initAfterLoad();
 		break;
 	case OBS_FRONTEND_EVENT_SCENE_CHANGED:
+		dockx::panels::autoSceneLayout();
+		dockx::panels::refreshSoon();
+		break;
 	case OBS_FRONTEND_EVENT_PREVIEW_SCENE_CHANGED:
 	case OBS_FRONTEND_EVENT_SCENE_LIST_CHANGED:
 	case OBS_FRONTEND_EVENT_SCENE_COLLECTION_CHANGED:

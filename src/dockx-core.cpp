@@ -17,6 +17,8 @@ if the UI does not look the way we expect, do NOTHING. Never crash OBS.
 #include <QBoxLayout>
 #include <QBrush>
 #include <QColor>
+#include <QDockWidget>
+#include <QEvent>
 #include <QLabel>
 #include <QPainter>
 #include <QPixmap>
@@ -27,6 +29,8 @@ if the UI does not look the way we expect, do NOTHING. Never crash OBS.
 #include <QMetaObject>
 #include <QPointer>
 #include <QTimer>
+
+#include <algorithm>
 
 namespace dockx {
 
@@ -96,12 +100,16 @@ void stateLoad()
 	obs_data_set_default_bool(d, "scene_search", true);
 	obs_data_set_default_bool(d, "source_search", true);
 	obs_data_set_default_bool(d, "scene_colors", true);
+	obs_data_set_default_bool(d, "dock_colors", true);
 	obs_data_set_default_int(d, "next_id", 1);
 
 	g_state.nesting = obs_data_get_bool(d, "nesting");
 	g_state.sceneSearch = obs_data_get_bool(d, "scene_search");
 	g_state.sourceSearch = obs_data_get_bool(d, "source_search");
 	g_state.sceneColors = obs_data_get_bool(d, "scene_colors");
+	g_state.dockColors = obs_data_get_bool(d, "dock_colors");
+	g_state.sepSize = (int)obs_data_get_int(d, "sep_size");
+	g_state.sepColor = QString::fromUtf8(obs_data_get_string(d, "sep_color"));
 	g_state.nextId = (int)obs_data_get_int(d, "next_id");
 
 	obs_data_t *colors = obs_data_get_obj(d, "colors");
@@ -114,6 +122,30 @@ void stateLoad()
 				g_state.colors[QString::fromUtf8(scene)] = QString::fromUtf8(hex);
 		}
 		obs_data_release(colors);
+	}
+
+	obs_data_t *dockColors = obs_data_get_obj(d, "dock_color_map");
+	if (dockColors) {
+		for (obs_data_item_t *item = obs_data_first(dockColors); item;
+		     obs_data_item_next(&item)) {
+			const char *key = obs_data_item_get_name(item);
+			const char *hex = obs_data_item_get_string(item);
+			if (key && hex && *hex)
+				g_state.dockColorMap[QString::fromUtf8(key)] = QString::fromUtf8(hex);
+		}
+		obs_data_release(dockColors);
+	}
+
+	obs_data_t *autoRules = obs_data_get_obj(d, "scene_layouts");
+	if (autoRules) {
+		for (obs_data_item_t *item = obs_data_first(autoRules); item;
+		     obs_data_item_next(&item)) {
+			const char *scene = obs_data_item_get_name(item);
+			long long id = obs_data_item_get_int(item);
+			if (scene && id > 0)
+				g_state.sceneLayouts[QString::fromUtf8(scene)] = (int)id;
+		}
+		obs_data_release(autoRules);
 	}
 
 	obs_data_array_t *arr = obs_data_get_array(d, "layouts");
@@ -152,6 +184,9 @@ void stateSave()
 	obs_data_set_bool(d, "scene_search", g_state.sceneSearch);
 	obs_data_set_bool(d, "source_search", g_state.sourceSearch);
 	obs_data_set_bool(d, "scene_colors", g_state.sceneColors);
+	obs_data_set_bool(d, "dock_colors", g_state.dockColors);
+	obs_data_set_int(d, "sep_size", g_state.sepSize);
+	obs_data_set_string(d, "sep_color", g_state.sepColor.toUtf8().constData());
 	obs_data_set_int(d, "next_id", g_state.nextId);
 
 	obs_data_t *colors = obs_data_create();
@@ -160,6 +195,21 @@ void stateSave()
 				    it.value().toUtf8().constData());
 	obs_data_set_obj(d, "colors", colors);
 	obs_data_release(colors);
+
+	obs_data_t *dockColors = obs_data_create();
+	for (auto it = g_state.dockColorMap.constBegin(); it != g_state.dockColorMap.constEnd();
+	     ++it)
+		obs_data_set_string(dockColors, it.key().toUtf8().constData(),
+				    it.value().toUtf8().constData());
+	obs_data_set_obj(d, "dock_color_map", dockColors);
+	obs_data_release(dockColors);
+
+	obs_data_t *autoRules = obs_data_create();
+	for (auto it = g_state.sceneLayouts.constBegin(); it != g_state.sceneLayouts.constEnd();
+	     ++it)
+		obs_data_set_int(autoRules, it.key().toUtf8().constData(), it.value());
+	obs_data_set_obj(d, "scene_layouts", autoRules);
+	obs_data_release(autoRules);
 
 	obs_data_array_t *arr = obs_data_array_create();
 	for (Layout &l : g_state.layouts) {
@@ -325,6 +375,134 @@ static void filterSources()
 	}
 }
 
+/* ---- dock borders & separators ---- */
+
+/* every stylesheet we put on a dock starts with this, so we never
+   clobber a stylesheet somebody else (theme, other plugin) set */
+static const char *DOCK_QSS_MARK = "/*dockx*/";
+static const char *SEP_MARK_BEGIN = "/*dockx-sep*/";
+static const char *SEP_MARK_END = "/*dockx-sep-end*/";
+
+static QString dockKey(const QDockWidget *dock)
+{
+	const QString obj = dock->objectName();
+	return obj.isEmpty() ? dock->windowTitle() : obj;
+}
+
+/* black or white, whichever reads best on this background */
+static QString contrastText(const QColor &c)
+{
+	const double lum = 0.299 * c.red() + 0.587 * c.green() + 0.114 * c.blue();
+	return lum > 150 ? QStringLiteral("#000000") : QStringLiteral("#ffffff");
+}
+
+QList<DockInfo> listDocks()
+{
+	QList<DockInfo> out;
+	QMainWindow *m = mainWindow();
+	if (!m)
+		return out;
+	const QList<QDockWidget *> docks = m->findChildren<QDockWidget *>();
+	for (QDockWidget *d : docks) {
+		if (d->windowTitle().isEmpty())
+			continue;
+		out.append({dockKey(d), d->windowTitle()});
+	}
+	std::sort(out.begin(), out.end(), [](const DockInfo &a, const DockInfo &b) {
+		return a.title.compare(b.title, Qt::CaseInsensitive) < 0;
+	});
+	return out;
+}
+
+static void applyDockColorsNow()
+{
+	QMainWindow *m = mainWindow();
+	if (!m)
+		return;
+	const QList<QDockWidget *> docks = m->findChildren<QDockWidget *>();
+	for (QDockWidget *d : docks) {
+		const QString hex =
+			state().dockColors ? state().dockColorMap.value(dockKey(d)) : QString();
+		const QString current = d->styleSheet();
+		if (hex.isEmpty()) {
+			/* only remove styles we put there ourselves */
+			if (current.startsWith(DOCK_QSS_MARK))
+				d->setStyleSheet(QString());
+			continue;
+		}
+		/* if someone else styled this dock, leave it alone */
+		if (!current.isEmpty() && !current.startsWith(DOCK_QSS_MARK))
+			continue;
+		const QColor c(hex);
+		const QString qss = QString("%1 QDockWidget { border: 2px solid %2; color: %3; } "
+					    "QDockWidget::title { background: %2; }")
+					    .arg(DOCK_QSS_MARK, hex, contrastText(c));
+		if (current != qss)
+			d->setStyleSheet(qss);
+	}
+}
+
+void applyDockColors()
+{
+	applyDockColorsNow();
+}
+
+void applySeparators()
+{
+	QMainWindow *m = mainWindow();
+	if (!m)
+		return;
+	QString qss = m->styleSheet();
+	/* strip our previous block, keep everything anyone else added */
+	int b = qss.indexOf(SEP_MARK_BEGIN);
+	if (b >= 0) {
+		int e = qss.indexOf(SEP_MARK_END);
+		if (e >= 0)
+			qss.remove(b, e + (int)strlen(SEP_MARK_END) - b);
+		else
+			qss.truncate(b);
+	}
+	if (state().sepSize > 0 || !state().sepColor.isEmpty()) {
+		QString block = QString(SEP_MARK_BEGIN) + " QMainWindow::separator {";
+		if (state().sepSize > 0)
+			block += QString(" width: %1px; height: %1px;").arg(state().sepSize);
+		if (!state().sepColor.isEmpty())
+			block += QString(" background: %1;").arg(state().sepColor);
+		block += " } ";
+		if (!state().sepColor.isEmpty())
+			block += QString("QMainWindow::separator:hover { background: %1; } ")
+					 .arg(QColor(state().sepColor).lighter(130).name());
+		qss += block + SEP_MARK_END;
+	}
+	m->setStyleSheet(qss);
+}
+
+/* browser docks and plugin docks appear after we first load; recolor
+   whenever a new child shows up under the main window */
+class DockWatcher : public QObject {
+public:
+	using QObject::QObject;
+
+protected:
+	bool eventFilter(QObject *obj, QEvent *ev) override
+	{
+		if (ev->type() == QEvent::ChildAdded)
+			refreshSoon();
+		return QObject::eventFilter(obj, ev);
+	}
+};
+
+static QPointer<DockWatcher> dockWatcher;
+
+static void watchDocks()
+{
+	QMainWindow *m = mainWindow();
+	if (!m || dockWatcher)
+		return;
+	dockWatcher = new DockWatcher(m);
+	m->installEventFilter(dockWatcher);
+}
+
 static void applySceneColorsNow()
 {
 	QListWidget *list = sceneList();
@@ -379,6 +557,7 @@ static void refreshNow()
 		return;
 	watchModels();
 	applySceneColorsNow();
+	applyDockColorsNow();
 	filterScenes();
 	filterSources();
 }
@@ -451,6 +630,24 @@ void applySearchBars()
 	}
 }
 
+void autoSceneLayout()
+{
+	obs_source_t *scene = obs_frontend_get_current_scene();
+	if (!scene)
+		return;
+	const QString name = QString::fromUtf8(obs_source_get_name(scene));
+	obs_source_release(scene);
+	const int id = state().sceneLayouts.value(name, 0);
+	if (!id || !findLayout(id))
+		return;
+	QMainWindow *m = mainWindow();
+	if (!m)
+		return;
+	/* never rebuild docks from inside the frontend event callback */
+	QMetaObject::invokeMethod(
+		m, [id]() { applyLayout(id); }, Qt::QueuedConnection);
+}
+
 bool applyLayout(int id)
 {
 	Layout *l = findLayout(id);
@@ -479,6 +676,8 @@ void initAfterLoad()
 {
 	applyNesting();
 	applySearchBars();
+	applySeparators();
+	watchDocks();
 	refreshNow();
 }
 

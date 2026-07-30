@@ -11,14 +11,17 @@ GPL v2, see plugin-main.cpp for the full notice.
 
 #include <QCheckBox>
 #include <QColorDialog>
+#include <QComboBox>
 #include <QDialog>
 #include <QHBoxLayout>
 #include <QInputDialog>
+#include <QKeySequenceEdit>
 #include <QLabel>
 #include <QListWidget>
 #include <QMainWindow>
 #include <QMessageBox>
 #include <QPushButton>
+#include <QSpinBox>
 #include <QTabWidget>
 #include <QVBoxLayout>
 
@@ -45,12 +48,161 @@ static QStringList sceneNames()
 static const char *PRESET_COLORS[] = {"#e5534b", "#f0883e", "#e3b341", "#57ab5a",
 				      "#39c5cf", "#539bf5", "#986ee2", "#e275ad"};
 
+/* one row of preset swatches + Custom + No color, calling apply(hex) */
+static void addPaletteRow(QWidget *tab, QVBoxLayout *v, QDialog *dlg,
+			  std::function<void(const QString &)> apply)
+{
+	QHBoxLayout *row = new QHBoxLayout();
+	for (const char *hex : PRESET_COLORS) {
+		QPushButton *b = new QPushButton(tab);
+		b->setFixedSize(26, 26);
+		b->setStyleSheet(QString("background:%1; border-radius:5px; border:none;")
+					 .arg(hex));
+		b->setToolTip("Use this color");
+		QString h = QString::fromUtf8(hex);
+		QObject::connect(b, &QPushButton::clicked, tab, [apply, h]() { apply(h); });
+		row->addWidget(b);
+	}
+	QPushButton *customBtn = new QPushButton("Custom", tab);
+	QObject::connect(customBtn, &QPushButton::clicked, dlg, [dlg, apply]() {
+		QColor c = QColorDialog::getColor(Qt::white, dlg, "Pick a color");
+		if (c.isValid())
+			apply(c.name());
+	});
+	QPushButton *noneBtn = new QPushButton("No color", tab);
+	QObject::connect(noneBtn, &QPushButton::clicked, tab, [apply]() { apply(QString()); });
+	row->addWidget(customBtn);
+	row->addWidget(noneBtn);
+	row->addStretch(1);
+	v->addLayout(row);
+}
+
+/* ---- hotkey binding from inside the dialog ---- */
+
+static QString qtKeyToObsName(int key)
+{
+	if (key >= Qt::Key_A && key <= Qt::Key_Z)
+		return QString("OBS_KEY_%1").arg(QChar((char)('A' + (key - Qt::Key_A))));
+	if (key >= Qt::Key_0 && key <= Qt::Key_9)
+		return QString("OBS_KEY_%1").arg(key - Qt::Key_0);
+	if (key >= Qt::Key_F1 && key <= Qt::Key_F24)
+		return QString("OBS_KEY_F%1").arg(key - Qt::Key_F1 + 1);
+	switch (key) {
+	case Qt::Key_Space:
+		return "OBS_KEY_SPACE";
+	case Qt::Key_Return:
+		return "OBS_KEY_RETURN";
+	case Qt::Key_Enter:
+		return "OBS_KEY_ENTER";
+	case Qt::Key_Insert:
+		return "OBS_KEY_INSERT";
+	case Qt::Key_Delete:
+		return "OBS_KEY_DELETE";
+	case Qt::Key_Home:
+		return "OBS_KEY_HOME";
+	case Qt::Key_End:
+		return "OBS_KEY_END";
+	case Qt::Key_PageUp:
+		return "OBS_KEY_PAGEUP";
+	case Qt::Key_PageDown:
+		return "OBS_KEY_PAGEDOWN";
+	case Qt::Key_Left:
+		return "OBS_KEY_LEFT";
+	case Qt::Key_Right:
+		return "OBS_KEY_RIGHT";
+	case Qt::Key_Up:
+		return "OBS_KEY_UP";
+	case Qt::Key_Down:
+		return "OBS_KEY_DOWN";
+	case Qt::Key_Comma:
+		return "OBS_KEY_COMMA";
+	case Qt::Key_Period:
+		return "OBS_KEY_PERIOD";
+	case Qt::Key_Semicolon:
+		return "OBS_KEY_SEMICOLON";
+	case Qt::Key_Apostrophe:
+		return "OBS_KEY_APOSTROPHE";
+	case Qt::Key_BracketLeft:
+		return "OBS_KEY_BRACKETLEFT";
+	case Qt::Key_BracketRight:
+		return "OBS_KEY_BRACKETRIGHT";
+	case Qt::Key_Backslash:
+		return "OBS_KEY_BACKSLASH";
+	case Qt::Key_Slash:
+		return "OBS_KEY_SLASH";
+	case Qt::Key_Minus:
+		return "OBS_KEY_MINUS";
+	case Qt::Key_Equal:
+		return "OBS_KEY_EQUAL";
+	default:
+		return QString();
+	}
+}
+
+/* empty sequence removes the binding; returns false if the key is unsupported */
+static bool setLayoutHotkey(Layout *l, const QKeySequence &seq)
+{
+	if (!l || l->hotkey == OBS_INVALID_HOTKEY_ID)
+		return false;
+	obs_data_array_t *arr = obs_data_array_create();
+	if (!seq.isEmpty()) {
+		const QKeyCombination combo = seq[0];
+		const QString name = qtKeyToObsName(combo.key());
+		if (name.isEmpty() ||
+		    obs_key_from_name(name.toUtf8().constData()) == OBS_KEY_NONE) {
+			obs_data_array_release(arr);
+			return false;
+		}
+		obs_data_t *b = obs_data_create();
+		obs_data_set_string(b, "key", name.toUtf8().constData());
+		obs_data_set_bool(b, "shift", combo.keyboardModifiers() & Qt::ShiftModifier);
+		obs_data_set_bool(b, "control", combo.keyboardModifiers() & Qt::ControlModifier);
+		obs_data_set_bool(b, "alt", combo.keyboardModifiers() & Qt::AltModifier);
+		obs_data_set_bool(b, "command", combo.keyboardModifiers() & Qt::MetaModifier);
+		obs_data_array_push_back(arr, b);
+		obs_data_release(b);
+	}
+	obs_hotkey_load(l->hotkey, arr);
+	obs_data_array_release(arr);
+	stateSave();
+	return true;
+}
+
+static QString layoutHotkeyText(const Layout &l)
+{
+	if (l.hotkey == OBS_INVALID_HOTKEY_ID)
+		return QString();
+	obs_data_array_t *arr = obs_hotkey_save(l.hotkey);
+	if (!arr)
+		return QString();
+	QString out;
+	if (obs_data_array_count(arr) > 0) {
+		obs_data_t *b = obs_data_array_item(arr, 0);
+		QString key = QString::fromUtf8(obs_data_get_string(b, "key"));
+		key.remove(QStringLiteral("OBS_KEY_"));
+		QStringList parts;
+		if (obs_data_get_bool(b, "control"))
+			parts << "Ctrl";
+		if (obs_data_get_bool(b, "alt"))
+			parts << "Alt";
+		if (obs_data_get_bool(b, "shift"))
+			parts << "Shift";
+		if (obs_data_get_bool(b, "command"))
+			parts << "Meta";
+		parts << key;
+		out = parts.join("+");
+		obs_data_release(b);
+	}
+	obs_data_array_release(arr);
+	return out;
+}
+
 void showDialog()
 {
 	QMainWindow *main = mainWindow();
 	QDialog dlg(main);
 	dlg.setWindowTitle("DockX");
-	dlg.setMinimumSize(430, 420);
+	dlg.setMinimumSize(520, 460);
 
 	QVBoxLayout *root = new QVBoxLayout(&dlg);
 	QTabWidget *tabs = new QTabWidget(&dlg);
@@ -66,7 +218,11 @@ void showDialog()
 	auto reloadLayouts = [layoutList]() {
 		layoutList->clear();
 		for (const Layout &l : state().layouts) {
-			QListWidgetItem *it = new QListWidgetItem(l.name, layoutList);
+			QString text = l.name;
+			const QString hk = layoutHotkeyText(l);
+			if (!hk.isEmpty())
+				text += QString("   [%1]").arg(hk);
+			QListWidgetItem *it = new QListWidgetItem(text, layoutList);
 			it->setData(Qt::UserRole, l.id);
 		}
 	};
@@ -79,18 +235,25 @@ void showDialog()
 	QHBoxLayout *lb = new QHBoxLayout();
 	QPushButton *saveBtn = new QPushButton("Save current layout", layoutsTab);
 	QPushButton *applyBtn = new QPushButton("Apply", layoutsTab);
-	QPushButton *renameBtn = new QPushButton("Rename", layoutsTab);
-	QPushButton *deleteBtn = new QPushButton("Delete", layoutsTab);
 	QPushButton *undoBtn = new QPushButton("Undo apply", layoutsTab);
 	lb->addWidget(saveBtn);
 	lb->addWidget(applyBtn);
-	lb->addWidget(renameBtn);
-	lb->addWidget(deleteBtn);
 	lb->addWidget(undoBtn);
 	lv->addLayout(lb);
 
-	QLabel *hint = new QLabel("Hotkeys: bind a key per layout in Settings > Hotkeys "
-				  "(search for DockX). Applying a layout always keeps an undo.",
+	QHBoxLayout *lb2 = new QHBoxLayout();
+	QPushButton *hotkeyBtn = new QPushButton("Set hotkey", layoutsTab);
+	QPushButton *renameBtn = new QPushButton("Rename", layoutsTab);
+	QPushButton *deleteBtn = new QPushButton("Delete", layoutsTab);
+	lb2->addWidget(hotkeyBtn);
+	lb2->addWidget(renameBtn);
+	lb2->addWidget(deleteBtn);
+	lb2->addStretch(1);
+	lv->addLayout(lb2);
+
+	QLabel *hint = new QLabel("Set hotkey binds a key right here. A Stream Deck can press "
+				  "that key for one tap layout changes. Applying a layout always "
+				  "keeps an undo.",
 				  layoutsTab);
 	hint->setWordWrap(true);
 	lv->addWidget(hint);
@@ -155,8 +318,148 @@ void showDialog()
 		if (!panels::undoLayout())
 			QMessageBox::information(&dlg, "DockX", "Nothing to undo yet.");
 	});
+	QObject::connect(hotkeyBtn, &QPushButton::clicked, &dlg,
+			 [&dlg, selectedLayoutId, reloadLayouts]() {
+				 int id = selectedLayoutId();
+				 Layout *l = id ? findLayout(id) : nullptr;
+				 if (!l) {
+					 QMessageBox::information(&dlg, "DockX",
+								  "Pick a layout first.");
+					 return;
+				 }
+				 QDialog hd(&dlg);
+				 hd.setWindowTitle(QString("Hotkey for \"%1\"").arg(l->name));
+				 QVBoxLayout *v = new QVBoxLayout(&hd);
+				 v->addWidget(new QLabel("Press the keys you want:", &hd));
+				 QKeySequenceEdit *edit = new QKeySequenceEdit(&hd);
+				 v->addWidget(edit);
+				 QHBoxLayout *hb = new QHBoxLayout();
+				 QPushButton *ok = new QPushButton("Save", &hd);
+				 QPushButton *clear = new QPushButton("Remove hotkey", &hd);
+				 QPushButton *cancel = new QPushButton("Cancel", &hd);
+				 hb->addWidget(ok);
+				 hb->addWidget(clear);
+				 hb->addWidget(cancel);
+				 v->addLayout(hb);
+				 QObject::connect(ok, &QPushButton::clicked, &hd,
+						  [&hd]() { hd.done(1); });
+				 QObject::connect(clear, &QPushButton::clicked, &hd,
+						  [&hd]() { hd.done(2); });
+				 QObject::connect(cancel, &QPushButton::clicked, &hd,
+						  [&hd]() { hd.reject(); });
+				 edit->setFocus();
+				 int r = hd.exec();
+				 if (r == 1) {
+					 QKeySequence seq = edit->keySequence();
+					 if (seq.isEmpty())
+						 return;
+					 if (!setLayoutHotkey(l, seq))
+						 QMessageBox::information(
+							 &dlg, "DockX",
+							 "That key is not supported here. You can "
+							 "still bind it in OBS under Settings > "
+							 "Hotkeys (search for DockX).");
+				 } else if (r == 2) {
+					 setLayoutHotkey(l, QKeySequence());
+				 } else {
+					 return;
+				 }
+				 reloadLayouts();
+			 });
 
 	tabs->addTab(layoutsTab, "Layouts");
+
+	/* ---------- Auto switch tab ---------- */
+	QWidget *autoTab = new QWidget();
+	QVBoxLayout *av = new QVBoxLayout(autoTab);
+
+	QLabel *aintro = new QLabel("Pair a scene with a layout. When OBS switches to that "
+				    "scene, DockX rearranges your docks to match. Great for a "
+				    "gameplay layout, a chatting layout, an ending layout.",
+				    autoTab);
+	aintro->setWordWrap(true);
+	av->addWidget(aintro);
+
+	QListWidget *ruleList = new QListWidget(autoTab);
+	av->addWidget(ruleList, 1);
+
+	auto reloadRules = [ruleList]() {
+		ruleList->clear();
+		QStringList scenes = state().sceneLayouts.keys();
+		scenes.sort(Qt::CaseInsensitive);
+		for (const QString &scene : scenes) {
+			Layout *l = findLayout(state().sceneLayouts.value(scene));
+			if (!l)
+				continue;
+			QListWidgetItem *it = new QListWidgetItem(
+				QString("%1   applies   %2").arg(scene, l->name), ruleList);
+			it->setData(Qt::UserRole, scene);
+		}
+	};
+	reloadRules();
+
+	QHBoxLayout *ab = new QHBoxLayout();
+	QPushButton *addRuleBtn = new QPushButton("Add rule", autoTab);
+	QPushButton *removeRuleBtn = new QPushButton("Remove rule", autoTab);
+	ab->addWidget(addRuleBtn);
+	ab->addWidget(removeRuleBtn);
+	ab->addStretch(1);
+	av->addLayout(ab);
+
+	QObject::connect(addRuleBtn, &QPushButton::clicked, &dlg, [&dlg, reloadRules]() {
+		if (state().layouts.empty()) {
+			QMessageBox::information(&dlg, "DockX",
+						 "Save a layout first (Layouts tab).");
+			return;
+		}
+		QDialog rd(&dlg);
+		rd.setWindowTitle("Add rule");
+		QVBoxLayout *v = new QVBoxLayout(&rd);
+		v->addWidget(new QLabel("When OBS switches to this scene:", &rd));
+		QComboBox *sceneBox = new QComboBox(&rd);
+		sceneBox->addItems(sceneNames());
+		v->addWidget(sceneBox);
+		v->addWidget(new QLabel("apply this layout:", &rd));
+		QComboBox *layoutBox = new QComboBox(&rd);
+		for (const Layout &l : state().layouts)
+			layoutBox->addItem(l.name, l.id);
+		v->addWidget(layoutBox);
+		QHBoxLayout *hb = new QHBoxLayout();
+		QPushButton *ok = new QPushButton("Add", &rd);
+		QPushButton *cancel = new QPushButton("Cancel", &rd);
+		hb->addStretch(1);
+		hb->addWidget(ok);
+		hb->addWidget(cancel);
+		v->addLayout(hb);
+		QObject::connect(ok, &QPushButton::clicked, &rd, [&rd]() { rd.accept(); });
+		QObject::connect(cancel, &QPushButton::clicked, &rd, [&rd]() { rd.reject(); });
+		if (rd.exec() != QDialog::Accepted || sceneBox->currentText().isEmpty())
+			return;
+		state().sceneLayouts[sceneBox->currentText()] =
+			layoutBox->currentData().toInt();
+		stateSave();
+		reloadRules();
+	});
+	QObject::connect(removeRuleBtn, &QPushButton::clicked, &dlg,
+			 [&dlg, ruleList, reloadRules]() {
+				 QListWidgetItem *it = ruleList->currentItem();
+				 if (!it) {
+					 QMessageBox::information(&dlg, "DockX",
+								  "Pick a rule first.");
+					 return;
+				 }
+				 state().sceneLayouts.remove(it->data(Qt::UserRole).toString());
+				 stateSave();
+				 reloadRules();
+			 });
+
+	QLabel *ahint = new QLabel("Tip: a Stream Deck button that switches the scene will pull "
+				   "the matching layout with it automatically.",
+				   autoTab);
+	ahint->setWordWrap(true);
+	av->addWidget(ahint);
+
+	tabs->addTab(autoTab, "Auto switch");
 
 	/* ---------- Scene colors tab ---------- */
 	QWidget *colorsTab = new QWidget();
@@ -192,31 +495,7 @@ void showDialog()
 		panels::refreshSoon();
 	};
 
-	QHBoxLayout *palette = new QHBoxLayout();
-	for (const char *hex : PRESET_COLORS) {
-		QPushButton *b = new QPushButton(colorsTab);
-		b->setFixedSize(26, 26);
-		b->setStyleSheet(QString("background:%1; border-radius:5px; border:none;")
-					 .arg(hex));
-		b->setToolTip("Use this color");
-		QString h = QString::fromUtf8(hex);
-		QObject::connect(b, &QPushButton::clicked, colorsTab,
-				 [setSceneColor, h]() { setSceneColor(h); });
-		palette->addWidget(b);
-	}
-	QPushButton *customBtn = new QPushButton("Custom", colorsTab);
-	QObject::connect(customBtn, &QPushButton::clicked, &dlg, [&dlg, setSceneColor]() {
-		QColor c = QColorDialog::getColor(Qt::white, &dlg, "Pick a scene color");
-		if (c.isValid())
-			setSceneColor(c.name());
-	});
-	QPushButton *noneBtn = new QPushButton("No color", colorsTab);
-	QObject::connect(noneBtn, &QPushButton::clicked, colorsTab,
-			 [setSceneColor]() { setSceneColor(QString()); });
-	palette->addWidget(customBtn);
-	palette->addWidget(noneBtn);
-	palette->addStretch(1);
-	cv->addLayout(palette);
+	addPaletteRow(colorsTab, cv, &dlg, setSceneColor);
 
 	QLabel *chint = new QLabel("Pick a scene, then a color. The scene name shows in that "
 				   "color in the Scenes panel. Sources already have this built "
@@ -226,6 +505,90 @@ void showDialog()
 	cv->addWidget(chint);
 
 	tabs->addTab(colorsTab, "Scene colors");
+
+	/* ---------- Dock colors tab ---------- */
+	QWidget *dockTab = new QWidget();
+	QVBoxLayout *dv = new QVBoxLayout(dockTab);
+
+	QListWidget *dockListW = new QListWidget(dockTab);
+	for (const panels::DockInfo &info : panels::listDocks()) {
+		QListWidgetItem *it = new QListWidgetItem(info.title, dockListW);
+		it->setData(Qt::UserRole, info.key);
+		const QString hex = state().dockColorMap.value(info.key);
+		if (!hex.isEmpty()) {
+			it->setForeground(QBrush(QColor(hex)));
+			it->setIcon(colorDot(QColor(hex)));
+		}
+	}
+	dv->addWidget(dockListW, 1);
+
+	auto setDockColor = [dockListW, &dlg](const QString &hex) {
+		QListWidgetItem *it = dockListW->currentItem();
+		if (!it) {
+			QMessageBox::information(&dlg, "DockX", "Pick a dock first.");
+			return;
+		}
+		const QString key = it->data(Qt::UserRole).toString();
+		if (hex.isEmpty()) {
+			state().dockColorMap.remove(key);
+			it->setData(Qt::ForegroundRole, QVariant());
+			it->setIcon(QIcon());
+		} else {
+			state().dockColorMap[key] = hex;
+			it->setForeground(QBrush(QColor(hex)));
+			it->setIcon(colorDot(QColor(hex)));
+		}
+		stateSave();
+		panels::applyDockColors();
+	};
+
+	addPaletteRow(dockTab, dv, &dlg, setDockColor);
+
+	QLabel *dhint = new QLabel("Pick a dock, then a color. The dock gets a colored border "
+				   "and title bar so you can spot it instantly.",
+				   dockTab);
+	dhint->setWordWrap(true);
+	dv->addWidget(dhint);
+
+	QHBoxLayout *sepRow = new QHBoxLayout();
+	sepRow->addWidget(new QLabel("Lines between docks:", dockTab));
+	QSpinBox *sepSpin = new QSpinBox(dockTab);
+	sepSpin->setRange(0, 12);
+	sepSpin->setSpecialValueText("Theme default");
+	sepSpin->setSuffix(" px");
+	sepSpin->setValue(state().sepSize);
+	QObject::connect(sepSpin, &QSpinBox::valueChanged, dockTab, [](int v) {
+		state().sepSize = v;
+		stateSave();
+		panels::applySeparators();
+	});
+	sepRow->addWidget(sepSpin);
+	QPushButton *sepColorBtn = new QPushButton("Line color", dockTab);
+	QObject::connect(sepColorBtn, &QPushButton::clicked, &dlg, [&dlg]() {
+		QColor c = QColorDialog::getColor(Qt::white, &dlg, "Pick a line color");
+		if (!c.isValid())
+			return;
+		state().sepColor = c.name();
+		stateSave();
+		panels::applySeparators();
+	});
+	sepRow->addWidget(sepColorBtn);
+	QPushButton *sepNoneBtn = new QPushButton("No tint", dockTab);
+	QObject::connect(sepNoneBtn, &QPushButton::clicked, dockTab, []() {
+		state().sepColor.clear();
+		stateSave();
+		panels::applySeparators();
+	});
+	sepRow->addWidget(sepNoneBtn);
+	sepRow->addStretch(1);
+	dv->addLayout(sepRow);
+
+	QLabel *sephint = new QLabel("Thicker lines make dock edges easier to see and grab.",
+				     dockTab);
+	sephint->setWordWrap(true);
+	dv->addWidget(sephint);
+
+	tabs->addTab(dockTab, "Dock colors");
 
 	/* ---------- Settings tab ---------- */
 	QWidget *settingsTab = new QWidget();
@@ -258,6 +621,10 @@ void showDialog()
 	addCheck("Color coded scene names", state().sceneColors, [](bool v) {
 		state().sceneColors = v;
 		panels::refreshSoon();
+	});
+	addCheck("Colored dock borders", state().dockColors, [](bool v) {
+		state().dockColors = v;
+		panels::applyDockColors();
 	});
 
 	sv->addStretch(1);

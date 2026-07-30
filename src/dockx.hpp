@@ -9,6 +9,7 @@ GPL v2, see plugin-main.cpp for the full notice.
 #include <QByteArray>
 #include <QHash>
 #include <QIcon>
+#include <QList>
 #include <QString>
 
 #include <vector>
@@ -28,11 +29,16 @@ struct State {
 	bool sceneSearch = true;
 	bool sourceSearch = true;
 	bool sceneColors = true;
+	bool dockColors = true;
 
 	int nextId = 1;
 	std::vector<Layout> layouts;
-	QHash<QString, QString> colors; /* scene name -> "#rrggbb" */
-	QByteArray undoState;           /* layout snapshot taken before the last apply */
+	QHash<QString, QString> colors;       /* scene name -> "#rrggbb" */
+	QHash<QString, QString> dockColorMap; /* dock key -> "#rrggbb" */
+	QHash<QString, int> sceneLayouts;     /* scene name -> layout id (auto switch) */
+	int sepSize = 0;                      /* px between docks; 0 = theme default */
+	QString sepColor;                     /* separator tint; empty = theme default */
+	QByteArray undoState;                 /* layout snapshot taken before the last apply */
 };
 
 State &state();
@@ -49,9 +55,19 @@ void initAfterLoad();   /* one time UI wiring once OBS finished loading */
 void applyNesting();    /* honor state().nesting on the main window */
 void applySearchBars(); /* create/show/hide the injected search boxes */
 void refreshSoon();     /* debounced: reapply colors + active filters */
+void applyDockColors();  /* colored border + title bar per tagged dock */
+void applySeparators();  /* thickness/tint of the lines between docks */
+void autoSceneLayout();  /* apply the layout mapped to the current scene, if any */
 bool applyLayout(int id);
 bool undoLayout();
 void shutdown();
+
+/* docks currently in the main window, for the dialog list */
+struct DockInfo {
+	QString key;   /* stable id used in state().dockColorMap */
+	QString title; /* what the user sees */
+};
+QList<DockInfo> listDocks();
 } // namespace panels
 
 void showDialog();
