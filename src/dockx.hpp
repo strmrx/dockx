@@ -16,6 +16,8 @@ GPL v2, see plugin-main.cpp for the full notice.
 
 #include <vector>
 
+class QListWidget;
+
 namespace dockx {
 
 struct Layout {
@@ -80,6 +82,7 @@ struct DockInfo {
 	QString title; /* what the user sees */
 };
 QList<DockInfo> listDocks();
+QListWidget *nativeSceneList(); /* the native Scenes panel list, or null */
 } // namespace panels
 
 void showDialog();

@@ -393,6 +393,11 @@ static QListView *sourceView()
 	return m ? m->findChild<QListView *>("sources") : nullptr;
 }
 
+QListWidget *nativeSceneList()
+{
+	return sceneList();
+}
+
 void applyNesting()
 {
 	QMainWindow *m = mainWindow();

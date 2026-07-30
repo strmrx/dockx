@@ -24,8 +24,10 @@ UUID (renames never lose a folder) and stored per scene collection.
 #include <QHBoxLayout>
 #include <QInputDialog>
 #include <QLineEdit>
+#include <QListWidget>
 #include <QMainWindow>
 #include <QMenu>
+#include <QShortcut>
 #include <QMessageBox>
 #include <QPointer>
 #include <QScreen>
@@ -446,14 +448,62 @@ static void renameScenePrompt(const QString &uuid, const QString &name)
 	}
 }
 
-static void duplicateScene(const QString &uuid, const QString &name)
+/* prompts for a name (native behavior), refusing clashes */
+static QString promptSceneName(const QString &title, const QString &suggested)
 {
+	bool ok = false;
+	QString name = QInputDialog::getText(g_tree, title, "Scene name:", QLineEdit::Normal,
+					     suggested, &ok)
+			       .trimmed();
+	if (!ok || name.isEmpty())
+		return QString();
+	if (obs_source_t *clash = obs_get_source_by_name(name.toUtf8().constData())) {
+		obs_source_release(clash);
+		QMessageBox::information(g_tree, "DockX",
+					 "A scene or source with that name already exists.");
+		return QString();
+	}
+	return name;
+}
+
+static void switchToScene(obs_source_t *src)
+{
+	if (obs_frontend_preview_program_mode_active())
+		obs_frontend_set_current_preview_scene(src);
+	else
+		obs_frontend_set_current_scene(src);
+}
+
+static void addScenePrompt(const QString &folder)
+{
+	const QString name = promptSceneName("Add scene", uniqueSceneName("Scene"));
+	if (name.isEmpty())
+		return;
+	obs_scene_t *scene = obs_scene_create(name.toUtf8().constData());
+	if (!scene)
+		return;
+	if (!folder.isEmpty()) {
+		const char *u = obs_source_get_uuid(obs_scene_get_source(scene));
+		if (u) {
+			data().assign[QString::fromUtf8(u)] = folder;
+			stateSave();
+		}
+	}
+	switchToScene(obs_scene_get_source(scene));
+	obs_scene_release(scene);
+}
+
+static void duplicateScenePrompt(const QString &uuid, const QString &name)
+{
+	const QString dupName =
+		promptSceneName("Duplicate scene", uniqueSceneName(name + " Copy"));
+	if (dupName.isEmpty())
+		return;
 	obs_source_t *src = sceneByUuid(uuid);
 	if (!src)
 		return;
 	obs_scene_t *scene = obs_scene_from_source(src);
 	if (scene) {
-		const QString dupName = uniqueSceneName(name + " Copy");
 		obs_scene_t *dup = obs_scene_duplicate(scene, dupName.toUtf8().constData(),
 						       OBS_SCENE_DUP_REFS);
 		if (dup) {
@@ -472,6 +522,58 @@ static void duplicateScene(const QString &uuid, const QString &name)
 			obs_scene_release(dup);
 		}
 	}
+	obs_source_release(src);
+}
+
+/* the scene whose filters were last copied (this OBS run only, like native) */
+static QString g_copyFiltersUuid;
+
+/* reorder the scene in the NATIVE list; OBS reads the list order back on save,
+   and obs_frontend_get_scenes follows it, so our tree mirrors the move.
+   modes: 0 up, 1 down, 2 top, 3 bottom */
+static void moveSceneRow(const QString &name, int mode)
+{
+	QListWidget *list = panels::nativeSceneList();
+	if (!list)
+		return;
+	int row = -1;
+	for (int i = 0; i < list->count(); i++) {
+		if (list->item(i)->text() == name) {
+			row = i;
+			break;
+		}
+	}
+	if (row < 0)
+		return;
+	const int dst = mode == 0 ? row - 1
+		      : mode == 1 ? row + 1
+		      : mode == 2 ? 0
+				  : list->count() - 1;
+	if (dst < 0 || dst >= list->count() || dst == row)
+		return;
+	{
+		/* silent move: OBS must not see the take/insert as a scene switch */
+		QListWidgetItem *cur = list->currentItem();
+		const QSignalBlocker block(list);
+		QListWidgetItem *it = list->takeItem(row);
+		list->insertItem(dst, it);
+		if (cur)
+			list->setCurrentItem(cur);
+	}
+	rebuildSoon();
+}
+
+static void setTransitionOverride(const QString &uuid, const QString &transition)
+{
+	obs_source_t *src = sceneByUuid(uuid);
+	if (!src)
+		return;
+	obs_data_t *priv = obs_source_get_private_settings(src);
+	if (transition.isEmpty())
+		obs_data_erase(priv, "transition");
+	else
+		obs_data_set_string(priv, "transition", transition.toUtf8().constData());
+	obs_data_release(priv);
 	obs_source_release(src);
 }
 
@@ -506,22 +608,68 @@ static void showContextMenu(const QPoint &pos)
 		const QString uuid = itemKey(it);
 		const QString name = it->text(0);
 
-		menu.addAction("Rename", [uuid, name]() { renameScenePrompt(uuid, name); });
-		menu.addAction("Duplicate", [uuid, name]() { duplicateScene(uuid, name); });
-
-		QMenu *colorMenu = menu.addMenu("Set Color");
-		for (int i = 0; i < 8; i++) {
-			const QString hex = QString::fromUtf8(PRESET_COLORS[i]);
-			colorMenu->addAction(colorDot(QColor(hex)), PRESET_COLOR_NAMES[i],
-					     [name, hex]() { setSceneColor(name, hex); });
+		/* current per-scene state, read once for the checkmarks */
+		bool hasFilters = false, inMultiview = true;
+		QString curOverride;
+		int curDur = 300;
+		if (obs_source_t *src = sceneByUuid(uuid)) {
+			hasFilters = obs_source_filter_count(src) > 0;
+			obs_data_t *priv = obs_source_get_private_settings(src);
+			obs_data_set_default_bool(priv, "show_in_multiview", true);
+			obs_data_set_default_int(priv, "transition_duration", 300);
+			inMultiview = obs_data_get_bool(priv, "show_in_multiview");
+			curOverride =
+				QString::fromUtf8(obs_data_get_string(priv, "transition"));
+			curDur = (int)obs_data_get_int(priv, "transition_duration");
+			obs_data_release(priv);
+			obs_source_release(src);
 		}
-		colorMenu->addAction("Custom...", [name]() {
-			QColor c = QColorDialog::getColor(Qt::white, g_tree, "Pick a color");
-			if (c.isValid())
-				setSceneColor(name, c.name());
+
+		menu.addAction("Add Scene...", [uuid]() {
+			addScenePrompt(data().assign.value(uuid));
 		});
-		colorMenu->addAction("No color",
-				     [name]() { setSceneColor(name, QString()); });
+		menu.addAction("Duplicate...",
+			       [uuid, name]() { duplicateScenePrompt(uuid, name); });
+		QAction *copyF = menu.addAction("Copy Filters",
+						[uuid]() { g_copyFiltersUuid = uuid; });
+		copyF->setEnabled(hasFilters);
+		bool canPaste = false;
+		if (!g_copyFiltersUuid.isEmpty() && g_copyFiltersUuid != uuid) {
+			if (obs_source_t *s = sceneByUuid(g_copyFiltersUuid)) {
+				canPaste = true;
+				obs_source_release(s);
+			}
+		}
+		QAction *pasteF = menu.addAction("Paste Filters", [uuid]() {
+			obs_source_t *from = sceneByUuid(g_copyFiltersUuid);
+			obs_source_t *to = sceneByUuid(uuid);
+			if (from && to && from != to)
+				obs_source_copy_filters(to, from);
+			if (from)
+				obs_source_release(from);
+			if (to)
+				obs_source_release(to);
+		});
+		pasteF->setEnabled(canPaste);
+
+		menu.addSeparator();
+		QAction *renA = menu.addAction(
+			"Rename...", [uuid, name]() { renameScenePrompt(uuid, name); });
+		renA->setShortcut(QKeySequence(Qt::Key_F2));
+		renA->setShortcutContext(Qt::WidgetShortcut);
+		renA->setShortcutVisibleInContextMenu(true);
+		QAction *remA = menu.addAction(
+			"Remove", [uuid, name]() { removeScenePrompt(uuid, name); });
+		remA->setShortcut(QKeySequence(Qt::Key_Delete));
+		remA->setShortcutContext(Qt::WidgetShortcut);
+		remA->setShortcutVisibleInContextMenu(true);
+
+		menu.addSeparator();
+		QMenu *orderMenu = menu.addMenu("Order");
+		orderMenu->addAction("Move Up", [name]() { moveSceneRow(name, 0); });
+		orderMenu->addAction("Move Down", [name]() { moveSceneRow(name, 1); });
+		orderMenu->addAction("Move to Top", [name]() { moveSceneRow(name, 2); });
+		orderMenu->addAction("Move to Bottom", [name]() { moveSceneRow(name, 3); });
 
 		QMenu *moveMenu = menu.addMenu("Move to Folder");
 		FolderData &fd = data();
@@ -547,6 +695,47 @@ static void showContextMenu(const QPoint &pos)
 		moveMenu->addAction("New folder...",
 				    [uuid]() { newFolderPrompt(g_tree, uuid); });
 
+		QMenu *colorMenu = menu.addMenu("Set Color");
+		for (int i = 0; i < 8; i++) {
+			const QString hex = QString::fromUtf8(PRESET_COLORS[i]);
+			colorMenu->addAction(colorDot(QColor(hex)), PRESET_COLOR_NAMES[i],
+					     [name, hex]() { setSceneColor(name, hex); });
+		}
+		colorMenu->addAction("Custom...", [name]() {
+			QColor c = QColorDialog::getColor(Qt::white, g_tree, "Pick a color");
+			if (c.isValid())
+				setSceneColor(name, c.name());
+		});
+		colorMenu->addAction("No color",
+				     [name]() { setSceneColor(name, QString()); });
+
+		menu.addSeparator();
+		QMenu *projMenu = menu.addMenu("Open Scene Projector");
+		QMenu *fsMenu = projMenu->addMenu("Fullscreen");
+		const QList<QScreen *> screens = QGuiApplication::screens();
+		for (int i = 0; i < screens.size(); i++) {
+			const QRect g = screens[i]->geometry();
+			fsMenu->addAction(QString("Display %1 (%2x%3)")
+						  .arg(i + 1)
+						  .arg(g.width())
+						  .arg(g.height()),
+					  [i, name]() {
+						  obs_frontend_open_projector(
+							  "Scene", i, nullptr,
+							  name.toUtf8().constData());
+					  });
+		}
+		projMenu->addAction("Windowed", [name]() {
+			obs_frontend_open_projector("Scene", -1, nullptr,
+						    name.toUtf8().constData());
+		});
+		menu.addAction("Save Scene Screenshot", [uuid]() {
+			if (obs_source_t *src = sceneByUuid(uuid)) {
+				obs_frontend_take_source_screenshot(src);
+				obs_source_release(src);
+			}
+		});
+
 		menu.addSeparator();
 		menu.addAction("Filters", [uuid]() {
 			if (obs_source_t *src = sceneByUuid(uuid)) {
@@ -554,34 +743,59 @@ static void showContextMenu(const QPoint &pos)
 				obs_source_release(src);
 			}
 		});
-		QMenu *projMenu = menu.addMenu("Fullscreen Projector");
-		const QList<QScreen *> screens = QGuiApplication::screens();
-		for (int i = 0; i < screens.size(); i++) {
-			const QRect g = screens[i]->geometry();
-			projMenu->addAction(QString("Display %1 (%2x%3)")
-						    .arg(i + 1)
-						    .arg(g.width())
-						    .arg(g.height()),
-					    [i, name]() {
-						    obs_frontend_open_projector(
-							    "Scene", i, nullptr,
-							    name.toUtf8().constData());
-					    });
+		QMenu *trMenu = menu.addMenu("Transition Override");
+		QAction *noneT = trMenu->addAction(
+			"None", [uuid]() { setTransitionOverride(uuid, QString()); });
+		noneT->setCheckable(true);
+		noneT->setChecked(curOverride.isEmpty());
+		obs_frontend_source_list tl = {};
+		obs_frontend_get_transitions(&tl);
+		for (size_t i = 0; i < tl.sources.num; i++) {
+			const char *tn = obs_source_get_name(tl.sources.array[i]);
+			if (!tn)
+				continue;
+			const QString tname = QString::fromUtf8(tn);
+			QAction *a = trMenu->addAction(tname, [uuid, tname]() {
+				setTransitionOverride(uuid, tname);
+			});
+			a->setCheckable(true);
+			a->setChecked(tname == curOverride);
 		}
-		menu.addAction("Windowed Projector", [name]() {
-			obs_frontend_open_projector("Scene", -1, nullptr,
-						    name.toUtf8().constData());
+		obs_frontend_source_list_free(&tl);
+		trMenu->addSeparator();
+		trMenu->addAction(QString("Duration (%1 ms)...").arg(curDur),
+				  [uuid, curDur]() {
+					  bool ok = false;
+					  const int ms = QInputDialog::getInt(
+						  g_tree, "Transition duration",
+						  "Milliseconds:", curDur, 50, 20000, 50,
+						  &ok);
+					  if (!ok)
+						  return;
+					  obs_source_t *s = sceneByUuid(uuid);
+					  if (!s)
+						  return;
+					  obs_data_t *priv =
+						  obs_source_get_private_settings(s);
+					  obs_data_set_int(priv, "transition_duration", ms);
+					  obs_data_release(priv);
+					  obs_source_release(s);
+				  });
+		QAction *mv = menu.addAction("Show in Multiview");
+		mv->setCheckable(true);
+		mv->setChecked(inMultiview);
+		QObject::connect(mv, &QAction::triggered, g_tree, [uuid](bool on) {
+			obs_source_t *s = sceneByUuid(uuid);
+			if (!s)
+				return;
+			obs_data_t *priv = obs_source_get_private_settings(s);
+			obs_data_set_bool(priv, "show_in_multiview", on);
+			obs_data_release(priv);
+			obs_source_release(s);
 		});
-		menu.addAction("Screenshot", [uuid]() {
-			if (obs_source_t *src = sceneByUuid(uuid)) {
-				obs_frontend_take_source_screenshot(src);
-				obs_source_release(src);
-			}
-		});
-		menu.addSeparator();
-		menu.addAction("Remove", [uuid, name]() { removeScenePrompt(uuid, name); });
 	} else if (isFolder(it)) {
 		const QString fname = itemKey(it);
+		menu.addAction("Add Scene...", [fname]() { addScenePrompt(fname); });
 		menu.addAction("New folder", []() { newFolderPrompt(g_tree); });
 		menu.addAction("Rename", [fname]() { renameFolderPrompt(g_tree, fname); });
 		menu.addAction("Delete", [fname]() { deleteFolderPrompt(g_tree, fname); });
@@ -589,6 +803,7 @@ static void showContextMenu(const QPoint &pos)
 		menu.addAction("Collapse all", []() { setAllExpanded(false); });
 		menu.addAction("Expand all", []() { setAllExpanded(true); });
 	} else {
+		menu.addAction("Add Scene...", []() { addScenePrompt(QString()); });
 		menu.addAction("New folder", []() { newFolderPrompt(g_tree); });
 		menu.addSeparator();
 		menu.addAction("Collapse all", []() { setAllExpanded(false); });
@@ -629,6 +844,26 @@ void createDock()
 	g_tree->setContextMenuPolicy(Qt::CustomContextMenu);
 	QObject::connect(g_tree, &QTreeWidget::customContextMenuRequested, g_tree,
 			 [](const QPoint &pos) { showContextMenu(pos); });
+
+	/* native panel keyboard parity, only while the tree has focus */
+	QShortcut *renShort = new QShortcut(QKeySequence(Qt::Key_F2), g_tree);
+	renShort->setContext(Qt::WidgetShortcut);
+	QObject::connect(renShort, &QShortcut::activated, g_tree, []() {
+		QTreeWidgetItem *it = g_tree ? g_tree->currentItem() : nullptr;
+		if (isScene(it))
+			renameScenePrompt(itemKey(it), it->text(0));
+		else if (isFolder(it))
+			renameFolderPrompt(g_tree, itemKey(it));
+	});
+	QShortcut *delShort = new QShortcut(QKeySequence(Qt::Key_Delete), g_tree);
+	delShort->setContext(Qt::WidgetShortcut);
+	QObject::connect(delShort, &QShortcut::activated, g_tree, []() {
+		QTreeWidgetItem *it = g_tree ? g_tree->currentItem() : nullptr;
+		if (isScene(it))
+			removeScenePrompt(itemKey(it), it->text(0));
+		else if (isFolder(it))
+			deleteFolderPrompt(g_tree, itemKey(it));
+	});
 	v->addWidget(g_tree, 1);
 
 	QObject::connect(g_tree, &QTreeWidget::itemClicked, g_tree,
