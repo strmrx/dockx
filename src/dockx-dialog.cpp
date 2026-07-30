@@ -45,9 +45,6 @@ static QStringList sceneNames()
 	return out;
 }
 
-static const char *PRESET_COLORS[] = {"#e5534b", "#f0883e", "#e3b341", "#57ab5a",
-				      "#39c5cf", "#539bf5", "#986ee2", "#e275ad"};
-
 /* one row of preset swatches + Custom + No color, calling apply(hex) */
 static void addPaletteRow(QWidget *tab, QVBoxLayout *v, QDialog *dlg,
 			  std::function<void(const QString &)> apply)

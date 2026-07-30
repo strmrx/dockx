@@ -111,4 +111,8 @@ void shutdown();
    so the color always shows even when the theme repaints item text */
 QIcon colorDot(const QColor &c);
 
+/* shared preset swatches (dialog palette rows + folder dock context menu) */
+extern const char *PRESET_COLORS[8];
+extern const char *PRESET_COLOR_NAMES[8];
+
 } // namespace dockx

@@ -34,6 +34,11 @@ if the UI does not look the way we expect, do NOTHING. Never crash OBS.
 
 namespace dockx {
 
+const char *PRESET_COLORS[8] = {"#e5534b", "#f0883e", "#e3b341", "#57ab5a",
+				"#39c5cf", "#539bf5", "#986ee2", "#e275ad"};
+const char *PRESET_COLOR_NAMES[8] = {"Red", "Orange", "Yellow", "Green",
+				     "Teal", "Blue", "Purple", "Pink"};
+
 QIcon colorDot(const QColor &c)
 {
 	/* drawn large and scaled down so the dot stays crisp at any icon size */

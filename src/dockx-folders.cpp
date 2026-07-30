@@ -14,19 +14,24 @@ UUID (renames never lose a folder) and stored per scene collection.
 #include <obs-frontend-api.h>
 #include <plugin-support.h>
 
+#include <QAction>
 #include <QBrush>
+#include <QColorDialog>
 #include <QDockWidget>
 #include <QDropEvent>
 #include <QFont>
+#include <QGuiApplication>
 #include <QHBoxLayout>
 #include <QInputDialog>
 #include <QLineEdit>
 #include <QMainWindow>
+#include <QMenu>
 #include <QMessageBox>
 #include <QPointer>
-#include <QPushButton>
+#include <QScreen>
 #include <QStyle>
 #include <QTimer>
+#include <QToolButton>
 #include <QTreeWidget>
 #include <QVBoxLayout>
 
@@ -103,11 +108,29 @@ static void applySearch()
 	}
 }
 
+static QTreeWidgetItem *findByKey(const QString &key)
+{
+	for (int i = 0; i < g_tree->topLevelItemCount(); i++) {
+		QTreeWidgetItem *it = g_tree->topLevelItem(i);
+		if (itemKey(it) == key)
+			return it;
+		for (int j = 0; j < it->childCount(); j++)
+			if (itemKey(it->child(j)) == key)
+				return it->child(j);
+	}
+	return nullptr;
+}
+
 static void rebuildNow()
 {
 	if (g_shutdown || !g_tree)
 		return;
 	g_applying = true;
+	/* clearing resets the scroll; remember what was at the top so a rebuild
+	   never yanks the list around under the user */
+	QString topKey;
+	if (QTreeWidgetItem *top = g_tree->itemAt(4, 4))
+		topKey = itemKey(top);
 	g_tree->clear();
 
 	FolderData &fd = data();
@@ -199,12 +222,22 @@ static void rebuildNow()
 		fi->setExpanded(!fd.collapsed.contains(it.key()));
 	}
 
-	/* always show where you are: peek into the folder holding the live scene
-	   and scroll to it (a collapsed folder stays collapsed next rebuild) */
+	/* put the list back where it was before the rebuild */
+	if (!topKey.isEmpty()) {
+		if (QTreeWidgetItem *top = findByKey(topKey))
+			g_tree->scrollToItem(top, QAbstractItemView::PositionAtTop);
+	}
+
+	/* always show where you are: peek into the folder holding the live scene,
+	   but only scroll if it is actually off screen (native panel behavior; a
+	   collapsed folder stays collapsed next rebuild) */
 	if (curItem) {
 		if (curItem->parent())
 			curItem->parent()->setExpanded(true);
-		g_tree->scrollToItem(curItem);
+		const QRect r = g_tree->visualItemRect(curItem);
+		const int viewH = g_tree->viewport()->height();
+		if (r.height() == 0 || r.top() < 0 || r.bottom() > viewH)
+			g_tree->scrollToItem(curItem);
 	}
 
 	g_applying = false;
@@ -273,14 +306,296 @@ protected:
 	}
 };
 
-static QTreeWidgetItem *selectedFolder(QWidget *msgParent)
+/* ---- folder management (footer toolbar + context menu) ---- */
+
+static void newFolderPrompt(QWidget *parent, const QString &assignSceneUuid = QString())
 {
-	QTreeWidgetItem *it = g_tree ? g_tree->currentItem() : nullptr;
-	if (!isFolder(it)) {
-		QMessageBox::information(msgParent, "DockX", "Pick a folder first.");
-		return nullptr;
+	bool ok = false;
+	QString name = QInputDialog::getText(parent, "New folder", "Folder name:",
+					     QLineEdit::Normal, QString(), &ok)
+			       .trimmed();
+	if (!ok || name.isEmpty())
+		return;
+	FolderData &fd = data();
+	if (fd.order.contains(name)) {
+		QMessageBox::information(parent, "DockX",
+					 "A folder with that name already exists.");
+		return;
 	}
-	return it;
+	fd.order.append(name);
+	if (!assignSceneUuid.isEmpty())
+		fd.assign[assignSceneUuid] = name;
+	stateSave();
+	rebuildNow();
+}
+
+static void renameFolderPrompt(QWidget *parent, const QString &oldName)
+{
+	bool ok = false;
+	QString name = QInputDialog::getText(parent, "Rename folder", "New name:",
+					     QLineEdit::Normal, oldName, &ok)
+			       .trimmed();
+	if (!ok || name.isEmpty() || name == oldName)
+		return;
+	FolderData &fd = data();
+	if (fd.order.contains(name)) {
+		QMessageBox::information(parent, "DockX",
+					 "A folder with that name already exists.");
+		return;
+	}
+	for (int i = 0; i < fd.order.size(); i++)
+		if (fd.order[i] == oldName)
+			fd.order[i] = name;
+	for (auto a = fd.assign.begin(); a != fd.assign.end(); ++a)
+		if (a.value() == oldName)
+			a.value() = name;
+	if (fd.collapsed.remove(oldName))
+		fd.collapsed.insert(name);
+	stateSave();
+	rebuildNow();
+}
+
+static void deleteFolderPrompt(QWidget *parent, const QString &name)
+{
+	auto answer = QMessageBox::question(
+		parent, "Delete folder",
+		QString("Delete \"%1\"? The scenes inside go back to the main list. "
+			"No scene is deleted.")
+			.arg(name));
+	if (answer != QMessageBox::Yes)
+		return;
+	FolderData &fd = data();
+	fd.order.removeAll(name);
+	fd.collapsed.remove(name);
+	for (auto a = fd.assign.begin(); a != fd.assign.end();) {
+		if (a.value() == name)
+			a = fd.assign.erase(a);
+		else
+			++a;
+	}
+	stateSave();
+	rebuildNow();
+}
+
+static void setAllExpanded(bool on)
+{
+	if (!g_tree)
+		return;
+	for (int i = 0; i < g_tree->topLevelItemCount(); i++) {
+		QTreeWidgetItem *it = g_tree->topLevelItem(i);
+		if (isFolder(it))
+			it->setExpanded(on);
+	}
+}
+
+/* ---- scene actions (context menu) ---- */
+
+static obs_source_t *sceneByUuid(const QString &uuid)
+{
+	return obs_get_source_by_uuid(uuid.toUtf8().constData());
+}
+
+static QString uniqueSceneName(const QString &base)
+{
+	QString name = base;
+	int n = 2;
+	for (;;) {
+		obs_source_t *clash = obs_get_source_by_name(name.toUtf8().constData());
+		if (!clash)
+			return name;
+		obs_source_release(clash);
+		name = QString("%1 %2").arg(base).arg(n++);
+	}
+}
+
+static void setSceneColor(const QString &name, const QString &hex)
+{
+	if (hex.isEmpty())
+		state().colors.remove(name);
+	else
+		state().colors[name] = hex;
+	stateSave();
+	panels::refreshSoon();
+	rebuildSoon();
+}
+
+static void renameScenePrompt(const QString &uuid, const QString &name)
+{
+	bool ok = false;
+	QString newName = QInputDialog::getText(g_tree, "Rename scene", "New name:",
+						QLineEdit::Normal, name, &ok)
+				  .trimmed();
+	if (!ok || newName.isEmpty() || newName == name)
+		return;
+	if (obs_source_t *clash = obs_get_source_by_name(newName.toUtf8().constData())) {
+		obs_source_release(clash);
+		QMessageBox::information(g_tree, "DockX",
+					 "A scene or source with that name already exists.");
+		return;
+	}
+	obs_source_t *src = sceneByUuid(uuid);
+	if (!src)
+		return;
+	obs_source_set_name(src, newName.toUtf8().constData());
+	obs_source_release(src);
+	/* color labels are keyed by name; carry the label along */
+	if (state().colors.contains(name)) {
+		state().colors[newName] = state().colors.take(name);
+		stateSave();
+		panels::refreshSoon();
+	}
+}
+
+static void duplicateScene(const QString &uuid, const QString &name)
+{
+	obs_source_t *src = sceneByUuid(uuid);
+	if (!src)
+		return;
+	obs_scene_t *scene = obs_scene_from_source(src);
+	if (scene) {
+		const QString dupName = uniqueSceneName(name + " Copy");
+		obs_scene_t *dup = obs_scene_duplicate(scene, dupName.toUtf8().constData(),
+						       OBS_SCENE_DUP_REFS);
+		if (dup) {
+			/* the copy lands in the same folder, with the same color */
+			obs_source_t *dupSrc = obs_scene_get_source(dup);
+			const char *du = dupSrc ? obs_source_get_uuid(dupSrc) : nullptr;
+			FolderData &fd = data();
+			const QString folder = fd.assign.value(uuid);
+			if (du && !folder.isEmpty())
+				fd.assign[QString::fromUtf8(du)] = folder;
+			const QString hex = state().colors.value(name);
+			if (!hex.isEmpty())
+				state().colors[dupName] = hex;
+			stateSave();
+			panels::refreshSoon();
+			obs_scene_release(dup);
+		}
+	}
+	obs_source_release(src);
+}
+
+static void removeScenePrompt(const QString &uuid, const QString &name)
+{
+	obs_frontend_source_list list = {};
+	obs_frontend_get_scenes(&list);
+	const size_t count = list.sources.num;
+	obs_frontend_source_list_free(&list);
+	if (count <= 1) {
+		QMessageBox::information(g_tree, "DockX", "OBS needs at least one scene.");
+		return;
+	}
+	if (QMessageBox::question(g_tree, "Remove scene",
+				  QString("Remove \"%1\" from OBS? This deletes the scene.")
+					  .arg(name)) != QMessageBox::Yes)
+		return;
+	if (obs_source_t *src = sceneByUuid(uuid)) {
+		obs_source_remove(src);
+		obs_source_release(src);
+	}
+}
+
+static void showContextMenu(const QPoint &pos)
+{
+	if (!g_tree)
+		return;
+	QTreeWidgetItem *it = g_tree->itemAt(pos);
+	QMenu menu(g_tree);
+
+	if (isScene(it)) {
+		const QString uuid = itemKey(it);
+		const QString name = it->text(0);
+
+		menu.addAction("Rename", [uuid, name]() { renameScenePrompt(uuid, name); });
+		menu.addAction("Duplicate", [uuid, name]() { duplicateScene(uuid, name); });
+
+		QMenu *colorMenu = menu.addMenu("Set Color");
+		for (int i = 0; i < 8; i++) {
+			const QString hex = QString::fromUtf8(PRESET_COLORS[i]);
+			colorMenu->addAction(colorDot(QColor(hex)), PRESET_COLOR_NAMES[i],
+					     [name, hex]() { setSceneColor(name, hex); });
+		}
+		colorMenu->addAction("Custom...", [name]() {
+			QColor c = QColorDialog::getColor(Qt::white, g_tree, "Pick a color");
+			if (c.isValid())
+				setSceneColor(name, c.name());
+		});
+		colorMenu->addAction("No color",
+				     [name]() { setSceneColor(name, QString()); });
+
+		QMenu *moveMenu = menu.addMenu("Move to Folder");
+		FolderData &fd = data();
+		const QString curFolder = fd.assign.value(uuid);
+		for (const QString &fname : fd.order) {
+			QAction *a = moveMenu->addAction(fname, [uuid, fname]() {
+				data().assign[uuid] = fname;
+				stateSave();
+				rebuildNow();
+			});
+			a->setCheckable(true);
+			a->setChecked(fname == curFolder);
+		}
+		if (!fd.order.isEmpty())
+			moveMenu->addSeparator();
+		QAction *noneA = moveMenu->addAction("No folder", [uuid]() {
+			data().assign.remove(uuid);
+			stateSave();
+			rebuildNow();
+		});
+		noneA->setCheckable(true);
+		noneA->setChecked(curFolder.isEmpty());
+		moveMenu->addAction("New folder...",
+				    [uuid]() { newFolderPrompt(g_tree, uuid); });
+
+		menu.addSeparator();
+		menu.addAction("Filters", [uuid]() {
+			if (obs_source_t *src = sceneByUuid(uuid)) {
+				obs_frontend_open_source_filters(src);
+				obs_source_release(src);
+			}
+		});
+		QMenu *projMenu = menu.addMenu("Fullscreen Projector");
+		const QList<QScreen *> screens = QGuiApplication::screens();
+		for (int i = 0; i < screens.size(); i++) {
+			const QRect g = screens[i]->geometry();
+			projMenu->addAction(QString("Display %1 (%2x%3)")
+						    .arg(i + 1)
+						    .arg(g.width())
+						    .arg(g.height()),
+					    [i, name]() {
+						    obs_frontend_open_projector(
+							    "Scene", i, nullptr,
+							    name.toUtf8().constData());
+					    });
+		}
+		menu.addAction("Windowed Projector", [name]() {
+			obs_frontend_open_projector("Scene", -1, nullptr,
+						    name.toUtf8().constData());
+		});
+		menu.addAction("Screenshot", [uuid]() {
+			if (obs_source_t *src = sceneByUuid(uuid)) {
+				obs_frontend_take_source_screenshot(src);
+				obs_source_release(src);
+			}
+		});
+		menu.addSeparator();
+		menu.addAction("Remove", [uuid, name]() { removeScenePrompt(uuid, name); });
+	} else if (isFolder(it)) {
+		const QString fname = itemKey(it);
+		menu.addAction("New folder", []() { newFolderPrompt(g_tree); });
+		menu.addAction("Rename", [fname]() { renameFolderPrompt(g_tree, fname); });
+		menu.addAction("Delete", [fname]() { deleteFolderPrompt(g_tree, fname); });
+		menu.addSeparator();
+		menu.addAction("Collapse all", []() { setAllExpanded(false); });
+		menu.addAction("Expand all", []() { setAllExpanded(true); });
+	} else {
+		menu.addAction("New folder", []() { newFolderPrompt(g_tree); });
+		menu.addSeparator();
+		menu.addAction("Collapse all", []() { setAllExpanded(false); });
+		menu.addAction("Expand all", []() { setAllExpanded(true); });
+	}
+
+	menu.exec(g_tree->viewport()->mapToGlobal(pos));
 }
 
 void createDock()
@@ -311,6 +626,9 @@ void createDock()
 	g_tree->setIconSize(QSize(18, 18));
 	g_tree->setUniformRowHeights(true);
 	g_tree->setStyleSheet("QTreeWidget::item { min-height: 30px; padding-left: 2px; }");
+	g_tree->setContextMenuPolicy(Qt::CustomContextMenu);
+	QObject::connect(g_tree, &QTreeWidget::customContextMenuRequested, g_tree,
+			 [](const QPoint &pos) { showContextMenu(pos); });
 	v->addWidget(g_tree, 1);
 
 	QObject::connect(g_tree, &QTreeWidget::itemClicked, g_tree,
@@ -340,87 +658,20 @@ void createDock()
 		stateSave();
 	});
 
+	/* slim footer, like the native panel: one icon button; everything else
+	   (rename/delete folder, all scene actions) lives in the right click menu */
 	QHBoxLayout *row = new QHBoxLayout();
-	QPushButton *newBtn = new QPushButton("New folder", panel);
-	QPushButton *renBtn = new QPushButton("Rename", panel);
-	QPushButton *delBtn = new QPushButton("Delete", panel);
+	row->setContentsMargins(0, 0, 0, 0);
+	QToolButton *newBtn = new QToolButton(panel);
+	newBtn->setAutoRaise(true);
+	newBtn->setIcon(panel->style()->standardIcon(QStyle::SP_FileDialogNewFolder));
+	newBtn->setToolTip("New folder");
 	row->addWidget(newBtn);
-	row->addWidget(renBtn);
-	row->addWidget(delBtn);
 	row->addStretch(1);
 	v->addLayout(row);
 
-	QObject::connect(newBtn, &QPushButton::clicked, panel, [panel]() {
-		bool ok = false;
-		QString name = QInputDialog::getText(panel, "New folder",
-						     "Folder name:", QLineEdit::Normal,
-						     QString(), &ok);
-		name = name.trimmed();
-		if (!ok || name.isEmpty())
-			return;
-		FolderData &fd = data();
-		if (fd.order.contains(name)) {
-			QMessageBox::information(panel, "DockX",
-						 "A folder with that name already exists.");
-			return;
-		}
-		fd.order.append(name);
-		stateSave();
-		rebuildNow();
-	});
-	QObject::connect(renBtn, &QPushButton::clicked, panel, [panel]() {
-		QTreeWidgetItem *it = selectedFolder(panel);
-		if (!it)
-			return;
-		const QString oldName = itemKey(it);
-		bool ok = false;
-		QString name = QInputDialog::getText(panel, "Rename folder",
-						     "New name:", QLineEdit::Normal, oldName,
-						     &ok);
-		name = name.trimmed();
-		if (!ok || name.isEmpty() || name == oldName)
-			return;
-		FolderData &fd = data();
-		if (fd.order.contains(name)) {
-			QMessageBox::information(panel, "DockX",
-						 "A folder with that name already exists.");
-			return;
-		}
-		for (int i = 0; i < fd.order.size(); i++)
-			if (fd.order[i] == oldName)
-				fd.order[i] = name;
-		for (auto a = fd.assign.begin(); a != fd.assign.end(); ++a)
-			if (a.value() == oldName)
-				a.value() = name;
-		if (fd.collapsed.remove(oldName))
-			fd.collapsed.insert(name);
-		stateSave();
-		rebuildNow();
-	});
-	QObject::connect(delBtn, &QPushButton::clicked, panel, [panel]() {
-		QTreeWidgetItem *it = selectedFolder(panel);
-		if (!it)
-			return;
-		const QString name = itemKey(it);
-		auto answer = QMessageBox::question(
-			panel, "Delete folder",
-			QString("Delete \"%1\"? The scenes inside go back to the main list. "
-				"No scene is deleted.")
-				.arg(name));
-		if (answer != QMessageBox::Yes)
-			return;
-		FolderData &fd = data();
-		fd.order.removeAll(name);
-		fd.collapsed.remove(name);
-		for (auto a = fd.assign.begin(); a != fd.assign.end();) {
-			if (a.value() == name)
-				a = fd.assign.erase(a);
-			else
-				++a;
-		}
-		stateSave();
-		rebuildNow();
-	});
+	QObject::connect(newBtn, &QToolButton::clicked, panel,
+			 [panel]() { newFolderPrompt(panel); });
 
 	if (!obs_frontend_add_dock_by_id("dockx_scene_folders", "Scene Folders", panel)) {
 		obs_log(LOG_WARNING, "could not register the Scene Folders dock");
