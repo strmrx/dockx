@@ -35,25 +35,31 @@ static void on_frontend_event(enum obs_frontend_event event, void *)
 		dockx::filters::rescanSoon();
 		dockx::folders::rebuildSoon();
 		dockx::folders::showFirstRun();
+		dockx::sourcedocks::refreshAll();
 		break;
 	case OBS_FRONTEND_EVENT_SCENE_CHANGED:
 		dockx::panels::autoSceneLayout();
 		dockx::panels::refreshSoon();
+		dockx::sourcedocks::refreshAll();
 		break;
 	case OBS_FRONTEND_EVENT_PREVIEW_SCENE_CHANGED:
 	case OBS_FRONTEND_EVENT_SCENE_LIST_CHANGED:
 		dockx::panels::refreshSoon();
+		dockx::sourcedocks::refreshAll();
 		break;
 	case OBS_FRONTEND_EVENT_SCENE_COLLECTION_CHANGED:
 		dockx::panels::refreshSoon();
 		dockx::filters::rescanSoon();
+		dockx::sourcedocks::refreshAll();
 		break;
 	case OBS_FRONTEND_EVENT_STUDIO_MODE_ENABLED:
 	case OBS_FRONTEND_EVENT_STUDIO_MODE_DISABLED:
 		dockx::folders::rebuildSoon();
+		dockx::sourcedocks::refreshAll();
 		break;
 	case OBS_FRONTEND_EVENT_EXIT:
 		dockx::stateSave();
+		dockx::sourcedocks::shutdown(); /* displays first, while graphics lives */
 		dockx::filters::shutdown();
 		dockx::folders::shutdown();
 		dockx::panels::shutdown();
@@ -74,6 +80,7 @@ bool obs_module_load(void)
 	dockx::stateLoad();
 	dockx::filters::init();
 	dockx::folders::createDock();
+	dockx::sourcedocks::createFromState();
 	obs_frontend_add_event_callback(on_frontend_event, nullptr);
 	obs_frontend_add_tools_menu_item("DockX", tools_menu_clicked, nullptr);
 	return true;

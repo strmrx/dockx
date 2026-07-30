@@ -45,6 +45,25 @@ static QStringList sceneNames()
 	return out;
 }
 
+static bool collectVideoInput(void *param, obs_source_t *src)
+{
+	auto *out = static_cast<QStringList *>(param);
+	if (obs_source_get_output_flags(src) & OBS_SOURCE_VIDEO) {
+		const char *n = obs_source_get_name(src);
+		if (n && *n)
+			*out << QString::fromUtf8(n);
+	}
+	return true;
+}
+
+static QStringList videoInputNames()
+{
+	QStringList out;
+	obs_enum_sources(collectVideoInput, &out);
+	out.sort(Qt::CaseInsensitive);
+	return out;
+}
+
 /* one row of preset swatches + Custom + No color, calling apply(hex) */
 static void addPaletteRow(QWidget *tab, QVBoxLayout *v, QDialog *dlg,
 			  std::function<void(const QString &)> apply)
@@ -694,6 +713,68 @@ void showDialog()
 	dv->addWidget(sephint);
 
 	tabs->addTab(dockTab, "Dock colors");
+
+	/* ---------- Source docks tab ---------- */
+	QWidget *sdTab = new QWidget();
+	QVBoxLayout *sdv = new QVBoxLayout(sdTab);
+
+	QListWidget *sdListW = new QListWidget(sdTab);
+	auto sdTitle = [](const SourceDockEntry &e) {
+		if (e.kind == sourcedocks::KIND_PROGRAM)
+			return QString("Program");
+		if (e.kind == sourcedocks::KIND_PREVIEW)
+			return QString("Preview");
+		return e.sourceName;
+	};
+	auto sdReload = [sdListW, sdTitle]() {
+		sdListW->clear();
+		for (const SourceDockEntry &e : state().sourceDocks) {
+			QListWidgetItem *it = new QListWidgetItem(sdTitle(e), sdListW);
+			it->setData(Qt::UserRole, e.id);
+		}
+	};
+	sdReload();
+	sdv->addWidget(sdListW, 1);
+
+	QHBoxLayout *sdRow = new QHBoxLayout();
+	QComboBox *sdCombo = new QComboBox(sdTab);
+	sdCombo->addItem("Program (main output)", (int)sourcedocks::KIND_PROGRAM);
+	sdCombo->addItem("Preview (studio mode)", (int)sourcedocks::KIND_PREVIEW);
+	for (const QString &n : sceneNames())
+		sdCombo->addItem(n, (int)sourcedocks::KIND_SOURCE);
+	for (const QString &n : videoInputNames())
+		sdCombo->addItem(n, (int)sourcedocks::KIND_SOURCE);
+	sdRow->addWidget(sdCombo, 1);
+	QPushButton *sdAdd = new QPushButton("Add dock", sdTab);
+	QPushButton *sdRemove = new QPushButton("Remove", sdTab);
+	sdRow->addWidget(sdAdd);
+	sdRow->addWidget(sdRemove);
+	sdv->addLayout(sdRow);
+
+	QObject::connect(sdAdd, &QPushButton::clicked, sdTab, [sdCombo, sdReload]() {
+		const int kind = sdCombo->currentData().toInt();
+		const QString name = kind == sourcedocks::KIND_SOURCE
+					     ? sdCombo->currentText()
+					     : QString();
+		sourcedocks::addDock(kind, name);
+		sdReload();
+	});
+	QObject::connect(sdRemove, &QPushButton::clicked, sdTab, [sdListW, sdReload]() {
+		QListWidgetItem *it = sdListW->currentItem();
+		if (!it)
+			return;
+		sourcedocks::removeDock(it->data(Qt::UserRole).toInt());
+		sdReload();
+	});
+
+	QLabel *sdHint = new QLabel(
+		"Each dock shows that source, scene, or output live. Find them in the "
+		"Docks menu; their position saves with your dock layouts.",
+		sdTab);
+	sdHint->setWordWrap(true);
+	sdv->addWidget(sdHint);
+
+	tabs->addTab(sdTab, "Source docks");
 
 	/* ---------- Settings tab ---------- */
 	QWidget *settingsTab = new QWidget();

@@ -39,9 +39,10 @@ Ranked by demand x feasibility for a Qt frontend plugin. Context: #1 idea sitewi
 1. **Scene folders** -- SHIPPED v0.5. Collapsible folder tree for scenes. 82+23 votes,
    years of forum threads. Incumbent (Scene Tree Folder plugin, ~7.6k downloads) is
    weak/Windows-only with UX complaints. MEDIUM.
-2. **Source docks / preview-as-a-dock** -- render any source/scene live inside a dock.
-   87 votes; Exeldro's Source Dock has 227k downloads (biggest demand proof found).
-   Unlocks multiview/studio-mode/grid follow-ons. MEDIUM.
+2. **Source docks / preview-as-a-dock** -- PHASE 1 SHIPPED v0.7 (video docks for any
+   source/scene/Preview/Program; remaining: volume/mute on audio docks, click to
+   interact, per-dock zoom). 87 votes; Exeldro's Source Dock has 227k downloads
+   (biggest demand proof found). Unlocks multiview/studio-mode/grid follow-ons.
    CORRECTED competitive read (verified 2026-07-30): Source Dock is ALIVE and healthy
    (updated Mar 2026, OBS 32 support, 79% five star), NOT abandoned. Known gaps: Mac
    load failures, crash on exit reports, groups don't list members, year-old open

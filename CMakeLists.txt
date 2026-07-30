@@ -36,7 +36,8 @@ endif()
 
 target_sources(
   ${CMAKE_PROJECT_NAME}
-  PRIVATE src/plugin-main.cpp src/dockx-core.cpp src/dockx-dialog.cpp src/dockx-filters.cpp src/dockx-folders.cpp src/dockx.hpp
+  PRIVATE src/plugin-main.cpp src/dockx-core.cpp src/dockx-dialog.cpp src/dockx-filters.cpp src/dockx-folders.cpp
+          src/dockx-sourcedocks.cpp src/dockx.hpp
 )
 
 set_target_properties_plugin(${CMAKE_PROJECT_NAME} PROPERTIES OUTPUT_NAME ${_name})

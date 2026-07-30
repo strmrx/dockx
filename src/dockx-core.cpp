@@ -110,6 +110,7 @@ void stateLoad()
 	obs_data_set_default_bool(d, "filter_hotkeys", true);
 	obs_data_set_default_bool(d, "folder_new_button", true);
 	obs_data_set_default_int(d, "next_id", 1);
+	obs_data_set_default_int(d, "next_source_dock_id", 1);
 
 	g_state.nesting = obs_data_get_bool(d, "nesting");
 	g_state.sceneSearch = obs_data_get_bool(d, "scene_search");
@@ -122,6 +123,23 @@ void stateLoad()
 	g_state.sepSize = (int)obs_data_get_int(d, "sep_size");
 	g_state.sepColor = QString::fromUtf8(obs_data_get_string(d, "sep_color"));
 	g_state.nextId = (int)obs_data_get_int(d, "next_id");
+	g_state.nextSourceDockId = (int)obs_data_get_int(d, "next_source_dock_id");
+
+	obs_data_array_t *sdocks = obs_data_get_array(d, "source_docks");
+	if (sdocks) {
+		const size_t n = obs_data_array_count(sdocks);
+		for (size_t i = 0; i < n; i++) {
+			obs_data_t *o = obs_data_array_item(sdocks, i);
+			SourceDockEntry e;
+			e.id = (int)obs_data_get_int(o, "id");
+			e.kind = (int)obs_data_get_int(o, "kind");
+			e.sourceName = QString::fromUtf8(obs_data_get_string(o, "name"));
+			if (e.id > 0)
+				g_state.sourceDocks.push_back(e);
+			obs_data_release(o);
+		}
+		obs_data_array_release(sdocks);
+	}
 
 	obs_data_t *colors = obs_data_get_obj(d, "colors");
 	if (colors) {
@@ -189,6 +207,18 @@ void stateLoad()
 				}
 				obs_data_release(as);
 			}
+			obs_data_t *fc = obs_data_get_obj(fo, "colors");
+			if (fc) {
+				for (obs_data_item_t *a = obs_data_first(fc); a;
+				     obs_data_item_next(&a)) {
+					const char *fname = obs_data_item_get_name(a);
+					const char *hex = obs_data_item_get_string(a);
+					if (fname && hex && *hex)
+						fd.colors[QString::fromUtf8(fname)] =
+							QString::fromUtf8(hex);
+				}
+				obs_data_release(fc);
+			}
 			g_state.folders[QString::fromUtf8(coll)] = fd;
 			obs_data_release(fo);
 		}
@@ -238,6 +268,19 @@ void stateSave()
 	obs_data_set_int(d, "sep_size", g_state.sepSize);
 	obs_data_set_string(d, "sep_color", g_state.sepColor.toUtf8().constData());
 	obs_data_set_int(d, "next_id", g_state.nextId);
+	obs_data_set_int(d, "next_source_dock_id", g_state.nextSourceDockId);
+
+	obs_data_array_t *sdocks = obs_data_array_create();
+	for (const SourceDockEntry &e : g_state.sourceDocks) {
+		obs_data_t *o = obs_data_create();
+		obs_data_set_int(o, "id", e.id);
+		obs_data_set_int(o, "kind", e.kind);
+		obs_data_set_string(o, "name", e.sourceName.toUtf8().constData());
+		obs_data_array_push_back(sdocks, o);
+		obs_data_release(o);
+	}
+	obs_data_set_array(d, "source_docks", sdocks);
+	obs_data_array_release(sdocks);
 
 	obs_data_t *colors = obs_data_create();
 	for (auto it = g_state.colors.constBegin(); it != g_state.colors.constEnd(); ++it)
@@ -280,6 +323,12 @@ void stateSave()
 					    a.value().toUtf8().constData());
 		obs_data_set_obj(fo, "assign", as);
 		obs_data_release(as);
+		obs_data_t *fc = obs_data_create();
+		for (auto a = fd.colors.constBegin(); a != fd.colors.constEnd(); ++a)
+			obs_data_set_string(fc, a.key().toUtf8().constData(),
+					    a.value().toUtf8().constData());
+		obs_data_set_obj(fo, "colors", fc);
+		obs_data_release(fc);
 		obs_data_set_obj(folders, it.key().toUtf8().constData(), fo);
 		obs_data_release(fo);
 	}

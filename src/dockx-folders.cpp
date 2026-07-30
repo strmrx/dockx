@@ -29,6 +29,8 @@ UUID (renames never lose a folder) and stored per scene collection.
 #include <QMenu>
 #include <QShortcut>
 #include <QMessageBox>
+#include <QPainter>
+#include <QPixmap>
 #include <QPointer>
 #include <QScreen>
 #include <QStyle>
@@ -81,6 +83,27 @@ static QString itemKey(const QTreeWidgetItem *it)
 {
 	return it->data(0, Qt::UserRole + 1).toString();
 }
+
+/* folder icon in the folder's color (or neutral); drawn, not themed, so any
+   color works */
+static QIcon folderGlyph(const QColor &c)
+{
+	QPixmap pm(32, 32);
+	pm.fill(Qt::transparent);
+	QPainter p(&pm);
+	p.setRenderHint(QPainter::Antialiasing);
+	p.setPen(Qt::NoPen);
+	p.setBrush(c);
+	p.drawRoundedRect(QRectF(2, 3, 13, 9), 3, 3);  /* tab */
+	p.drawRoundedRect(QRectF(2, 6, 28, 21), 4, 4); /* body */
+	p.end();
+	return QIcon(pm);
+}
+
+/* every scene row carries a dot in the leftmost slot (where tree arrows used
+   to be); uncolored scenes get a faint neutral dot so rows stay aligned */
+static const QColor NEUTRAL_DOT(160, 160, 160, 70);
+static const QColor NEUTRAL_FOLDER(157, 157, 157);
 
 static void applySearch()
 {
@@ -180,7 +203,6 @@ static void rebuildNow()
 		obs_source_release(cur);
 	}
 
-	const QIcon folderIcon = g_tree->style()->standardIcon(QStyle::SP_DirIcon);
 	QHash<QString, QTreeWidgetItem *> folderItems;
 	for (const QString &fname : fd.order) {
 		QTreeWidgetItem *fi = new QTreeWidgetItem(g_tree);
@@ -188,7 +210,10 @@ static void rebuildNow()
 		fi->setData(0, Qt::UserRole + 1, fname);
 		fi->setFlags(Qt::ItemIsEnabled | Qt::ItemIsSelectable | Qt::ItemIsDragEnabled |
 			     Qt::ItemIsDropEnabled);
-		fi->setIcon(0, folderIcon);
+		const QString fhex = fd.colors.value(fname);
+		fi->setIcon(0, folderGlyph(fhex.isEmpty() ? NEUTRAL_FOLDER : QColor(fhex)));
+		if (!fhex.isEmpty())
+			fi->setForeground(0, QBrush(QColor(fhex)));
 		QFont ff = fi->font(0);
 		ff.setBold(true);
 		fi->setFont(0, ff);
@@ -209,6 +234,8 @@ static void rebuildNow()
 		if (!hex.isEmpty()) {
 			si->setForeground(0, QBrush(QColor(hex)));
 			si->setIcon(0, colorDot(QColor(hex)));
+		} else {
+			si->setIcon(0, colorDot(NEUTRAL_DOT));
 		}
 		if (s.uuid == curUuid) {
 			QFont f = si->font(0);
@@ -354,6 +381,19 @@ static void renameFolderPrompt(QWidget *parent, const QString &oldName)
 			a.value() = name;
 	if (fd.collapsed.remove(oldName))
 		fd.collapsed.insert(name);
+	if (fd.colors.contains(oldName))
+		fd.colors[name] = fd.colors.take(oldName);
+	stateSave();
+	rebuildNow();
+}
+
+static void setFolderColor(const QString &fname, const QString &hex)
+{
+	FolderData &fd = data();
+	if (hex.isEmpty())
+		fd.colors.remove(fname);
+	else
+		fd.colors[fname] = hex;
 	stateSave();
 	rebuildNow();
 }
@@ -370,6 +410,7 @@ static void deleteFolderPrompt(QWidget *parent, const QString &name)
 	FolderData &fd = data();
 	fd.order.removeAll(name);
 	fd.collapsed.remove(name);
+	fd.colors.remove(name);
 	for (auto a = fd.assign.begin(); a != fd.assign.end();) {
 		if (a.value() == name)
 			a = fd.assign.erase(a);
@@ -800,6 +841,19 @@ static void showContextMenu(const QPoint &pos)
 		menu.addAction("New folder", []() { newFolderPrompt(g_tree); });
 		menu.addAction("Rename", [fname]() { renameFolderPrompt(g_tree, fname); });
 		menu.addAction("Delete", [fname]() { deleteFolderPrompt(g_tree, fname); });
+		QMenu *fcMenu = menu.addMenu("Set Color");
+		for (int i = 0; i < 8; i++) {
+			const QString hex = QString::fromUtf8(PRESET_COLORS[i]);
+			fcMenu->addAction(folderGlyph(QColor(hex)), PRESET_COLOR_NAMES[i],
+					  [fname, hex]() { setFolderColor(fname, hex); });
+		}
+		fcMenu->addAction("Custom...", [fname]() {
+			QColor c = QColorDialog::getColor(Qt::white, g_tree, "Pick a color");
+			if (c.isValid())
+				setFolderColor(fname, c.name());
+		});
+		fcMenu->addAction("No color",
+				  [fname]() { setFolderColor(fname, QString()); });
 		menu.addSeparator();
 		menu.addAction("Collapse all", []() { setAllExpanded(false); });
 		menu.addAction("Expand all", []() { setAllExpanded(true); });
@@ -848,6 +902,9 @@ void createDock()
 	g_tree->setSelectionMode(QAbstractItemView::SingleSelection);
 	g_tree->setAnimated(true);
 	g_tree->setIndentation(18);
+	/* no disclosure arrows: dots and folder icons own the left edge; folders
+	   expand and collapse on click instead */
+	g_tree->setRootIsDecorated(false);
 	/* read as large and clear as the native Scenes panel: bigger font,
 	   taller rows, bigger icons (metrics only; theme keeps its colors) */
 	QFont treeFont = g_tree->font();
@@ -883,6 +940,10 @@ void createDock()
 
 	QObject::connect(g_tree, &QTreeWidget::itemClicked, g_tree,
 			 [](QTreeWidgetItem *it, int) {
+				 if (isFolder(it)) {
+					 it->setExpanded(!it->isExpanded());
+					 return;
+				 }
 				 if (!isScene(it))
 					 return;
 				 obs_source_t *src = obs_get_source_by_uuid(

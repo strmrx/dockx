@@ -27,11 +27,19 @@ struct Layout {
 	obs_hotkey_id hotkey = OBS_INVALID_HOTKEY_ID;
 };
 
+/* a live video dock: a source/scene (or Preview/Program) rendered in a dock */
+struct SourceDockEntry {
+	int id = 0;
+	int kind = 0; /* 0 = named source/scene, 1 = Program, 2 = Preview */
+	QString sourceName;
+};
+
 /* scene folder layout for one scene collection */
 struct FolderData {
 	QHash<QString, QString> assign; /* scene uuid -> folder name */
 	QStringList order;              /* folder display order */
 	QSet<QString> collapsed;        /* folder names currently collapsed */
+	QHash<QString, QString> colors; /* folder name -> "#rrggbb" */
 };
 
 struct State {
@@ -54,6 +62,8 @@ struct State {
 	QString sepColor;                     /* separator tint; empty = theme default */
 	QHash<QString, FolderData> folders;   /* scene folders, keyed by collection name */
 	QByteArray undoState;                 /* layout snapshot taken before the last apply */
+	std::vector<SourceDockEntry> sourceDocks;
+	int nextSourceDockId = 1;
 };
 
 State &state();
@@ -111,6 +121,16 @@ void applySettings(); /* honor state().folderNewButton */
 void showFirstRun(); /* pop the dock open once so people discover it */
 void shutdown();
 } // namespace folders
+
+/* live video docks: any source/scene (or Preview/Program) rendered in a dock */
+namespace sourcedocks {
+enum { KIND_SOURCE = 0, KIND_PROGRAM = 1, KIND_PREVIEW = 2 };
+void createFromState(); /* register saved docks; call once at module load */
+void refreshAll();      /* re-resolve sources after scene/collection changes */
+void addDock(int kind, const QString &sourceName);
+void removeDock(int id);
+void shutdown(); /* MUST run at EXIT, before graphics dies */
+} // namespace sourcedocks
 
 /* colored dot icon for a scene row; theme stylesheets cannot override icons,
    so the color always shows even when the theme repaints item text */
