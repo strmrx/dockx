@@ -163,6 +163,9 @@ static void rebuildNow()
 		fi->setFlags(Qt::ItemIsEnabled | Qt::ItemIsSelectable | Qt::ItemIsDragEnabled |
 			     Qt::ItemIsDropEnabled);
 		fi->setIcon(0, folderIcon);
+		QFont ff = fi->font(0);
+		ff.setBold(true);
+		fi->setFont(0, ff);
 		folderItems[fname] = fi;
 	}
 
@@ -299,7 +302,15 @@ void createDock()
 	g_tree->setDragDropMode(QAbstractItemView::InternalMove);
 	g_tree->setSelectionMode(QAbstractItemView::SingleSelection);
 	g_tree->setAnimated(true);
-	g_tree->setIndentation(14);
+	g_tree->setIndentation(18);
+	/* read as large and clear as the native Scenes panel: bigger font,
+	   taller rows, bigger icons (metrics only; theme keeps its colors) */
+	QFont treeFont = g_tree->font();
+	treeFont.setPointSizeF(treeFont.pointSizeF() + 1.0);
+	g_tree->setFont(treeFont);
+	g_tree->setIconSize(QSize(18, 18));
+	g_tree->setUniformRowHeights(true);
+	g_tree->setStyleSheet("QTreeWidget::item { min-height: 30px; padding-left: 2px; }");
 	v->addWidget(g_tree, 1);
 
 	QObject::connect(g_tree, &QTreeWidget::itemClicked, g_tree,

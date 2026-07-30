@@ -36,13 +36,14 @@ namespace dockx {
 
 QIcon colorDot(const QColor &c)
 {
-	QPixmap pm(16, 16);
+	/* drawn large and scaled down so the dot stays crisp at any icon size */
+	QPixmap pm(32, 32);
 	pm.fill(Qt::transparent);
 	QPainter p(&pm);
 	p.setRenderHint(QPainter::Antialiasing);
 	p.setBrush(c);
 	p.setPen(Qt::NoPen);
-	p.drawEllipse(3, 3, 10, 10);
+	p.drawEllipse(6, 6, 20, 20);
 	p.end();
 	return QIcon(pm);
 }
