@@ -1,11 +1,16 @@
 /*
-DockX for OBS Studio (by StrmrX) -- live source docks.
+DockX for OBS Studio (by StrmrX) -- live source docks (phase 2).
 GPL v2, see plugin-main.cpp for the full notice.
 
 Renders any source, scene, the Preview (studio mode) or the Program inside a
 regular OBS dock via an obs_display bound to a native Qt widget. Sources are
 held as weak references and resolved by name on the UI thread; the draw
 callback (graphics thread) only touches libobs.
+
+Phase 2: audio sources get a volume slider + mute button under the video
+(audio only sources are just the control strip), and interaction capable
+sources (browser sources) receive mouse/keyboard input straight through the
+dock, like OBS's own Interact window.
 */
 
 #include "dockx.hpp"
@@ -15,11 +20,22 @@ callback (graphics thread) only touches libobs.
 #include <plugin-support.h>
 
 #include <QDockWidget>
+#include <QFocusEvent>
+#include <QHBoxLayout>
+#include <QKeyEvent>
 #include <QMainWindow>
+#include <QMouseEvent>
 #include <QResizeEvent>
 #include <QShowEvent>
+#include <QSlider>
+#include <QStyle>
+#include <QTimer>
+#include <QToolButton>
+#include <QVBoxLayout>
+#include <QWheelEvent>
 #include <QWidget>
 
+#include <cmath>
 #include <mutex>
 #include <vector>
 
@@ -33,14 +49,34 @@ static QString dockIdFor(int id)
 	return QString("dockx_source_%1").arg(id);
 }
 
-class SourceDockView : public QWidget {
+static uint32_t toObsModifiers(Qt::KeyboardModifiers m, Qt::MouseButtons buttons)
+{
+	uint32_t mods = INTERACT_NONE;
+	if (m & Qt::ShiftModifier)
+		mods |= INTERACT_SHIFT_KEY;
+	if (m & Qt::ControlModifier)
+		mods |= INTERACT_CONTROL_KEY;
+	if (m & Qt::AltModifier)
+		mods |= INTERACT_ALT_KEY;
+	if (buttons & Qt::LeftButton)
+		mods |= INTERACT_MOUSE_LEFT;
+	if (buttons & Qt::MiddleButton)
+		mods |= INTERACT_MOUSE_MIDDLE;
+	if (buttons & Qt::RightButton)
+		mods |= INTERACT_MOUSE_RIGHT;
+	return mods;
+}
+
+/* the native paint surface: obs_display + draw callback + input forwarding */
+class VideoWidget : public QWidget {
 public:
 	int id;
 	int kind;
 	QString sourceName;
+	bool interactive = false; /* forward mouse/keys into the source */
 
-	SourceDockView(int id_, int kind_, const QString &name)
-		: QWidget(nullptr),
+	VideoWidget(int id_, int kind_, const QString &name, QWidget *parent)
+		: QWidget(parent),
 		  id(id_),
 		  kind(kind_),
 		  sourceName(name)
@@ -52,9 +88,11 @@ public:
 		setAttribute(Qt::WA_DontCreateNativeAncestors);
 		setAttribute(Qt::WA_NativeWindow);
 		setMinimumSize(80, 45);
+		setMouseTracking(true);
+		setFocusPolicy(Qt::ClickFocus);
 	}
 
-	~SourceDockView() override
+	~VideoWidget() override
 	{
 		destroyDisplay();
 		setWeak(nullptr);
@@ -114,7 +152,7 @@ public:
 	{
 		if (!display)
 			return;
-		obs_display_remove_draw_callback(display, &SourceDockView::drawCb, this);
+		obs_display_remove_draw_callback(display, &VideoWidget::drawCb, this);
 		obs_display_destroy(display);
 		display = nullptr;
 	}
@@ -147,6 +185,69 @@ protected:
 		}
 	}
 
+	/* ---- input forwarding (browser sources etc.) ---- */
+
+	void mousePressEvent(QMouseEvent *e) override { sendClick(e, false); }
+	void mouseReleaseEvent(QMouseEvent *e) override { sendClick(e, true); }
+	void mouseDoubleClickEvent(QMouseEvent *e) override { sendClick(e, false, 2); }
+
+	void mouseMoveEvent(QMouseEvent *e) override
+	{
+		if (!interactive)
+			return;
+		if (obs_source_t *src = lockSource()) {
+			obs_mouse_event me = {};
+			me.modifiers = toObsModifiers(e->modifiers(), e->buttons());
+			if (mapToSource(e->position(), me.x, me.y))
+				obs_source_send_mouse_move(src, &me, false);
+			obs_source_release(src);
+		}
+	}
+
+	void leaveEvent(QEvent *e) override
+	{
+		QWidget::leaveEvent(e);
+		if (!interactive)
+			return;
+		if (obs_source_t *src = lockSource()) {
+			obs_mouse_event me = {};
+			obs_source_send_mouse_move(src, &me, true);
+			obs_source_release(src);
+		}
+	}
+
+	void wheelEvent(QWheelEvent *e) override
+	{
+		if (!interactive) {
+			QWidget::wheelEvent(e);
+			return;
+		}
+		if (obs_source_t *src = lockSource()) {
+			obs_mouse_event me = {};
+			me.modifiers = toObsModifiers(e->modifiers(), e->buttons());
+			mapToSource(e->position(), me.x, me.y);
+			obs_source_send_mouse_wheel(src, &me, e->angleDelta().x(),
+						    e->angleDelta().y());
+			obs_source_release(src);
+			e->accept();
+		}
+	}
+
+	void keyPressEvent(QKeyEvent *e) override { sendKey(e, false); }
+	void keyReleaseEvent(QKeyEvent *e) override { sendKey(e, true); }
+
+	void focusInEvent(QFocusEvent *e) override
+	{
+		QWidget::focusInEvent(e);
+		sendFocus(true);
+	}
+
+	void focusOutEvent(QFocusEvent *e) override
+	{
+		QWidget::focusOutEvent(e);
+		sendFocus(false);
+	}
+
 private:
 	obs_display_t *display = nullptr;
 	obs_weak_source_t *weak = nullptr;
@@ -169,8 +270,7 @@ private:
 #endif
 		display = obs_display_create(&info, 0x151515);
 		if (display)
-			obs_display_add_draw_callback(display, &SourceDockView::drawCb,
-						      this);
+			obs_display_add_draw_callback(display, &VideoWidget::drawCb, this);
 		else
 			obs_log(LOG_WARNING, "source dock %d: display create failed", id);
 	}
@@ -184,14 +284,103 @@ private:
 			if (e.id == id)
 				e.sourceName = n;
 		stateSave();
-		if (QWidget *p = parentWidget())
+		QWidget *p = parentWidget();
+		while (p && !qobject_cast<QDockWidget *>(p))
+			p = p->parentWidget();
+		if (p)
 			p->setWindowTitle(n);
+	}
+
+	/* widget position -> source pixel position (undo the letterbox math) */
+	bool mapToSource(const QPointF &pos, int32_t &sx, int32_t &sy)
+	{
+		obs_source_t *src = lockSource();
+		if (!src)
+			return false;
+		const uint32_t w = obs_source_get_width(src);
+		const uint32_t h = obs_source_get_height(src);
+		obs_source_release(src);
+		if (!w || !h)
+			return false;
+		const qreal dpr = devicePixelRatioF();
+		const float cx = (float)(width() * dpr);
+		const float cy = (float)(height() * dpr);
+		const float scale = qMin(cx / (float)w, cy / (float)h);
+		if (scale <= 0.0f)
+			return false;
+		const float vx = (cx - scale * (float)w) / 2.0f;
+		const float vy = (cy - scale * (float)h) / 2.0f;
+		sx = (int32_t)(((float)(pos.x() * dpr) - vx) / scale);
+		sy = (int32_t)(((float)(pos.y() * dpr) - vy) / scale);
+		sx = qBound(0, sx, (int32_t)w - 1);
+		sy = qBound(0, sy, (int32_t)h - 1);
+		return true;
+	}
+
+	void sendClick(QMouseEvent *e, bool up, uint32_t clicks = 1)
+	{
+		if (!interactive) {
+			if (up)
+				QWidget::mouseReleaseEvent(e);
+			else
+				QWidget::mousePressEvent(e);
+			return;
+		}
+		obs_source_t *src = lockSource();
+		if (!src)
+			return;
+		obs_mouse_event me = {};
+		me.modifiers = toObsModifiers(e->modifiers(), e->buttons());
+		if (mapToSource(e->position(), me.x, me.y)) {
+			int32_t btn = MOUSE_LEFT;
+			if (e->button() == Qt::RightButton)
+				btn = MOUSE_RIGHT;
+			else if (e->button() == Qt::MiddleButton)
+				btn = MOUSE_MIDDLE;
+			obs_source_send_mouse_click(src, &me, btn, up, clicks);
+		}
+		obs_source_release(src);
+		if (!up)
+			setFocus();
+	}
+
+	void sendKey(QKeyEvent *e, bool up)
+	{
+		if (!interactive) {
+			if (up)
+				QWidget::keyReleaseEvent(e);
+			else
+				QWidget::keyPressEvent(e);
+			return;
+		}
+		obs_source_t *src = lockSource();
+		if (!src)
+			return;
+		QByteArray text = e->text().toUtf8();
+		obs_key_event ke = {};
+		ke.modifiers = toObsModifiers(e->modifiers(), Qt::NoButton);
+		ke.text = text.data();
+		ke.native_modifiers = e->nativeModifiers();
+		ke.native_scancode = e->nativeScanCode();
+		ke.native_vkey = e->nativeVirtualKey();
+		obs_source_send_key_click(src, &ke, up);
+		obs_source_release(src);
+	}
+
+	void sendFocus(bool focused)
+	{
+		if (!interactive)
+			return;
+		if (obs_source_t *src = lockSource()) {
+			obs_source_send_focus(src, focused);
+			obs_source_release(src);
+		}
 	}
 
 	/* graphics thread: libobs calls only */
 	static void drawCb(void *param, uint32_t cx, uint32_t cy)
 	{
-		SourceDockView *v = static_cast<SourceDockView *>(param);
+		VideoWidget *v = static_cast<VideoWidget *>(param);
 		obs_source_t *src = nullptr;
 		uint32_t w, h;
 		if (v->kind == KIND_PROGRAM) {
@@ -211,8 +400,7 @@ private:
 				return;
 			}
 		}
-		const float scale =
-			qMin((float)cx / (float)w, (float)cy / (float)h);
+		const float scale = qMin((float)cx / (float)w, (float)cy / (float)h);
 		const int vw = (int)(scale * (float)w);
 		const int vh = (int)(scale * (float)h);
 		const int vx = ((int)cx - vw) / 2;
@@ -232,7 +420,120 @@ private:
 	}
 };
 
-static std::vector<SourceDockView *> g_views;
+/* the dock content: video on top, audio controls underneath when the source
+   has audio (audio only sources show just the control strip) */
+class SourceDockPanel : public QWidget {
+public:
+	VideoWidget *video;
+
+	SourceDockPanel(int id, int kind, const QString &name) : QWidget(nullptr)
+	{
+		QVBoxLayout *v = new QVBoxLayout(this);
+		v->setContentsMargins(0, 0, 0, 0);
+		v->setSpacing(2);
+		video = new VideoWidget(id, kind, name, this);
+		v->addWidget(video, 1);
+
+		audioRow = new QWidget(this);
+		QHBoxLayout *h = new QHBoxLayout(audioRow);
+		h->setContentsMargins(6, 2, 6, 4);
+		h->setSpacing(6);
+		muteBtn = new QToolButton(audioRow);
+		muteBtn->setCheckable(true);
+		muteBtn->setAutoRaise(true);
+		muteBtn->setToolTip("Mute");
+		h->addWidget(muteBtn);
+		volSlider = new QSlider(Qt::Horizontal, audioRow);
+		volSlider->setRange(0, 100);
+		volSlider->setToolTip("Volume");
+		h->addWidget(volSlider, 1);
+		v->addWidget(audioRow);
+		audioRow->setVisible(false);
+
+		QObject::connect(volSlider, &QSlider::valueChanged, this, [this](int val) {
+			if (syncing)
+				return;
+			if (obs_source_t *src = video->lockSource()) {
+				const float f = (float)val / 100.0f;
+				obs_source_set_volume(src, f * f * f); /* cubic, like OBS */
+				obs_source_release(src);
+			}
+		});
+		QObject::connect(muteBtn, &QToolButton::toggled, this, [this](bool on) {
+			if (syncing)
+				return;
+			if (obs_source_t *src = video->lockSource()) {
+				obs_source_set_muted(src, on);
+				obs_source_release(src);
+			}
+			updateMuteIcon(on);
+		});
+
+		/* the mixer can change volume/mute behind our back; keep in sync
+		   with a light poll while the controls are on screen */
+		poll = new QTimer(this);
+		poll->setInterval(800);
+		QObject::connect(poll, &QTimer::timeout, this, [this]() { syncControls(); });
+	}
+
+	void refresh()
+	{
+		video->resolve();
+		uint32_t flags = 0;
+		if (obs_source_t *src = video->lockSource()) {
+			flags = obs_source_get_output_flags(src);
+			obs_source_release(src);
+		}
+		const bool audio = video->kind == KIND_SOURCE && (flags & OBS_SOURCE_AUDIO);
+		const bool videoOut = video->kind != KIND_SOURCE || (flags & OBS_SOURCE_VIDEO);
+		video->interactive = (flags & OBS_SOURCE_INTERACTION) != 0;
+		video->setVisible(videoOut);
+		audioRow->setVisible(audio);
+		if (audio) {
+			syncControls();
+			poll->start();
+		} else {
+			poll->stop();
+		}
+	}
+
+	void teardown()
+	{
+		poll->stop();
+		video->destroyDisplay();
+		video->clearWeak();
+	}
+
+private:
+	QWidget *audioRow;
+	QSlider *volSlider;
+	QToolButton *muteBtn;
+	QTimer *poll;
+	bool syncing = false;
+
+	void updateMuteIcon(bool muted)
+	{
+		muteBtn->setIcon(style()->standardIcon(
+			muted ? QStyle::SP_MediaVolumeMuted : QStyle::SP_MediaVolume));
+	}
+
+	void syncControls()
+	{
+		obs_source_t *src = video->lockSource();
+		if (!src)
+			return;
+		const float vol = obs_source_get_volume(src);
+		const bool muted = obs_source_muted(src);
+		obs_source_release(src);
+		syncing = true;
+		volSlider->setValue((int)std::lround(std::cbrt((double)vol) * 100.0));
+		muteBtn->setChecked(muted);
+		updateMuteIcon(muted);
+		syncing = false;
+	}
+};
+
+static std::vector<SourceDockPanel *> g_views;
 
 static QString titleFor(const SourceDockEntry &e)
 {
@@ -243,9 +544,9 @@ static QString titleFor(const SourceDockEntry &e)
 	return e.sourceName;
 }
 
-static SourceDockView *registerView(const SourceDockEntry &e)
+static SourceDockPanel *registerView(const SourceDockEntry &e)
 {
-	SourceDockView *v = new SourceDockView(e.id, e.kind, e.sourceName);
+	SourceDockPanel *v = new SourceDockPanel(e.id, e.kind, e.sourceName);
 	if (!obs_frontend_add_dock_by_id(dockIdFor(e.id).toUtf8().constData(),
 					 titleFor(e).toUtf8().constData(), v)) {
 		obs_log(LOG_WARNING, "could not register source dock %d", e.id);
@@ -266,8 +567,8 @@ void refreshAll()
 {
 	if (g_shutdown)
 		return;
-	for (SourceDockView *v : g_views)
-		v->resolve();
+	for (SourceDockPanel *v : g_views)
+		v->refresh();
 }
 
 void addDock(int kind, const QString &sourceName)
@@ -278,10 +579,10 @@ void addDock(int kind, const QString &sourceName)
 	e.sourceName = sourceName;
 	state().sourceDocks.push_back(e);
 	stateSave();
-	SourceDockView *v = registerView(e);
+	SourceDockPanel *v = registerView(e);
 	if (!v)
 		return;
-	v->resolve();
+	v->refresh();
 	/* pop the new dock open so it visibly appears */
 	QMainWindow *m = static_cast<QMainWindow *>(obs_frontend_get_main_window());
 	QDockWidget *dock = m ? m->findChild<QDockWidget *>(dockIdFor(e.id)) : nullptr;
@@ -294,12 +595,13 @@ void addDock(int kind, const QString &sourceName)
 void removeDock(int id)
 {
 	for (auto it = g_views.begin(); it != g_views.end(); ++it) {
-		if ((*it)->id == id) {
+		if ((*it)->video->id == id) {
+			(*it)->teardown();
 			g_views.erase(it);
 			break;
 		}
 	}
-	/* removing the dock destroys the wrapper AND our view widget */
+	/* removing the dock destroys the wrapper AND our panel widget */
 	obs_frontend_remove_dock(dockIdFor(id).toUtf8().constData());
 	auto &v = state().sourceDocks;
 	for (auto it = v.begin(); it != v.end(); ++it) {
@@ -316,10 +618,8 @@ void shutdown()
 	g_shutdown = true;
 	/* displays and refs must die while graphics is still alive; the widgets
 	   themselves are torn down later with their QDockWidget parents */
-	for (SourceDockView *v : g_views) {
-		v->destroyDisplay();
-		v->clearWeak();
-	}
+	for (SourceDockPanel *v : g_views)
+		v->teardown();
 	g_views.clear();
 }
 

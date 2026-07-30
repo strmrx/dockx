@@ -45,10 +45,10 @@ static QStringList sceneNames()
 	return out;
 }
 
-static bool collectVideoInput(void *param, obs_source_t *src)
+static bool collectDockableInput(void *param, obs_source_t *src)
 {
 	auto *out = static_cast<QStringList *>(param);
-	if (obs_source_get_output_flags(src) & OBS_SOURCE_VIDEO) {
+	if (obs_source_get_output_flags(src) & (OBS_SOURCE_VIDEO | OBS_SOURCE_AUDIO)) {
 		const char *n = obs_source_get_name(src);
 		if (n && *n)
 			*out << QString::fromUtf8(n);
@@ -56,10 +56,10 @@ static bool collectVideoInput(void *param, obs_source_t *src)
 	return true;
 }
 
-static QStringList videoInputNames()
+static QStringList dockableInputNames()
 {
 	QStringList out;
-	obs_enum_sources(collectVideoInput, &out);
+	obs_enum_sources(collectDockableInput, &out);
 	out.sort(Qt::CaseInsensitive);
 	return out;
 }
@@ -742,7 +742,7 @@ void showDialog()
 	sdCombo->addItem("Preview (studio mode)", (int)sourcedocks::KIND_PREVIEW);
 	for (const QString &n : sceneNames())
 		sdCombo->addItem(n, (int)sourcedocks::KIND_SOURCE);
-	for (const QString &n : videoInputNames())
+	for (const QString &n : dockableInputNames())
 		sdCombo->addItem(n, (int)sourcedocks::KIND_SOURCE);
 	sdRow->addWidget(sdCombo, 1);
 	QPushButton *sdAdd = new QPushButton("Add dock", sdTab);
@@ -768,8 +768,10 @@ void showDialog()
 	});
 
 	QLabel *sdHint = new QLabel(
-		"Each dock shows that source, scene, or output live. Find them in the "
-		"Docks menu; their position saves with your dock layouts.",
+		"Each dock shows that source, scene, or output live. Audio sources get "
+		"volume and mute controls; browser sources are clickable right in the "
+		"dock. Find them in the Docks menu; their position saves with your dock "
+		"layouts.",
 		sdTab);
 	sdHint->setWordWrap(true);
 	sdv->addWidget(sdHint);
