@@ -110,6 +110,7 @@ void stateLoad()
 	g_state.sceneColors = obs_data_get_bool(d, "scene_colors");
 	g_state.dockColors = obs_data_get_bool(d, "dock_colors");
 	g_state.filterHotkeys = obs_data_get_bool(d, "filter_hotkeys");
+	g_state.folderDockIntroduced = obs_data_get_bool(d, "folder_dock_introduced");
 	g_state.sepSize = (int)obs_data_get_int(d, "sep_size");
 	g_state.sepColor = QString::fromUtf8(obs_data_get_string(d, "sep_color"));
 	g_state.nextId = (int)obs_data_get_int(d, "next_id");
@@ -224,6 +225,7 @@ void stateSave()
 	obs_data_set_bool(d, "scene_colors", g_state.sceneColors);
 	obs_data_set_bool(d, "dock_colors", g_state.dockColors);
 	obs_data_set_bool(d, "filter_hotkeys", g_state.filterHotkeys);
+	obs_data_set_bool(d, "folder_dock_introduced", g_state.folderDockIntroduced);
 	obs_data_set_int(d, "sep_size", g_state.sepSize);
 	obs_data_set_string(d, "sep_color", g_state.sepColor.toUtf8().constData());
 	obs_data_set_int(d, "next_id", g_state.nextId);

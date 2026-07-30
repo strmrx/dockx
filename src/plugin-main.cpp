@@ -34,6 +34,7 @@ static void on_frontend_event(enum obs_frontend_event event, void *)
 		dockx::panels::initAfterLoad();
 		dockx::filters::rescanSoon();
 		dockx::folders::rebuildSoon();
+		dockx::folders::showFirstRun();
 		break;
 	case OBS_FRONTEND_EVENT_SCENE_CHANGED:
 		dockx::panels::autoSceneLayout();

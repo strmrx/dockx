@@ -40,6 +40,7 @@ struct State {
 	bool sceneColors = true;
 	bool dockColors = true;
 	bool filterHotkeys = true;
+	bool folderDockIntroduced = false; /* first run pops the Scene Folders dock open */
 
 	int nextId = 1;
 	std::vector<Layout> layouts;
@@ -102,6 +103,7 @@ void shutdown();
 namespace folders {
 void createDock();  /* register the dock; call once at module load */
 void rebuildSoon(); /* debounced tree rebuild from OBS scene list + state */
+void showFirstRun(); /* pop the dock open once so people discover it */
 void shutdown();
 } // namespace folders
 

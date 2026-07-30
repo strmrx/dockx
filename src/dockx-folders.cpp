@@ -15,6 +15,7 @@ UUID (renames never lose a folder) and stored per scene collection.
 #include <plugin-support.h>
 
 #include <QBrush>
+#include <QDockWidget>
 #include <QDropEvent>
 #include <QFont>
 #include <QHBoxLayout>
@@ -406,6 +407,30 @@ void createDock()
 		g_tree = nullptr;
 		g_search = nullptr;
 	}
+}
+
+void showFirstRun()
+{
+	if (state().folderDockIntroduced || !g_tree)
+		return;
+	QMainWindow *m = static_cast<QMainWindow *>(obs_frontend_get_main_window());
+	if (!m)
+		return;
+	/* the dock OBS wrapped our panel in; find by id, fall back to title */
+	QDockWidget *dock = m->findChild<QDockWidget *>("dockx_scene_folders");
+	if (!dock) {
+		const QList<QDockWidget *> docks = m->findChildren<QDockWidget *>();
+		for (QDockWidget *d : docks) {
+			if (d->windowTitle() == QStringLiteral("Scene Folders")) {
+				dock = d;
+				break;
+			}
+		}
+	}
+	if (dock)
+		dock->setVisible(true);
+	state().folderDockIntroduced = true;
+	stateSave();
 }
 
 void shutdown()
