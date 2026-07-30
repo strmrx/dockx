@@ -22,6 +22,12 @@ separator thickness + tint control, hotkey binding INSIDE the dialog (no OBS set
 and Auto switch: scene -> layout rules so the whole dock arrangement changes with the scene
 (also the zero-effort Stream Deck integration: switch scene or press the layout hotkey).
 
+**v0.5.0 (2026-07-30):** the two top validated-demand picks, greenlit by Joey. Filter
+hotkeys: every filter on every source gets an on/off hotkey automatically (bindings ride
+the scene collection), bindable from a new Filters tab. Scene Folders: a native dock with
+a collapsible, searchable, drag and drop folder tree over the scene list, keyed by scene
+UUID and per scene collection; click to switch, studio mode aware, scene colors carried in.
+
 **Direction (Joey, 2026-07-29): DockX replaces LoadoutX.** The native plugin does
 everything the browser dock did, better, with zero setup (no websocket password dance).
 LoadoutX is frozen; its features migrate here.
@@ -30,9 +36,9 @@ LoadoutX is frozen; its features migrate here.
 Ranked by demand x feasibility for a Qt frontend plugin. Context: #1 idea sitewide has
 431 votes, so 80-150 = top tier.
 
-1. **Scene folders** -- collapsible folder tree for scenes. 82+23 votes, years of forum
-   threads. Incumbent (Scene Tree Folder plugin, ~7.6k downloads) is weak/Windows-only
-   with UX complaints. Natural extension of our Scenes panel work. MEDIUM.
+1. **Scene folders** -- SHIPPED v0.5. Collapsible folder tree for scenes. 82+23 votes,
+   years of forum threads. Incumbent (Scene Tree Folder plugin, ~7.6k downloads) is
+   weak/Windows-only with UX complaints. MEDIUM.
 2. **Source docks / preview-as-a-dock** -- render any source/scene live inside a dock.
    87 votes; Exeldro's Source Dock has 227k downloads (biggest demand proof found).
    Unlocks multiview/studio-mode/grid follow-ons. MEDIUM.
@@ -40,8 +46,8 @@ Ranked by demand x feasibility for a Qt frontend plugin. Context: #1 idea sitewi
    export files. 149 votes (highest plugin-territory idea). MEDIUM.
 4. **Reorderable audio mixer** -- drag to reorder mixer channels. 32+29 votes, constant
    forum pain (people rename sources "1 Mic, 2 Game"). MEDIUM.
-5. **Filter hotkeys** -- hotkey to toggle any filter (Stream Deck bait). 59 votes; only a
-   Lua script exists today. EASY -- cheapest high-demand win, good v0.5 candidate.
+5. **Filter hotkeys** -- SHIPPED v0.5. Hotkey to toggle any filter (Stream Deck bait).
+   59 votes; only a Lua script existed. EASY.
 6. **Multiview upgrades** -- pick/order scenes, custom grids, always-on-top. ~130 votes
    combined. MEDIUM-HARD (needs #2's display machinery).
 7. **Scene thumbnails** -- previews next to scene names. 22 votes; pairs with folders =

@@ -10,7 +10,9 @@ GPL v2, see plugin-main.cpp for the full notice.
 #include <QHash>
 #include <QIcon>
 #include <QList>
+#include <QSet>
 #include <QString>
+#include <QStringList>
 
 #include <vector>
 
@@ -23,6 +25,13 @@ struct Layout {
 	obs_hotkey_id hotkey = OBS_INVALID_HOTKEY_ID;
 };
 
+/* scene folder layout for one scene collection */
+struct FolderData {
+	QHash<QString, QString> assign; /* scene uuid -> folder name */
+	QStringList order;              /* folder display order */
+	QSet<QString> collapsed;        /* folder names currently collapsed */
+};
+
 struct State {
 	/* settings (all user visible, defaults ON) */
 	bool nesting = true;
@@ -30,6 +39,7 @@ struct State {
 	bool sourceSearch = true;
 	bool sceneColors = true;
 	bool dockColors = true;
+	bool filterHotkeys = true;
 
 	int nextId = 1;
 	std::vector<Layout> layouts;
@@ -38,6 +48,7 @@ struct State {
 	QHash<QString, int> sceneLayouts;     /* scene name -> layout id (auto switch) */
 	int sepSize = 0;                      /* px between docks; 0 = theme default */
 	QString sepColor;                     /* separator tint; empty = theme default */
+	QHash<QString, FolderData> folders;   /* scene folders, keyed by collection name */
 	QByteArray undoState;                 /* layout snapshot taken before the last apply */
 };
 
@@ -71,6 +82,28 @@ QList<DockInfo> listDocks();
 } // namespace panels
 
 void showDialog();
+
+/* toggle hotkeys for every filter on every source; bindings are registered on
+   the parent source so OBS persists them inside the scene collection */
+namespace filters {
+struct Entry {
+	QString sourceName;
+	QString filterName;
+	obs_hotkey_id hotkey;
+};
+void init();               /* signal wiring; call once at module load */
+void rescanSoon();         /* debounced reconcile of hotkey registrations */
+void applyEnabled();       /* honor state().filterHotkeys */
+QList<Entry> entries();    /* current registrations, for the dialog */
+void shutdown();
+} // namespace filters
+
+/* the Scene Folders dock: collapsible folder tree over the scene list */
+namespace folders {
+void createDock();  /* register the dock; call once at module load */
+void rebuildSoon(); /* debounced tree rebuild from OBS scene list + state */
+void shutdown();
+} // namespace folders
 
 /* colored dot icon for a scene row; theme stylesheets cannot override icons,
    so the color always shows even when the theme repaints item text */

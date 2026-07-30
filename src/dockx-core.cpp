@@ -101,6 +101,7 @@ void stateLoad()
 	obs_data_set_default_bool(d, "source_search", true);
 	obs_data_set_default_bool(d, "scene_colors", true);
 	obs_data_set_default_bool(d, "dock_colors", true);
+	obs_data_set_default_bool(d, "filter_hotkeys", true);
 	obs_data_set_default_int(d, "next_id", 1);
 
 	g_state.nesting = obs_data_get_bool(d, "nesting");
@@ -108,6 +109,7 @@ void stateLoad()
 	g_state.sourceSearch = obs_data_get_bool(d, "source_search");
 	g_state.sceneColors = obs_data_get_bool(d, "scene_colors");
 	g_state.dockColors = obs_data_get_bool(d, "dock_colors");
+	g_state.filterHotkeys = obs_data_get_bool(d, "filter_hotkeys");
 	g_state.sepSize = (int)obs_data_get_int(d, "sep_size");
 	g_state.sepColor = QString::fromUtf8(obs_data_get_string(d, "sep_color"));
 	g_state.nextId = (int)obs_data_get_int(d, "next_id");
@@ -148,6 +150,42 @@ void stateLoad()
 		obs_data_release(autoRules);
 	}
 
+	obs_data_t *folders = obs_data_get_obj(d, "folders");
+	if (folders) {
+		for (obs_data_item_t *item = obs_data_first(folders); item;
+		     obs_data_item_next(&item)) {
+			const char *coll = obs_data_item_get_name(item);
+			obs_data_t *fo = obs_data_item_get_obj(item);
+			if (!coll || !fo) {
+				if (fo)
+					obs_data_release(fo);
+				continue;
+			}
+			FolderData fd;
+			fd.order = QString::fromUtf8(obs_data_get_string(fo, "order"))
+					   .split('\n', Qt::SkipEmptyParts);
+			const QStringList col =
+				QString::fromUtf8(obs_data_get_string(fo, "collapsed"))
+					.split('\n', Qt::SkipEmptyParts);
+			fd.collapsed = QSet<QString>(col.begin(), col.end());
+			obs_data_t *as = obs_data_get_obj(fo, "assign");
+			if (as) {
+				for (obs_data_item_t *a = obs_data_first(as); a;
+				     obs_data_item_next(&a)) {
+					const char *uuid = obs_data_item_get_name(a);
+					const char *folder = obs_data_item_get_string(a);
+					if (uuid && folder && *folder)
+						fd.assign[QString::fromUtf8(uuid)] =
+							QString::fromUtf8(folder);
+				}
+				obs_data_release(as);
+			}
+			g_state.folders[QString::fromUtf8(coll)] = fd;
+			obs_data_release(fo);
+		}
+		obs_data_release(folders);
+	}
+
 	obs_data_array_t *arr = obs_data_get_array(d, "layouts");
 	if (arr) {
 		size_t n = obs_data_array_count(arr);
@@ -185,6 +223,7 @@ void stateSave()
 	obs_data_set_bool(d, "source_search", g_state.sourceSearch);
 	obs_data_set_bool(d, "scene_colors", g_state.sceneColors);
 	obs_data_set_bool(d, "dock_colors", g_state.dockColors);
+	obs_data_set_bool(d, "filter_hotkeys", g_state.filterHotkeys);
 	obs_data_set_int(d, "sep_size", g_state.sepSize);
 	obs_data_set_string(d, "sep_color", g_state.sepColor.toUtf8().constData());
 	obs_data_set_int(d, "next_id", g_state.nextId);
@@ -210,6 +249,31 @@ void stateSave()
 		obs_data_set_int(autoRules, it.key().toUtf8().constData(), it.value());
 	obs_data_set_obj(d, "scene_layouts", autoRules);
 	obs_data_release(autoRules);
+
+	obs_data_t *folders = obs_data_create();
+	for (auto it = g_state.folders.constBegin(); it != g_state.folders.constEnd(); ++it) {
+		const FolderData &fd = it.value();
+		if (fd.assign.isEmpty() && fd.order.isEmpty())
+			continue;
+		obs_data_t *fo = obs_data_create();
+		obs_data_set_string(fo, "order",
+				    fd.order.join(QChar('\n')).toUtf8().constData());
+		obs_data_set_string(fo, "collapsed",
+				    QStringList(fd.collapsed.begin(), fd.collapsed.end())
+					    .join(QChar('\n'))
+					    .toUtf8()
+					    .constData());
+		obs_data_t *as = obs_data_create();
+		for (auto a = fd.assign.constBegin(); a != fd.assign.constEnd(); ++a)
+			obs_data_set_string(as, a.key().toUtf8().constData(),
+					    a.value().toUtf8().constData());
+		obs_data_set_obj(fo, "assign", as);
+		obs_data_release(as);
+		obs_data_set_obj(folders, it.key().toUtf8().constData(), fo);
+		obs_data_release(fo);
+	}
+	obs_data_set_obj(d, "folders", folders);
+	obs_data_release(folders);
 
 	obs_data_array_t *arr = obs_data_array_create();
 	for (Layout &l : g_state.layouts) {
@@ -560,6 +624,7 @@ static void refreshNow()
 	applyDockColorsNow();
 	filterScenes();
 	filterSources();
+	folders::rebuildSoon(); /* scene renames/colors show up in the folder tree too */
 }
 
 void refreshSoon()

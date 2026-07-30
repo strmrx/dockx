@@ -140,9 +140,9 @@ static QString qtKeyToObsName(int key)
 }
 
 /* empty sequence removes the binding; returns false if the key is unsupported */
-static bool setLayoutHotkey(Layout *l, const QKeySequence &seq)
+static bool applyHotkeyBinding(obs_hotkey_id id, const QKeySequence &seq)
 {
-	if (!l || l->hotkey == OBS_INVALID_HOTKEY_ID)
+	if (id == OBS_INVALID_HOTKEY_ID)
 		return false;
 	obs_data_array_t *arr = obs_data_array_create();
 	if (!seq.isEmpty()) {
@@ -162,17 +162,24 @@ static bool setLayoutHotkey(Layout *l, const QKeySequence &seq)
 		obs_data_array_push_back(arr, b);
 		obs_data_release(b);
 	}
-	obs_hotkey_load(l->hotkey, arr);
+	obs_hotkey_load(id, arr);
 	obs_data_array_release(arr);
+	return true;
+}
+
+static bool setLayoutHotkey(Layout *l, const QKeySequence &seq)
+{
+	if (!l || !applyHotkeyBinding(l->hotkey, seq))
+		return false;
 	stateSave();
 	return true;
 }
 
-static QString layoutHotkeyText(const Layout &l)
+static QString hotkeyIdText(obs_hotkey_id id)
 {
-	if (l.hotkey == OBS_INVALID_HOTKEY_ID)
+	if (id == OBS_INVALID_HOTKEY_ID)
 		return QString();
-	obs_data_array_t *arr = obs_hotkey_save(l.hotkey);
+	obs_data_array_t *arr = obs_hotkey_save(id);
 	if (!arr)
 		return QString();
 	QString out;
@@ -197,12 +204,47 @@ static QString layoutHotkeyText(const Layout &l)
 	return out;
 }
 
+static QString layoutHotkeyText(const Layout &l)
+{
+	return hotkeyIdText(l.hotkey);
+}
+
+/* shared key-capture popup; returns 0 = cancel, 1 = save (seq filled), 2 = remove */
+static int promptHotkey(QWidget *parent, const QString &title, QKeySequence &seq)
+{
+	QDialog hd(parent);
+	hd.setWindowTitle(title);
+	QVBoxLayout *v = new QVBoxLayout(&hd);
+	v->addWidget(new QLabel("Press the keys you want:", &hd));
+	QKeySequenceEdit *edit = new QKeySequenceEdit(&hd);
+	v->addWidget(edit);
+	QHBoxLayout *hb = new QHBoxLayout();
+	QPushButton *ok = new QPushButton("Save", &hd);
+	QPushButton *clear = new QPushButton("Remove hotkey", &hd);
+	QPushButton *cancel = new QPushButton("Cancel", &hd);
+	hb->addWidget(ok);
+	hb->addWidget(clear);
+	hb->addWidget(cancel);
+	v->addLayout(hb);
+	QObject::connect(ok, &QPushButton::clicked, &hd, [&hd]() { hd.done(1); });
+	QObject::connect(clear, &QPushButton::clicked, &hd, [&hd]() { hd.done(2); });
+	QObject::connect(cancel, &QPushButton::clicked, &hd, [&hd]() { hd.reject(); });
+	edit->setFocus();
+	const int r = hd.exec();
+	if (r == 1) {
+		seq = edit->keySequence();
+		if (seq.isEmpty())
+			return 0;
+	}
+	return r == QDialog::Rejected ? 0 : r;
+}
+
 void showDialog()
 {
 	QMainWindow *main = mainWindow();
 	QDialog dlg(main);
 	dlg.setWindowTitle("DockX");
-	dlg.setMinimumSize(520, 460);
+	dlg.setMinimumSize(580, 470);
 
 	QVBoxLayout *root = new QVBoxLayout(&dlg);
 	QTabWidget *tabs = new QTabWidget(&dlg);
@@ -327,43 +369,19 @@ void showDialog()
 								  "Pick a layout first.");
 					 return;
 				 }
-				 QDialog hd(&dlg);
-				 hd.setWindowTitle(QString("Hotkey for \"%1\"").arg(l->name));
-				 QVBoxLayout *v = new QVBoxLayout(&hd);
-				 v->addWidget(new QLabel("Press the keys you want:", &hd));
-				 QKeySequenceEdit *edit = new QKeySequenceEdit(&hd);
-				 v->addWidget(edit);
-				 QHBoxLayout *hb = new QHBoxLayout();
-				 QPushButton *ok = new QPushButton("Save", &hd);
-				 QPushButton *clear = new QPushButton("Remove hotkey", &hd);
-				 QPushButton *cancel = new QPushButton("Cancel", &hd);
-				 hb->addWidget(ok);
-				 hb->addWidget(clear);
-				 hb->addWidget(cancel);
-				 v->addLayout(hb);
-				 QObject::connect(ok, &QPushButton::clicked, &hd,
-						  [&hd]() { hd.done(1); });
-				 QObject::connect(clear, &QPushButton::clicked, &hd,
-						  [&hd]() { hd.done(2); });
-				 QObject::connect(cancel, &QPushButton::clicked, &hd,
-						  [&hd]() { hd.reject(); });
-				 edit->setFocus();
-				 int r = hd.exec();
-				 if (r == 1) {
-					 QKeySequence seq = edit->keySequence();
-					 if (seq.isEmpty())
-						 return;
-					 if (!setLayoutHotkey(l, seq))
-						 QMessageBox::information(
-							 &dlg, "DockX",
-							 "That key is not supported here. You can "
-							 "still bind it in OBS under Settings > "
-							 "Hotkeys (search for DockX).");
-				 } else if (r == 2) {
-					 setLayoutHotkey(l, QKeySequence());
-				 } else {
+				 QKeySequence seq;
+				 const int r = promptHotkey(
+					 &dlg, QString("Hotkey for \"%1\"").arg(l->name), seq);
+				 if (r == 0)
 					 return;
-				 }
+				 if (r == 1 && !setLayoutHotkey(l, seq))
+					 QMessageBox::information(
+						 &dlg, "DockX",
+						 "That key is not supported here. You can still "
+						 "bind it in OBS under Settings > Hotkeys "
+						 "(search for DockX).");
+				 if (r == 2)
+					 setLayoutHotkey(l, QKeySequence());
 				 reloadLayouts();
 			 });
 
@@ -460,6 +478,66 @@ void showDialog()
 	av->addWidget(ahint);
 
 	tabs->addTab(autoTab, "Auto switch");
+
+	/* ---------- Filters tab ---------- */
+	QWidget *filtersTab = new QWidget();
+	QVBoxLayout *fv = new QVBoxLayout(filtersTab);
+
+	QListWidget *filterListW = new QListWidget(filtersTab);
+	fv->addWidget(filterListW, 1);
+
+	auto reloadFilters = [filterListW]() {
+		filterListW->clear();
+		for (const filters::Entry &e : filters::entries()) {
+			QString text = QString("%1 · %2").arg(e.sourceName, e.filterName);
+			const QString hk = hotkeyIdText(e.hotkey);
+			if (!hk.isEmpty())
+				text += QString("   [%1]").arg(hk);
+			QListWidgetItem *it = new QListWidgetItem(text, filterListW);
+			it->setData(Qt::UserRole, (qulonglong)e.hotkey);
+		}
+	};
+	reloadFilters();
+
+	QHBoxLayout *fb = new QHBoxLayout();
+	QPushButton *filterKeyBtn = new QPushButton("Set hotkey", filtersTab);
+	fb->addWidget(filterKeyBtn);
+	fb->addStretch(1);
+	fv->addLayout(fb);
+
+	QObject::connect(filterKeyBtn, &QPushButton::clicked, &dlg,
+			 [&dlg, filterListW, reloadFilters]() {
+				 QListWidgetItem *it = filterListW->currentItem();
+				 if (!it) {
+					 QMessageBox::information(&dlg, "DockX",
+								  "Pick a filter first.");
+					 return;
+				 }
+				 const obs_hotkey_id id =
+					 (obs_hotkey_id)it->data(Qt::UserRole).toULongLong();
+				 QKeySequence seq;
+				 const int r = promptHotkey(&dlg, "Filter hotkey", seq);
+				 if (r == 0)
+					 return;
+				 if (r == 1 && !applyHotkeyBinding(id, seq))
+					 QMessageBox::information(
+						 &dlg, "DockX",
+						 "That key is not supported here. You can still "
+						 "bind it in OBS under Settings > Hotkeys.");
+				 if (r == 2)
+					 applyHotkeyBinding(id, QKeySequence());
+				 reloadFilters();
+			 });
+
+	QLabel *fhint = new QLabel(
+		"Every filter on every source gets its own on/off hotkey, saved with your "
+		"scene collection. Bind keys here, and press them live (or from a Stream "
+		"Deck) to toggle the filter.",
+		filtersTab);
+	fhint->setWordWrap(true);
+	fv->addWidget(fhint);
+
+	tabs->addTab(filtersTab, "Filters");
 
 	/* ---------- Scene colors tab ---------- */
 	QWidget *colorsTab = new QWidget();
@@ -626,6 +704,11 @@ void showDialog()
 		state().dockColors = v;
 		panels::applyDockColors();
 	});
+	addCheck("Filter hotkeys (every filter gets an on/off hotkey)", state().filterHotkeys,
+		 [](bool v) {
+			 state().filterHotkeys = v;
+			 filters::applyEnabled();
+		 });
 
 	sv->addStretch(1);
 	QLabel *about = new QLabel(
