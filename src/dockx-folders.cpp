@@ -34,6 +34,7 @@ UUID (renames never lose a folder) and stored per scene collection.
 #include <QPointer>
 #include <QScreen>
 #include <QStyle>
+#include <QStyleOption>
 #include <QTimer>
 #include <QToolButton>
 #include <QTreeWidget>
@@ -333,6 +334,23 @@ protected:
 	{
 		QTreeWidget::dropEvent(e);
 		persistFromTree();
+	}
+
+	/* arrows only in the branch column; none of the dotted connector lines */
+	void drawBranches(QPainter *painter, const QRect &rect,
+			  const QModelIndex &index) const override
+	{
+		if (!model()->hasChildren(index))
+			return;
+		QStyleOption opt;
+		opt.initFrom(this);
+		const int s = 14;
+		QRect r(rect.right() - indentation() + (indentation() - s) / 2,
+			rect.center().y() - s / 2, s, s);
+		opt.rect = r;
+		style()->drawPrimitive(isExpanded(index) ? QStyle::PE_IndicatorArrowDown
+							 : QStyle::PE_IndicatorArrowRight,
+				       &opt, painter, this);
 	}
 };
 
