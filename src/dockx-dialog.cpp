@@ -13,6 +13,8 @@ GPL v2, see plugin-main.cpp for the full notice.
 #include <QColorDialog>
 #include <QComboBox>
 #include <QCompleter>
+#include <QDesktopServices>
+#include <QUrl>
 #include <QStandardItemModel>
 #include <QDialog>
 #include <QHBoxLayout>
@@ -924,6 +926,20 @@ void showDialog()
 		 });
 	addCheck("Nested folders (drag a folder into a folder)", state().folderNesting,
 		 [](bool v) { state().folderNesting = v; });
+
+	QHBoxLayout *helpRow = new QHBoxLayout();
+	QPushButton *guideBtn = new QPushButton("Dock layout guide", settingsTab);
+	guideBtn->setToolTip("The illustrated walkthrough from first run");
+	QObject::connect(guideBtn, &QPushButton::clicked, settingsTab,
+			 [settingsTab]() { hints::showGuide(settingsTab->window()); });
+	helpRow->addWidget(guideBtn);
+	QPushButton *helpBtn = new QPushButton("Help and guides", settingsTab);
+	helpBtn->setToolTip("Opens strmrx.com/dockx in your browser");
+	QObject::connect(helpBtn, &QPushButton::clicked, settingsTab,
+			 []() { QDesktopServices::openUrl(QUrl(HELP_URL)); });
+	helpRow->addWidget(helpBtn);
+	helpRow->addStretch(1);
+	sv->addLayout(helpRow);
 
 	sv->addStretch(1);
 	QLabel *about = new QLabel(

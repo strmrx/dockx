@@ -17,6 +17,7 @@ GPL v2, see plugin-main.cpp for the full notice.
 #include <vector>
 
 class QListWidget;
+class QWidget;
 
 namespace dockx {
 
@@ -54,6 +55,7 @@ struct State {
 	bool folderNesting = true;         /* folders may be dragged into folders */
 	bool folderGridMode = false;       /* Scene Folders dock shows tiles, not the tree */
 	bool folderDockIntroduced = false; /* first run pops the Scene Folders dock open */
+	bool dragHintsShown = false;       /* first run showed the dock layout guide */
 
 	int nextId = 1;
 	std::vector<Layout> layouts;
@@ -136,6 +138,16 @@ void addDock(int kind, const QString &sourceName);
 void removeDock(int id);
 void shutdown(); /* MUST run at EXIT, before graphics dies */
 } // namespace sourcedocks
+
+/* the dock layout guide: illustrated first-run walkthrough of dock dragging
+   (title bar grab, edge drop = split, center drop = tabs, DockX columns) */
+namespace hints {
+void showFirstRun();            /* opens the guide once after install */
+void showGuide(QWidget *parent); /* opens it on demand (Settings tab) */
+} // namespace hints
+
+/* where the Help button and guide link send people */
+extern const char *HELP_URL;
 
 /* colored dot icon for a scene row; theme stylesheets cannot override icons,
    so the color always shows even when the theme repaints item text */

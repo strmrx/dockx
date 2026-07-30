@@ -124,6 +124,7 @@ void stateLoad()
 	g_state.folderNesting = obs_data_get_bool(d, "folder_nesting");
 	g_state.folderGridMode = obs_data_get_bool(d, "folder_grid_mode");
 	g_state.folderDockIntroduced = obs_data_get_bool(d, "folder_dock_introduced");
+	g_state.dragHintsShown = obs_data_get_bool(d, "drag_hints_shown");
 	g_state.sepSize = (int)obs_data_get_int(d, "sep_size");
 	g_state.sepColor = QString::fromUtf8(obs_data_get_string(d, "sep_color"));
 	g_state.mixerOrder = QString::fromUtf8(obs_data_get_string(d, "mixer_order"))
@@ -273,6 +274,7 @@ void stateSave()
 	obs_data_set_bool(d, "folder_nesting", g_state.folderNesting);
 	obs_data_set_bool(d, "folder_grid_mode", g_state.folderGridMode);
 	obs_data_set_bool(d, "folder_dock_introduced", g_state.folderDockIntroduced);
+	obs_data_set_bool(d, "drag_hints_shown", g_state.dragHintsShown);
 	obs_data_set_int(d, "sep_size", g_state.sepSize);
 	obs_data_set_string(d, "sep_color", g_state.sepColor.toUtf8().constData());
 	obs_data_set_string(d, "mixer_order",

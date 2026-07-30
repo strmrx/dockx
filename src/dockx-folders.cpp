@@ -27,6 +27,8 @@ scenes from everywhere.
 #include <QAction>
 #include <QBrush>
 #include <QColorDialog>
+#include <QDesktopServices>
+#include <QUrl>
 #include <QDockWidget>
 #include <QDropEvent>
 #include <QFont>
@@ -51,6 +53,7 @@ scenes from everywhere.
 #include <QTreeWidget>
 #include <QVBoxLayout>
 
+#include <algorithm>
 #include <vector>
 
 namespace dockx {
@@ -445,6 +448,91 @@ static void persistFromTree()
 	rebuildSoon();
 }
 
+/* ---- scene ordering: drag to reorder + A to Z ---- */
+
+/* push a display order of scene names into the NATIVE scenes list, silently.
+   OBS saves list order from that widget and obs_frontend_get_scenes follows
+   it, so the order sticks without any DockX-side persistence. */
+static void reorderNativeTo(const QStringList &names)
+{
+	QListWidget *list = panels::nativeSceneList();
+	if (!list)
+		return;
+	QListWidgetItem *cur = list->currentItem();
+	const QSignalBlocker block(list);
+	int insertPos = 0;
+	for (const QString &name : names) {
+		int row = -1;
+		for (int i = insertPos; i < list->count(); i++) {
+			if (list->item(i)->text() == name) {
+				row = i;
+				break;
+			}
+		}
+		if (row < 0)
+			continue; /* unknown name: touch nothing else */
+		if (row != insertPos) {
+			QListWidgetItem *it = list->takeItem(row);
+			list->insertItem(insertPos, it);
+		}
+		insertPos++;
+	}
+	if (cur)
+		list->setCurrentItem(cur);
+}
+
+/* walk the tree collecting scene names in display order; a container matching
+   sortPath (or every container when sortAll) emits its direct scenes A to Z */
+static void collectOrdered(QTreeWidgetItem *folder, QStringList &out, bool sortAll,
+			   const QString &sortPath)
+{
+	if (!g_tree)
+		return;
+	const int n = folder ? folder->childCount() : g_tree->topLevelItemCount();
+	auto childAt = [folder](int i) {
+		return folder ? folder->child(i) : g_tree->topLevelItem(i);
+	};
+	const bool sortHere =
+		sortAll || (folder && !sortPath.isEmpty() && itemKey(folder) == sortPath);
+	QStringList sorted;
+	if (sortHere) {
+		for (int i = 0; i < n; i++) {
+			QTreeWidgetItem *c = childAt(i);
+			if (isScene(c))
+				sorted << c->text(0);
+		}
+		std::sort(sorted.begin(), sorted.end(),
+			  [](const QString &a, const QString &b) {
+				  return a.compare(b, Qt::CaseInsensitive) < 0;
+			  });
+	}
+	int next = 0;
+	for (int i = 0; i < n; i++) {
+		QTreeWidgetItem *c = childAt(i);
+		if (isScene(c))
+			out << (sortHere ? sorted[next++] : c->text(0));
+		else if (isFolder(c))
+			collectOrdered(c, out, sortAll, sortPath);
+	}
+}
+
+/* after a drag: the native list follows the tree's scene order */
+static void applySceneOrderFromTree()
+{
+	QStringList want;
+	collectOrdered(nullptr, want, false, QString());
+	reorderNativeTo(want);
+}
+
+/* sortPath = one folder's direct scenes; all = every container incl. root */
+static void sortScenesAtoZ(bool all, const QString &folderPath)
+{
+	QStringList want;
+	collectOrdered(nullptr, want, all, folderPath);
+	reorderNativeTo(want);
+	rebuildSoon();
+}
+
 class FolderTree : public QTreeWidget {
 public:
 	using QTreeWidget::QTreeWidget;
@@ -464,6 +552,7 @@ protected:
 			}
 		}
 		QTreeWidget::dropEvent(e);
+		applySceneOrderFromTree();
 		persistFromTree();
 	}
 
@@ -1014,6 +1103,7 @@ static void buildFolderMenu(QMenu &menu, const QString &path)
 		menu.addAction("New subfolder", [path]() {
 			newFolderPrompt(g_tree, QString(), path);
 		});
+	menu.addAction("Sort scenes A to Z", [path]() { sortScenesAtoZ(false, path); });
 	menu.addAction("Rename", [path]() { renameFolderPrompt(g_tree, path); });
 	menu.addAction("Delete", [path]() { deleteFolderPrompt(g_tree, path); });
 	QMenu *fcMenu = menu.addMenu("Set Color");
@@ -1047,6 +1137,8 @@ static void showContextMenu(const QPoint &pos)
 	} else {
 		menu.addAction("Add Scene...", []() { addScenePrompt(QString()); });
 		menu.addAction("New folder", []() { newFolderPrompt(g_tree); });
+		menu.addAction("Sort all scenes A to Z",
+			       []() { sortScenesAtoZ(true, QString()); });
 		menu.addSeparator();
 		menu.addAction("Collapse all", []() { setAllExpanded(false); });
 		menu.addAction("Expand all", []() { setAllExpanded(true); });
@@ -1198,6 +1290,8 @@ static void showGridMenu(const QPoint &pos)
 		menu.addAction("New folder here", []() {
 			newFolderPrompt(g_grid, QString(), g_gridPath);
 		});
+		menu.addAction("Sort all scenes A to Z",
+			       []() { sortScenesAtoZ(true, QString()); });
 	}
 	menu.exec(g_grid->viewport()->mapToGlobal(pos));
 }
@@ -1259,6 +1353,13 @@ void createDock()
 				state().folderGridMode ? g_gridPath : QString());
 	});
 	topRow->addWidget(g_newBtn);
+	QToolButton *helpBtn = new QToolButton(panel);
+	helpBtn->setAutoRaise(true);
+	helpBtn->setText("?");
+	helpBtn->setToolTip("DockX help (strmrx.com)");
+	QObject::connect(helpBtn, &QToolButton::clicked, panel,
+			 []() { QDesktopServices::openUrl(QUrl(HELP_URL)); });
+	topRow->addWidget(helpBtn);
 	v->addLayout(topRow);
 
 	g_crumb = new QLabel(panel);

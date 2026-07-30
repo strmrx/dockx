@@ -98,11 +98,26 @@ off-thesis: encoders, multi-output, NDI, VST, replay buffer.
 - Align + distribute tools (#8), projector management (#9), multiview upgrades (#6),
   studio mode QoL (#10), collection zip export/import (#11), second-monitor dock
   container (#14)
+- Scene sorting -- SHIPPED v0.11 (drag scenes to reorder in the folder tree, pushed
+  into the native list so it sticks; "Sort scenes A to Z" per folder + "Sort all
+  scenes A to Z" on the dock background, tree and grid)
 - Starter layouts gallery: "Chat right, tools left", "Podcast", "Just Chatting" etc.
 - Layout export/share (streamers trading layouts = the community moment + marketing)
-- Port remaining LoadoutX features natively: source loadouts (save/restore source
-  positions), one click scene lock
-- Guided drag hints (first-run tip explaining edge drops vs center drops = tabs)
+- Port remaining LoadoutX features natively (the LAST blockers to deleting LoadoutX;
+  gap audit 2026-07-30):
+  - Source loadouts: save/restore source position/scale/rotation/crop/visibility/lock
+    per scene or all scenes, with undo + confirmation (LoadoutX's headline feature)
+  - Scene lock tools: lock/unlock everything, per scene lock all, lock counts
+  - Source rows in search / find-usages + per source show/hide/lock from the tree
+    (folds into roadmap item: source tagging #13)
+  - Manual profile/collection switching with "you are live" guards (folds into #12)
+  - StrmrX Midnight OBS theme: distribute via the strmrx.com/dockx page, not the plugin
+- Guided drag hints -- SHIPPED v0.11 (illustrated Dock Layout Guide dialog: title bar
+  grab, edge drop = split, center drop = tabs, DockX columns; auto opens once on first
+  run, reopenable from Settings, linked to strmrx.com/dockx)
+- strmrx.com/dockx help page (the Help "?" button in the Scene Folders dock and the
+  guide dialog already point there; page = guides + layout ideas + theme download +
+  the conversion doorway into the StrmrX family). NEEDS BUILDING on the hub.
 - macOS build (template supports it; needs a Mac or CI to compile)
 - Distribution: obsproject.com forum resource (free, the funnel) + strmrx.com page;
   GPL means source is public, the moat is polish + first-mover + StrmrX brand
