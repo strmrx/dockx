@@ -776,6 +776,58 @@ void showDialog()
 
 	tabs->addTab(sdTab, "Source docks");
 
+	/* ---------- Mixer tab ---------- */
+	QWidget *mixTab = new QWidget();
+	QVBoxLayout *mxv = new QVBoxLayout(mixTab);
+
+	QListWidget *mixList = new QListWidget(mixTab);
+	mixList->setDragDropMode(QAbstractItemView::InternalMove);
+	mixList->setSelectionMode(QAbstractItemView::SingleSelection);
+	auto mixReload = [mixList]() {
+		mixList->clear();
+		/* current custom order first, then whatever the mixer shows */
+		QStringList names = state().mixerOrder;
+		for (const QString &n : panels::mixerSourceNames())
+			if (!names.contains(n))
+				names << n;
+		for (const QString &n : names)
+			new QListWidgetItem(n, mixList);
+	};
+	mixReload();
+	mxv->addWidget(mixList, 1);
+
+	auto mixPersist = [mixList]() {
+		QStringList order;
+		for (int i = 0; i < mixList->count(); i++)
+			order << mixList->item(i)->text();
+		state().mixerOrder = order;
+		stateSave();
+		panels::applyMixerOrder();
+	};
+	QObject::connect(mixList->model(), &QAbstractItemModel::rowsMoved, mixTab,
+			 [mixPersist]() { mixPersist(); });
+
+	QHBoxLayout *mixRow = new QHBoxLayout();
+	QPushButton *mixReset = new QPushButton("Forget custom order", mixTab);
+	mixRow->addWidget(mixReset);
+	mixRow->addStretch(1);
+	mxv->addLayout(mixRow);
+	QObject::connect(mixReset, &QPushButton::clicked, mixTab, [mixReload]() {
+		state().mixerOrder.clear();
+		stateSave();
+		mixReload();
+	});
+
+	QLabel *mixHint = new QLabel(
+		"Drag to reorder the Audio Mixer. The order sticks and reapplies "
+		"itself whenever OBS rebuilds the mixer. Forgetting the custom order "
+		"returns to OBS ordering after the next scene switch.",
+		mixTab);
+	mixHint->setWordWrap(true);
+	mxv->addWidget(mixHint);
+
+	tabs->addTab(mixTab, "Mixer");
+
 	/* ---------- Settings tab ---------- */
 	QWidget *settingsTab = new QWidget();
 	QVBoxLayout *sv = new QVBoxLayout(settingsTab);

@@ -50,8 +50,9 @@ Ranked by demand x feasibility for a Qt frontend plugin. Context: #1 idea sitewi
    folders + auto switch in one download) + polish, not rescue of a dead plugin.
 3. **Cross-collection copy** -- copy scenes/sources between scene collections without
    export files. 149 votes (highest plugin-territory idea). MEDIUM.
-4. **Reorderable audio mixer** -- drag to reorder mixer channels. 32+29 votes, constant
-   forum pain (people rename sources "1 Mic, 2 Game"). MEDIUM.
+4. **Reorderable audio mixer** -- SHIPPED v0.8 (drag rows in the DockX dialog Mixer
+   tab; order persists + reapplies on every mixer rebuild; in-mixer dragging maybe
+   later). 32+29 votes, constant forum pain (people rename sources "1 Mic, 2 Game").
 5. **Filter hotkeys** -- SHIPPED v0.5. Hotkey to toggle any filter (Stream Deck bait).
    59 votes; only a Lua script existed. EASY.
 6. **Multiview upgrades** -- pick/order scenes, custom grids, always-on-top. ~130 votes

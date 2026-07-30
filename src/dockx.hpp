@@ -64,6 +64,7 @@ struct State {
 	QByteArray undoState;                 /* layout snapshot taken before the last apply */
 	std::vector<SourceDockEntry> sourceDocks;
 	int nextSourceDockId = 1;
+	QStringList mixerOrder; /* custom Audio Mixer order (source names, top first) */
 };
 
 State &state();
@@ -94,6 +95,8 @@ struct DockInfo {
 };
 QList<DockInfo> listDocks();
 QListWidget *nativeSceneList(); /* the native Scenes panel list, or null */
+void applyMixerOrder();         /* reorder the native Audio Mixer per state */
+QStringList mixerSourceNames(); /* mixer rows in current visual order */
 } // namespace panels
 
 void showDialog();

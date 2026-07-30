@@ -122,6 +122,8 @@ void stateLoad()
 	g_state.folderDockIntroduced = obs_data_get_bool(d, "folder_dock_introduced");
 	g_state.sepSize = (int)obs_data_get_int(d, "sep_size");
 	g_state.sepColor = QString::fromUtf8(obs_data_get_string(d, "sep_color"));
+	g_state.mixerOrder = QString::fromUtf8(obs_data_get_string(d, "mixer_order"))
+				     .split('\n', Qt::SkipEmptyParts);
 	g_state.nextId = (int)obs_data_get_int(d, "next_id");
 	g_state.nextSourceDockId = (int)obs_data_get_int(d, "next_source_dock_id");
 
@@ -267,6 +269,8 @@ void stateSave()
 	obs_data_set_bool(d, "folder_dock_introduced", g_state.folderDockIntroduced);
 	obs_data_set_int(d, "sep_size", g_state.sepSize);
 	obs_data_set_string(d, "sep_color", g_state.sepColor.toUtf8().constData());
+	obs_data_set_string(d, "mixer_order",
+			    g_state.mixerOrder.join(QChar('\n')).toUtf8().constData());
 	obs_data_set_int(d, "next_id", g_state.nextId);
 	obs_data_set_int(d, "next_source_dock_id", g_state.nextSourceDockId);
 
@@ -722,13 +726,129 @@ static void watchModels()
 	}
 }
 
+/* ================= audio mixer order ================= */
+
+static QWidget *volumeContainer(const char *name)
+{
+	QMainWindow *m = mainWindow();
+	return m ? m->findChild<QWidget *>(name) : nullptr;
+}
+
+/* a VolControl's name label: the first label that is not the dB readout */
+static QString volControlName(QWidget *w)
+{
+	const QList<QLabel *> labels = w->findChildren<QLabel *>();
+	for (QLabel *l : labels) {
+		const QString t = l->text();
+		if (!t.isEmpty() && !t.contains(QStringLiteral("dB")))
+			return t;
+	}
+	return QString();
+}
+
+static bool isVolControl(QWidget *w)
+{
+	return w && qstrcmp(w->metaObject()->className(), "VolControl") == 0;
+}
+
+QStringList mixerSourceNames()
+{
+	QStringList out;
+	for (const char *cname : {"hVolumeWidgets", "vVolumeWidgets"}) {
+		QWidget *c = volumeContainer(cname);
+		QBoxLayout *lay = c ? qobject_cast<QBoxLayout *>(c->layout()) : nullptr;
+		if (!lay)
+			continue;
+		for (int i = 0; i < lay->count(); i++) {
+			QWidget *w = lay->itemAt(i)->widget();
+			if (isVolControl(w)) {
+				const QString n = volControlName(w);
+				if (!n.isEmpty())
+					out << n;
+			}
+		}
+		if (!out.isEmpty())
+			break; /* only one container is populated at a time */
+	}
+	return out;
+}
+
+void applyMixerOrder()
+{
+	if (state().mixerOrder.isEmpty() || shuttingDown)
+		return;
+	const QStringList &order = state().mixerOrder;
+	for (const char *cname : {"hVolumeWidgets", "vVolumeWidgets"}) {
+		QWidget *c = volumeContainer(cname);
+		QBoxLayout *lay = c ? qobject_cast<QBoxLayout *>(c->layout()) : nullptr;
+		if (!lay)
+			continue;
+		struct Row {
+			QWidget *w;
+			int rank;
+		};
+		std::vector<Row> rows;
+		for (int i = 0; i < lay->count(); i++) {
+			QWidget *w = lay->itemAt(i)->widget();
+			if (!isVolControl(w))
+				continue;
+			const int r = (int)order.indexOf(volControlName(w));
+			rows.push_back({w, r < 0 ? (1 << 30) : r});
+		}
+		if (rows.size() < 2)
+			continue;
+		std::vector<Row> sorted = rows;
+		std::stable_sort(sorted.begin(), sorted.end(),
+				 [](const Row &a, const Row &b) { return a.rank < b.rank; });
+		bool changed = false;
+		for (size_t i = 0; i < rows.size(); i++)
+			if (rows[i].w != sorted[i].w)
+				changed = true;
+		if (!changed)
+			continue;
+		applying = true;
+		for (const Row &r : sorted)
+			lay->removeWidget(r.w);
+		for (size_t i = 0; i < sorted.size(); i++)
+			lay->insertWidget((int)i, sorted[i].w);
+		applying = false;
+	}
+}
+
+/* the mixer rebuilds its rows on scene/source changes; watch for new rows */
+class MixerWatcher : public QObject {
+public:
+	using QObject::QObject;
+
+protected:
+	bool eventFilter(QObject *, QEvent *ev) override
+	{
+		if (ev->type() == QEvent::ChildAdded && !applying)
+			refreshSoon();
+		return false;
+	}
+};
+
+static void watchMixer()
+{
+	for (const char *cname : {"hVolumeWidgets", "vVolumeWidgets"}) {
+		QWidget *c = volumeContainer(cname);
+		if (c && !c->property("dockx_mixer_watch").toBool()) {
+			c->setProperty("dockx_mixer_watch", true);
+			c->installEventFilter(new MixerWatcher(c));
+		}
+	}
+}
+
 static void refreshNow()
 {
 	if (shuttingDown)
 		return;
 	watchModels();
+	watchMixer();
 	applySceneColorsNow();
 	applyDockColorsNow();
+	applyMixerOrder();
 	filterScenes();
 	filterSources();
 	folders::rebuildSoon(); /* scene renames/colors show up in the folder tree too */
