@@ -35,6 +35,33 @@ struct SourceDockEntry {
 	QString sourceName;
 };
 
+/* one captured source state inside a loadout (LoadoutX ported natively) */
+struct LoadoutItem {
+	QString sceneUuid;
+	QString sceneName;
+	QString sourceName;
+	long long itemId = 0;      /* obs_sceneitem_get_id, stable per collection */
+	long long groupItemId = 0; /* the containing group's id; 0 = top level */
+	QString groupName;
+	double posX = 0, posY = 0, rot = 0;
+	double scaleX = 1, scaleY = 1;
+	int alignment = 0;
+	int boundsType = 0, boundsAlign = 0;
+	double boundsX = 0, boundsY = 0;
+	bool cropToBounds = false;
+	int cropL = 0, cropT = 0, cropR = 0, cropB = 0;
+	bool visible = true, locked = false;
+};
+
+/* a saved arrangement of sources: position/size/rotation/crop/visibility/lock */
+struct SourceLoadout {
+	int id = 0;
+	QString name;
+	QString sceneUuid; /* empty = every scene */
+	QString sceneName; /* display only */
+	std::vector<LoadoutItem> items;
+};
+
 /* scene folder layout for one scene collection */
 struct FolderData {
 	QHash<QString, QString> assign; /* scene uuid -> folder name */
@@ -56,6 +83,7 @@ struct State {
 	bool folderGridMode = false;       /* Scene Folders dock shows tiles, not the tree */
 	bool folderDockIntroduced = false; /* first run pops the Scene Folders dock open */
 	bool dragHintsShown = false;       /* first run showed the dock layout guide */
+	bool folderSources = true;         /* source rows under scenes in the folder dock */
 
 	int nextId = 1;
 	std::vector<Layout> layouts;
@@ -69,6 +97,10 @@ struct State {
 	std::vector<SourceDockEntry> sourceDocks;
 	int nextSourceDockId = 1;
 	QStringList mixerOrder; /* custom Audio Mixer order (source names, top first) */
+	std::vector<SourceLoadout> loadouts;
+	int nextLoadoutId = 1;
+	SourceLoadout loadoutUndo; /* pre-restore snapshot; undo twice = redo */
+	bool hasLoadoutUndo = false;
 };
 
 State &state();
@@ -138,6 +170,21 @@ void addDock(int kind, const QString &sourceName);
 void removeDock(int id);
 void shutdown(); /* MUST run at EXIT, before graphics dies */
 } // namespace sourcedocks
+
+/* source loadouts + lock tools (LoadoutX's last features, done natively) */
+namespace loadouts {
+struct RestoreReport {
+	int restored = 0;
+	QStringList missing; /* "Scene: Source" rows that no longer exist */
+};
+SourceLoadout capture(const QString &sceneUuid, const QString &sceneName);
+RestoreReport restore(const SourceLoadout &l); /* snapshots an undo first */
+bool undoRestore(RestoreReport &report);       /* undo twice = redo */
+void lockScene(const QString &sceneUuid, bool locked); /* incl. group children */
+void lockAll(bool locked);
+obs_data_t *toData(const SourceLoadout &l); /* caller releases */
+SourceLoadout fromData(obs_data_t *d);
+} // namespace loadouts
 
 /* the dock layout guide: illustrated first-run walkthrough of dock dragging
    (title bar grab, edge drop = split, center drop = tabs, DockX columns) */

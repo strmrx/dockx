@@ -111,8 +111,10 @@ void stateLoad()
 	obs_data_set_default_bool(d, "filter_hotkeys", true);
 	obs_data_set_default_bool(d, "folder_new_button", true);
 	obs_data_set_default_bool(d, "folder_nesting", true);
+	obs_data_set_default_bool(d, "folder_sources", true);
 	obs_data_set_default_int(d, "next_id", 1);
 	obs_data_set_default_int(d, "next_source_dock_id", 1);
+	obs_data_set_default_int(d, "next_loadout_id", 1);
 
 	g_state.nesting = obs_data_get_bool(d, "nesting");
 	g_state.sceneSearch = obs_data_get_bool(d, "scene_search");
@@ -125,6 +127,28 @@ void stateLoad()
 	g_state.folderGridMode = obs_data_get_bool(d, "folder_grid_mode");
 	g_state.folderDockIntroduced = obs_data_get_bool(d, "folder_dock_introduced");
 	g_state.dragHintsShown = obs_data_get_bool(d, "drag_hints_shown");
+	g_state.folderSources = obs_data_get_bool(d, "folder_sources");
+	g_state.nextLoadoutId = (int)obs_data_get_int(d, "next_loadout_id");
+	obs_data_array_t *louts = obs_data_get_array(d, "loadouts");
+	if (louts) {
+		const size_t ln = obs_data_array_count(louts);
+		for (size_t i = 0; i < ln; i++) {
+			obs_data_t *e = obs_data_array_item(louts, i);
+			g_state.loadouts.push_back(loadouts::fromData(e));
+			obs_data_release(e);
+		}
+		obs_data_array_release(louts);
+	}
+	g_state.hasLoadoutUndo = obs_data_get_bool(d, "has_loadout_undo");
+	if (g_state.hasLoadoutUndo) {
+		obs_data_t *u = obs_data_get_obj(d, "loadout_undo");
+		if (u) {
+			g_state.loadoutUndo = loadouts::fromData(u);
+			obs_data_release(u);
+		} else {
+			g_state.hasLoadoutUndo = false;
+		}
+	}
 	g_state.sepSize = (int)obs_data_get_int(d, "sep_size");
 	g_state.sepColor = QString::fromUtf8(obs_data_get_string(d, "sep_color"));
 	g_state.mixerOrder = QString::fromUtf8(obs_data_get_string(d, "mixer_order"))
@@ -275,6 +299,22 @@ void stateSave()
 	obs_data_set_bool(d, "folder_grid_mode", g_state.folderGridMode);
 	obs_data_set_bool(d, "folder_dock_introduced", g_state.folderDockIntroduced);
 	obs_data_set_bool(d, "drag_hints_shown", g_state.dragHintsShown);
+	obs_data_set_bool(d, "folder_sources", g_state.folderSources);
+	obs_data_set_int(d, "next_loadout_id", g_state.nextLoadoutId);
+	obs_data_array_t *louts = obs_data_array_create();
+	for (const SourceLoadout &l : g_state.loadouts) {
+		obs_data_t *e = loadouts::toData(l);
+		obs_data_array_push_back(louts, e);
+		obs_data_release(e);
+	}
+	obs_data_set_array(d, "loadouts", louts);
+	obs_data_array_release(louts);
+	obs_data_set_bool(d, "has_loadout_undo", g_state.hasLoadoutUndo);
+	if (g_state.hasLoadoutUndo) {
+		obs_data_t *u = loadouts::toData(g_state.loadoutUndo);
+		obs_data_set_obj(d, "loadout_undo", u);
+		obs_data_release(u);
+	}
 	obs_data_set_int(d, "sep_size", g_state.sepSize);
 	obs_data_set_string(d, "sep_color", g_state.sepColor.toUtf8().constData());
 	obs_data_set_string(d, "mixer_order",

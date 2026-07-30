@@ -54,6 +54,7 @@ scenes from everywhere.
 #include <QVBoxLayout>
 
 #include <algorithm>
+#include <functional>
 #include <vector>
 
 namespace dockx {
@@ -73,6 +74,7 @@ static QString g_gridPath; /* folder the grid is inside ("" = root); per session
 static const char *ROLE_TYPE_FOLDER = "f";
 static const char *ROLE_TYPE_SCENE = "s";
 static const char *ROLE_TYPE_UP = "u";
+static const char *ROLE_TYPE_SOURCE = "x"; /* a source row under a scene */
 
 /* ---- folder paths ---- */
 
@@ -163,6 +165,138 @@ static const QColor NEUTRAL_DOT(160, 160, 160, 70);
 static const QColor NEUTRAL_FOLDER(157, 157, 157);
 static const QColor GRID_TILE_BG(52, 52, 52);
 
+/* ---- source rows under scenes ---- */
+
+static bool isSourceRow(const QTreeWidgetItem *it)
+{
+	return isType(it, ROLE_TYPE_SOURCE);
+}
+
+/* scenes expanded to show sources this session (deliberately not persisted:
+   a fresh OBS start begins tidy, scenes collapsed) */
+static QSet<QString> g_expandedScenes;
+
+/* eye (open/closed) with a small amber padlock badge when locked */
+static QIcon sourceGlyph(bool visible, bool locked)
+{
+	QPixmap pm(32, 32);
+	pm.fill(Qt::transparent);
+	QPainter p(&pm);
+	p.setRenderHint(QPainter::Antialiasing);
+	const QColor c = visible ? QColor(200, 200, 200) : QColor(150, 150, 150, 110);
+	p.setPen(QPen(c, 2.4));
+	p.setBrush(Qt::NoBrush);
+	const QRectF eye(4, 9, 20, 14);
+	p.drawArc(eye, 0, 180 * 16);
+	p.drawArc(eye, 180 * 16, 180 * 16);
+	p.setPen(Qt::NoPen);
+	p.setBrush(c);
+	p.drawEllipse(QPointF(14, 16), 3.4, 3.4);
+	if (!visible) {
+		p.setPen(QPen(c, 2.6));
+		p.drawLine(QPointF(5, 26), QPointF(23, 6));
+	}
+	if (locked) {
+		const QColor lc(255, 190, 80);
+		p.setPen(Qt::NoPen);
+		p.setBrush(lc);
+		p.drawRoundedRect(QRectF(21, 19, 10, 9), 2, 2);
+		p.setPen(QPen(lc, 2));
+		p.setBrush(Qt::NoBrush);
+		p.drawArc(QRectF(22.5, 13, 7, 9), 0, 180 * 16);
+	}
+	return QIcon(pm);
+}
+
+/* find a scene item by id anywhere in the scene, groups included */
+struct FindItemCtx {
+	long long id;
+	obs_sceneitem_t *hit = nullptr;
+};
+
+static bool findItemEnum(obs_scene_t *, obs_sceneitem_t *item, void *param)
+{
+	FindItemCtx *ctx = static_cast<FindItemCtx *>(param);
+	if (obs_sceneitem_get_id(item) == ctx->id) {
+		ctx->hit = item;
+		return false;
+	}
+	if (obs_sceneitem_is_group(item)) {
+		obs_sceneitem_group_enum_items(item, findItemEnum, param);
+		if (ctx->hit)
+			return false;
+	}
+	return true;
+}
+
+/* run fn(sceneitem) for the source row's live item; false if it is gone */
+template<typename Fn> static bool withRowItem(const QTreeWidgetItem *row, Fn fn)
+{
+	if (!isSourceRow(row))
+		return false;
+	obs_source_t *sceneSrc = obs_get_source_by_uuid(
+		row->data(0, Qt::UserRole + 1).toString().toUtf8().constData());
+	if (!sceneSrc)
+		return false;
+	obs_scene_t *scene = obs_scene_from_source(sceneSrc);
+	FindItemCtx ctx;
+	ctx.id = row->data(0, Qt::UserRole + 2).toLongLong();
+	if (scene)
+		obs_scene_enum_items(scene, findItemEnum, &ctx);
+	if (ctx.hit)
+		fn(ctx.hit);
+	obs_source_release(sceneSrc);
+	return ctx.hit != nullptr;
+}
+
+static bool collectItemsEnum(obs_scene_t *, obs_sceneitem_t *item, void *param)
+{
+	static_cast<std::vector<obs_sceneitem_t *> *>(param)->push_back(item);
+	return true;
+}
+
+static void addSourceRow(QTreeWidgetItem *parent, const QString &sceneUuid,
+			 obs_sceneitem_t *item)
+{
+	obs_source_t *src = obs_sceneitem_get_source(item);
+	if (!src)
+		return;
+	QTreeWidgetItem *row = new QTreeWidgetItem(parent);
+	row->setText(0, QString::fromUtf8(obs_source_get_name(src)));
+	row->setData(0, Qt::UserRole, ROLE_TYPE_SOURCE);
+	row->setData(0, Qt::UserRole + 1, sceneUuid);
+	row->setData(0, Qt::UserRole + 2, (qlonglong)obs_sceneitem_get_id(item));
+	/* selectable for the context menu; never draggable, never a drop target */
+	row->setFlags(Qt::ItemIsEnabled | Qt::ItemIsSelectable);
+	const bool vis = obs_sceneitem_visible(item);
+	row->setIcon(0, sourceGlyph(vis, obs_sceneitem_locked(item)));
+	if (!vis)
+		row->setForeground(0, QBrush(QColor(150, 150, 150, 140)));
+	if (obs_sceneitem_is_group(item)) {
+		std::vector<obs_sceneitem_t *> kids;
+		obs_sceneitem_group_enum_items(item, collectItemsEnum, &kids);
+		/* enum is bottom first; show top first like the Sources panel */
+		for (auto k = kids.rbegin(); k != kids.rend(); ++k)
+			addSourceRow(row, sceneUuid, *k);
+	}
+}
+
+static void addSourceRows(QTreeWidgetItem *sceneItem, const QString &sceneUuid)
+{
+	obs_source_t *sceneSrc =
+		obs_get_source_by_uuid(sceneUuid.toUtf8().constData());
+	if (!sceneSrc)
+		return;
+	obs_scene_t *scene = obs_scene_from_source(sceneSrc);
+	if (scene) {
+		std::vector<obs_sceneitem_t *> items;
+		obs_scene_enum_items(scene, collectItemsEnum, &items);
+		for (auto it = items.rbegin(); it != items.rend(); ++it)
+			addSourceRow(sceneItem, sceneUuid, *it);
+	}
+	obs_source_release(sceneSrc);
+}
+
 /* ---- shared scene data ---- */
 
 struct SceneRow {
@@ -203,13 +337,37 @@ static QString currentSceneUuid()
 
 /* ---- search (tree) ---- */
 
+/* source rows: visible when they (or a group child) match; a matching scene
+   or group shows everything under it */
+static bool applySearchSource(QTreeWidgetItem *it, const QString &q, bool showAll)
+{
+	const bool nameHit = q.isEmpty() || it->text(0).contains(q, Qt::CaseInsensitive);
+	bool anyKid = false;
+	for (int j = 0; j < it->childCount(); j++)
+		if (applySearchSource(it->child(j), q, showAll || nameHit))
+			anyKid = true;
+	const bool show = showAll || nameHit || anyKid;
+	it->setHidden(!show);
+	if (!q.isEmpty() && anyKid)
+		it->setExpanded(true);
+	return show;
+}
+
 static bool applySearchItem(QTreeWidgetItem *it, const QString &q)
 {
 	if (isScene(it)) {
-		const bool hide = !q.isEmpty() &&
-				  !it->text(0).contains(q, Qt::CaseInsensitive);
-		it->setHidden(hide);
-		return !hide;
+		const bool nameHit =
+			q.isEmpty() || it->text(0).contains(q, Qt::CaseInsensitive);
+		bool anyKid = false;
+		for (int j = 0; j < it->childCount(); j++)
+			if (applySearchSource(it->child(j), q, nameHit))
+				anyKid = true;
+		const bool show = q.isEmpty() || nameHit || anyKid;
+		it->setHidden(!show);
+		/* a source hit peeks into its scene so you see WHERE it lives */
+		if (!q.isEmpty() && anyKid && !nameHit)
+			it->setExpanded(true);
+		return show;
 	}
 	bool anyVisible = false;
 	for (int j = 0; j < it->childCount(); j++)
@@ -345,6 +503,10 @@ static void rebuildNow()
 			si->setFont(0, f);
 			si->setSelected(true);
 			curItem = si;
+		}
+		if (state().folderSources) {
+			addSourceRows(si, s.uuid);
+			si->setExpanded(g_expandedScenes.contains(s.uuid));
 		}
 	}
 
@@ -1093,6 +1255,83 @@ static void buildSceneMenu(QMenu &menu, const QString &uuid, const QString &name
 		obs_data_release(priv);
 		obs_source_release(s);
 	});
+	menu.addSeparator();
+	menu.addAction("Lock all sources", [uuid]() {
+		loadouts::lockScene(uuid, true);
+		rebuildSoon();
+	});
+	menu.addAction("Unlock all sources", [uuid]() {
+		loadouts::lockScene(uuid, false);
+		rebuildSoon();
+	});
+}
+
+/* right click on a source row: the everyday per source controls */
+static void buildSourceMenu(QMenu &menu, QTreeWidgetItem *row)
+{
+	bool visible = true, locked = false;
+	withRowItem(row, [&visible, &locked](obs_sceneitem_t *item) {
+		visible = obs_sceneitem_visible(item);
+		locked = obs_sceneitem_locked(item);
+	});
+	/* the row outlives the menu closures only until the next rebuild, so
+	   capture the lookup keys, never the row pointer */
+	const QString sceneUuid = row->data(0, Qt::UserRole + 1).toString();
+	const qlonglong itemId = row->data(0, Qt::UserRole + 2).toLongLong();
+	auto withItem = [sceneUuid, itemId](std::function<void(obs_sceneitem_t *)> fn) {
+		obs_source_t *sceneSrc =
+			obs_get_source_by_uuid(sceneUuid.toUtf8().constData());
+		if (!sceneSrc)
+			return;
+		obs_scene_t *scene = obs_scene_from_source(sceneSrc);
+		FindItemCtx ctx;
+		ctx.id = itemId;
+		if (scene)
+			obs_scene_enum_items(scene, findItemEnum, &ctx);
+		if (ctx.hit)
+			fn(ctx.hit);
+		obs_source_release(sceneSrc);
+	};
+
+	menu.addAction(visible ? "Hide" : "Show", [withItem, visible]() {
+		withItem([visible](obs_sceneitem_t *item) {
+			obs_sceneitem_set_visible(item, !visible);
+		});
+		rebuildSoon();
+	});
+	menu.addAction(locked ? "Unlock" : "Lock", [withItem, locked]() {
+		withItem([locked](obs_sceneitem_t *item) {
+			obs_sceneitem_set_locked(item, !locked);
+		});
+		rebuildSoon();
+	});
+	menu.addSeparator();
+	menu.addAction("Filters", [withItem]() {
+		withItem([](obs_sceneitem_t *item) {
+			obs_frontend_open_source_filters(obs_sceneitem_get_source(item));
+		});
+	});
+	menu.addAction("Properties", [withItem]() {
+		withItem([](obs_sceneitem_t *item) {
+			obs_frontend_open_source_properties(
+				obs_sceneitem_get_source(item));
+		});
+	});
+	menu.addAction("Rename...", [withItem]() {
+		withItem([](obs_sceneitem_t *item) {
+			obs_source_t *src = obs_sceneitem_get_source(item);
+			if (!src)
+				return;
+			bool ok = false;
+			const QString name = QInputDialog::getText(
+				g_tree, "Rename source", "New name:", QLineEdit::Normal,
+				QString::fromUtf8(obs_source_get_name(src)), &ok);
+			if (ok && !name.trimmed().isEmpty())
+				obs_source_set_name(src,
+						    name.trimmed().toUtf8().constData());
+		});
+		rebuildSoon();
+	});
 }
 
 static void buildFolderMenu(QMenu &menu, const QString &path)
@@ -1127,7 +1366,9 @@ static void showContextMenu(const QPoint &pos)
 	QTreeWidgetItem *it = g_tree->itemAt(pos);
 	QMenu menu(g_tree);
 
-	if (isScene(it)) {
+	if (isSourceRow(it)) {
+		buildSourceMenu(menu, it);
+	} else if (isScene(it)) {
 		buildSceneMenu(menu, itemKey(it), it->text(0));
 	} else if (isFolder(it)) {
 		buildFolderMenu(menu, itemKey(it));
@@ -1139,6 +1380,15 @@ static void showContextMenu(const QPoint &pos)
 		menu.addAction("New folder", []() { newFolderPrompt(g_tree); });
 		menu.addAction("Sort all scenes A to Z",
 			       []() { sortScenesAtoZ(true, QString()); });
+		menu.addSeparator();
+		menu.addAction("Lock every source (all scenes)", []() {
+			loadouts::lockAll(true);
+			rebuildSoon();
+		});
+		menu.addAction("Unlock every source (all scenes)", []() {
+			loadouts::lockAll(false);
+			rebuildSoon();
+		});
 		menu.addSeparator();
 		menu.addAction("Collapse all", []() { setAllExpanded(false); });
 		menu.addAction("Expand all", []() { setAllExpanded(true); });
@@ -1424,17 +1674,40 @@ void createDock()
 				 obs_source_release(src);
 			 });
 	QObject::connect(g_tree, &QTreeWidget::itemExpanded, g_tree, [](QTreeWidgetItem *it) {
-		if (g_applying || !isFolder(it))
+		if (g_applying)
+			return;
+		if (isScene(it)) {
+			g_expandedScenes.insert(itemKey(it));
+			return;
+		}
+		if (!isFolder(it))
 			return;
 		data().collapsed.remove(itemKey(it));
 		stateSave();
 	});
 	QObject::connect(g_tree, &QTreeWidget::itemCollapsed, g_tree, [](QTreeWidgetItem *it) {
-		if (g_applying || !isFolder(it))
+		if (g_applying)
+			return;
+		if (isScene(it)) {
+			g_expandedScenes.remove(itemKey(it));
+			return;
+		}
+		if (!isFolder(it))
 			return;
 		data().collapsed.insert(itemKey(it));
 		stateSave();
 	});
+	QObject::connect(g_tree, &QTreeWidget::itemDoubleClicked, g_tree,
+			 [](QTreeWidgetItem *it, int) {
+				 /* double click a source row = show/hide, like the eye */
+				 if (!isSourceRow(it))
+					 return;
+				 withRowItem(it, [](obs_sceneitem_t *item) {
+					 obs_sceneitem_set_visible(
+						 item, !obs_sceneitem_visible(item));
+				 });
+				 rebuildSoon();
+			 });
 
 	g_grid = new QListWidget(panel);
 	g_grid->setViewMode(QListView::IconMode);

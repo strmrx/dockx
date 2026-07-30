@@ -103,15 +103,13 @@ off-thesis: encoders, multi-output, NDI, VST, replay buffer.
   scenes A to Z" on the dock background, tree and grid)
 - Starter layouts gallery: "Chat right, tools left", "Podcast", "Just Chatting" etc.
 - Layout export/share (streamers trading layouts = the community moment + marketing)
-- Port remaining LoadoutX features natively (the LAST blockers to deleting LoadoutX;
-  gap audit 2026-07-30):
-  - Source loadouts: save/restore source position/scale/rotation/crop/visibility/lock
-    per scene or all scenes, with undo + confirmation (LoadoutX's headline feature)
-  - Scene lock tools: lock/unlock everything, per scene lock all, lock counts
-  - Source rows in search / find-usages + per source show/hide/lock from the tree
-    (folds into roadmap item: source tagging #13)
-  - Manual profile/collection switching with "you are live" guards (folds into #12)
-  - StrmrX Midnight OBS theme: distribute via the strmrx.com/dockx page, not the plugin
+- LoadoutX parity -- SHIPPED v0.12 (2026-07-30): source loadouts (save/restore all
+  transforms + visibility/lock, undo = redo, Loadouts tab), lock tools (per scene +
+  everywhere), source rows under scenes in the folder dock (eye/lock icons, double
+  click toggle, right click controls, search matches sources = find-usages), and the
+  live-guarded Switch tab (profiles + collections). StrmrX Midnight theme staged in
+  assets/themes/ for the strmrx.com/dockx page. LoadoutX is now fully replaced;
+  retire it after Joey's parity check.
 - Guided drag hints -- SHIPPED v0.11 (illustrated Dock Layout Guide dialog: title bar
   grab, edge drop = split, center drop = tabs, DockX columns; auto opens once on first
   run, reopenable from Settings, linked to strmrx.com/dockx)

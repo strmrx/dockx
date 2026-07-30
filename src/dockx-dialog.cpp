@@ -14,6 +14,7 @@ GPL v2, see plugin-main.cpp for the full notice.
 #include <QComboBox>
 #include <QCompleter>
 #include <QDesktopServices>
+#include <QFont>
 #include <QUrl>
 #include <QStandardItemModel>
 #include <QDialog>
@@ -283,7 +284,7 @@ void showDialog()
 	QMainWindow *main = mainWindow();
 	QDialog dlg(main);
 	dlg.setWindowTitle("DockX");
-	dlg.setMinimumSize(880, 500); /* wide enough that every tab shows */
+	dlg.setMinimumSize(980, 520); /* wide enough that every tab shows */
 
 	QVBoxLayout *root = new QVBoxLayout(&dlg);
 	QTabWidget *tabs = new QTabWidget(&dlg);
@@ -439,6 +440,188 @@ void showDialog()
 			 });
 
 	tabs->addTab(layoutsTab, "Layouts");
+
+	/* ---------- Loadouts tab (source positions, LoadoutX ported) ---------- */
+	QWidget *loTab = new QWidget();
+	QVBoxLayout *lov = new QVBoxLayout(loTab);
+
+	QListWidget *loList = new QListWidget(loTab);
+	lov->addWidget(loList, 1);
+
+	auto reloadLoadouts = [loList]() {
+		loList->clear();
+		for (const SourceLoadout &l : state().loadouts) {
+			const QString scope =
+				l.sceneUuid.isEmpty() ? "All scenes" : l.sceneName;
+			QListWidgetItem *it = new QListWidgetItem(
+				QString("%1   ·   %2   ·   %3 sources")
+					.arg(l.name, scope)
+					.arg((int)l.items.size()),
+				loList);
+			it->setData(Qt::UserRole, l.id);
+		}
+	};
+	auto selectedLoadout = [loList]() -> SourceLoadout * {
+		QListWidgetItem *it = loList->currentItem();
+		if (!it)
+			return nullptr;
+		const int id = it->data(Qt::UserRole).toInt();
+		for (SourceLoadout &l : state().loadouts)
+			if (l.id == id)
+				return &l;
+		return nullptr;
+	};
+	reloadLoadouts();
+
+	auto saveLoadout = [&dlg, reloadLoadouts](bool allScenes) {
+		QString uuid, sceneName;
+		if (!allScenes) {
+			obs_source_t *cur = obs_frontend_get_current_scene();
+			if (!cur) {
+				QMessageBox::information(&dlg, "DockX",
+							 "No current scene to save.");
+				return;
+			}
+			uuid = QString::fromUtf8(obs_source_get_uuid(cur));
+			sceneName = QString::fromUtf8(obs_source_get_name(cur));
+			obs_source_release(cur);
+		}
+		const QString suggested =
+			allScenes ? QString("Everything %1")
+					    .arg((int)state().loadouts.size() + 1)
+				  : QString("%1 loadout").arg(sceneName);
+		bool ok = false;
+		QString name = QInputDialog::getText(&dlg, "Save loadout",
+						     "Name this loadout:",
+						     QLineEdit::Normal, suggested, &ok)
+				       .trimmed();
+		if (!ok || name.isEmpty())
+			return;
+		SourceLoadout l = loadouts::capture(uuid, sceneName);
+		if (l.items.empty()) {
+			QMessageBox::information(&dlg, "DockX",
+						 "There are no sources to save yet.");
+			return;
+		}
+		l.id = state().nextLoadoutId++;
+		l.name = name;
+		state().loadouts.push_back(l);
+		stateSave();
+		reloadLoadouts();
+	};
+
+	QHBoxLayout *lob = new QHBoxLayout();
+	QPushButton *loSaveCur = new QPushButton("Save current scene", loTab);
+	QPushButton *loSaveAll = new QPushButton("Save all scenes", loTab);
+	QPushButton *loRestore = new QPushButton("Restore", loTab);
+	QPushButton *loUndo = new QPushButton("Undo restore", loTab);
+	lob->addWidget(loSaveCur);
+	lob->addWidget(loSaveAll);
+	lob->addWidget(loRestore);
+	lob->addWidget(loUndo);
+	lov->addLayout(lob);
+
+	QHBoxLayout *lob2 = new QHBoxLayout();
+	QPushButton *loRename = new QPushButton("Rename", loTab);
+	QPushButton *loDelete = new QPushButton("Delete", loTab);
+	lob2->addWidget(loRename);
+	lob2->addWidget(loDelete);
+	lob2->addStretch(1);
+	lov->addLayout(lob2);
+
+	QLabel *loHint = new QLabel(
+		"A loadout remembers where every source sits: position, size, rotation, "
+		"crop, visibility, and lock. Restore snaps them all back. Restoring "
+		"always keeps an undo; pressing Undo restore twice flips back again.",
+		loTab);
+	loHint->setWordWrap(true);
+	lov->addWidget(loHint);
+
+	QObject::connect(loSaveCur, &QPushButton::clicked, &dlg,
+			 [saveLoadout]() { saveLoadout(false); });
+	QObject::connect(loSaveAll, &QPushButton::clicked, &dlg,
+			 [saveLoadout]() { saveLoadout(true); });
+	QObject::connect(loRestore, &QPushButton::clicked, &dlg, [&dlg, selectedLoadout]() {
+		SourceLoadout *l = selectedLoadout();
+		if (!l) {
+			QMessageBox::information(&dlg, "DockX", "Pick a loadout first.");
+			return;
+		}
+		const QString scope =
+			l->sceneUuid.isEmpty() ? "every scene" : l->sceneName;
+		const auto answer = QMessageBox::question(
+			&dlg, "Restore loadout",
+			QString("Every saved source in %1 snaps back to its saved spot. "
+				"You can undo this. Restore \"%2\"?")
+				.arg(scope, l->name));
+		if (answer != QMessageBox::Yes)
+			return;
+		const loadouts::RestoreReport r = loadouts::restore(*l);
+		folders::rebuildSoon();
+		QString msg = QString("Restored %1 sources.").arg(r.restored);
+		if (!r.missing.isEmpty()) {
+			QStringList shown = r.missing.mid(0, 8);
+			if (r.missing.size() > 8)
+				shown << QString("and %1 more")
+						 .arg(r.missing.size() - 8);
+			msg += "\n\nNot found anymore:\n" + shown.join("\n");
+		}
+		QMessageBox::information(&dlg, "DockX", msg);
+	});
+	QObject::connect(loUndo, &QPushButton::clicked, &dlg, [&dlg]() {
+		loadouts::RestoreReport r;
+		if (!loadouts::undoRestore(r)) {
+			QMessageBox::information(&dlg, "DockX", "Nothing to undo yet.");
+			return;
+		}
+		folders::rebuildSoon();
+		QMessageBox::information(
+			&dlg, "DockX",
+			QString("Put %1 sources back the way they were.").arg(r.restored));
+	});
+	QObject::connect(loRename, &QPushButton::clicked, &dlg,
+			 [&dlg, selectedLoadout, reloadLoadouts]() {
+				 SourceLoadout *l = selectedLoadout();
+				 if (!l)
+					 return;
+				 bool ok = false;
+				 const QString name =
+					 QInputDialog::getText(&dlg, "Rename loadout",
+							       "New name:",
+							       QLineEdit::Normal, l->name,
+							       &ok)
+						 .trimmed();
+				 if (!ok || name.isEmpty())
+					 return;
+				 l->name = name;
+				 stateSave();
+				 reloadLoadouts();
+			 });
+	QObject::connect(loDelete, &QPushButton::clicked, &dlg,
+			 [&dlg, selectedLoadout, reloadLoadouts]() {
+				 SourceLoadout *l = selectedLoadout();
+				 if (!l)
+					 return;
+				 const auto answer = QMessageBox::question(
+					 &dlg, "Delete loadout",
+					 QString("Delete \"%1\"? Your sources are not "
+						 "touched.")
+						 .arg(l->name));
+				 if (answer != QMessageBox::Yes)
+					 return;
+				 const int id = l->id;
+				 auto &v = state().loadouts;
+				 for (size_t i = 0; i < v.size(); i++) {
+					 if (v[i].id == id) {
+						 v.erase(v.begin() + i);
+						 break;
+					 }
+				 }
+				 stateSave();
+				 reloadLoadouts();
+			 });
+
+	tabs->addTab(loTab, "Loadouts");
 
 	/* ---------- Auto switch tab ---------- */
 	QWidget *autoTab = new QWidget();
@@ -878,6 +1061,116 @@ void showDialog()
 
 	tabs->addTab(mixTab, "Mixer");
 
+	/* ---------- Switch tab (profiles + collections, live guarded) ---------- */
+	QWidget *swTab = new QWidget();
+	QVBoxLayout *swv = new QVBoxLayout(swTab);
+	QHBoxLayout *swCols = new QHBoxLayout();
+
+	QVBoxLayout *profCol = new QVBoxLayout();
+	profCol->addWidget(new QLabel("<b>Profiles</b> (settings: encoder, "
+				      "resolution, stream keys)",
+				      swTab));
+	QListWidget *profList = new QListWidget(swTab);
+	profCol->addWidget(profList, 1);
+	QPushButton *profBtn = new QPushButton("Switch profile", swTab);
+	profCol->addWidget(profBtn);
+	swCols->addLayout(profCol, 1);
+
+	QVBoxLayout *collCol = new QVBoxLayout();
+	collCol->addWidget(new QLabel("<b>Scene collections</b> (your scenes "
+				      "and sources)",
+				      swTab));
+	QListWidget *collList = new QListWidget(swTab);
+	collCol->addWidget(collList, 1);
+	QPushButton *collBtn = new QPushButton("Switch collection", swTab);
+	collCol->addWidget(collBtn);
+	swCols->addLayout(collCol, 1);
+
+	swv->addLayout(swCols, 1);
+	QLabel *swHint = new QLabel(
+		"Switching either is instant when you are offline. When you are live "
+		"or recording, DockX blocks profile changes (OBS cannot do them) and "
+		"warns before a collection change, because rebuilding scenes can "
+		"hiccup the stream.",
+		swTab);
+	swHint->setWordWrap(true);
+	swv->addWidget(swHint);
+
+	auto fillNameList = [](QListWidget *list, char **names, char *current) {
+		list->clear();
+		const QString cur = QString::fromUtf8(current ? current : "");
+		for (char **n = names; n && *n; n++) {
+			const QString name = QString::fromUtf8(*n);
+			QListWidgetItem *it = new QListWidgetItem(
+				name == cur ? name + "   (current)" : name, list);
+			it->setData(Qt::UserRole, name);
+			if (name == cur) {
+				QFont f = it->font();
+				f.setBold(true);
+				it->setFont(f);
+			}
+		}
+	};
+	auto reloadSwitch = [profList, collList, fillNameList]() {
+		char **profiles = obs_frontend_get_profiles();
+		char *curProf = obs_frontend_get_current_profile();
+		fillNameList(profList, profiles, curProf);
+		bfree(profiles);
+		bfree(curProf);
+		char **colls = obs_frontend_get_scene_collections();
+		char *curColl = obs_frontend_get_current_scene_collection();
+		fillNameList(collList, colls, curColl);
+		bfree(colls);
+		bfree(curColl);
+	};
+	reloadSwitch();
+
+	auto anyOutputActive = []() {
+		return obs_frontend_streaming_active() ||
+		       obs_frontend_recording_active() ||
+		       obs_frontend_virtualcam_active();
+	};
+	auto switchProfile = [&dlg, profList, reloadSwitch, anyOutputActive]() {
+		QListWidgetItem *it = profList->currentItem();
+		if (!it)
+			return;
+		if (anyOutputActive()) {
+			QMessageBox::information(
+				&dlg, "DockX",
+				"OBS cannot change profiles while you are streaming, "
+				"recording, or running the virtual camera. Stop first, "
+				"then switch.");
+			return;
+		}
+		obs_frontend_set_current_profile(
+			it->data(Qt::UserRole).toString().toUtf8().constData());
+		reloadSwitch();
+	};
+	auto switchCollection = [&dlg, collList, reloadSwitch, anyOutputActive]() {
+		QListWidgetItem *it = collList->currentItem();
+		if (!it)
+			return;
+		if (anyOutputActive()) {
+			const auto answer = QMessageBox::question(
+				&dlg, "You are live",
+				"Switching scene collections rebuilds every scene and "
+				"can hiccup your stream or recording. Switch anyway?");
+			if (answer != QMessageBox::Yes)
+				return;
+		}
+		obs_frontend_set_current_scene_collection(
+			it->data(Qt::UserRole).toString().toUtf8().constData());
+		reloadSwitch();
+	};
+	QObject::connect(profBtn, &QPushButton::clicked, &dlg, switchProfile);
+	QObject::connect(collBtn, &QPushButton::clicked, &dlg, switchCollection);
+	QObject::connect(profList, &QListWidget::itemDoubleClicked, &dlg,
+			 [switchProfile](QListWidgetItem *) { switchProfile(); });
+	QObject::connect(collList, &QListWidget::itemDoubleClicked, &dlg,
+			 [switchCollection](QListWidgetItem *) { switchCollection(); });
+
+	tabs->addTab(swTab, "Switch");
+
 	/* ---------- Settings tab ---------- */
 	QWidget *settingsTab = new QWidget();
 	QVBoxLayout *sv = new QVBoxLayout(settingsTab);
@@ -926,6 +1219,11 @@ void showDialog()
 		 });
 	addCheck("Nested folders (drag a folder into a folder)", state().folderNesting,
 		 [](bool v) { state().folderNesting = v; });
+	addCheck("Sources under scenes in the Scene Folders dock", state().folderSources,
+		 [](bool v) {
+			 state().folderSources = v;
+			 folders::rebuildSoon();
+		 });
 
 	QHBoxLayout *helpRow = new QHBoxLayout();
 	QPushButton *guideBtn = new QPushButton("Dock layout guide", settingsTab);
