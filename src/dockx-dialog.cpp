@@ -285,9 +285,11 @@ void showDialog()
 
 	QHBoxLayout *lb2 = new QHBoxLayout();
 	QPushButton *hotkeyBtn = new QPushButton("Set hotkey", layoutsTab);
+	QPushButton *unbindBtn = new QPushButton("Remove hotkey", layoutsTab);
 	QPushButton *renameBtn = new QPushButton("Rename", layoutsTab);
 	QPushButton *deleteBtn = new QPushButton("Delete", layoutsTab);
 	lb2->addWidget(hotkeyBtn);
+	lb2->addWidget(unbindBtn);
 	lb2->addWidget(renameBtn);
 	lb2->addWidget(deleteBtn);
 	lb2->addStretch(1);
@@ -384,6 +386,18 @@ void showDialog()
 					 setLayoutHotkey(l, QKeySequence());
 				 reloadLayouts();
 			 });
+	QObject::connect(unbindBtn, &QPushButton::clicked, &dlg,
+			 [&dlg, selectedLayoutId, reloadLayouts]() {
+				 int id = selectedLayoutId();
+				 Layout *l = id ? findLayout(id) : nullptr;
+				 if (!l) {
+					 QMessageBox::information(&dlg, "DockX",
+								  "Pick a layout first.");
+					 return;
+				 }
+				 setLayoutHotkey(l, QKeySequence());
+				 reloadLayouts();
+			 });
 
 	tabs->addTab(layoutsTab, "Layouts");
 
@@ -417,8 +431,8 @@ void showDialog()
 	reloadRules();
 
 	QHBoxLayout *ab = new QHBoxLayout();
-	QPushButton *addRuleBtn = new QPushButton("Add rule", autoTab);
-	QPushButton *removeRuleBtn = new QPushButton("Remove rule", autoTab);
+	QPushButton *addRuleBtn = new QPushButton("Pair scene with layout", autoTab);
+	QPushButton *removeRuleBtn = new QPushButton("Remove pairing", autoTab);
 	ab->addWidget(addRuleBtn);
 	ab->addWidget(removeRuleBtn);
 	ab->addStretch(1);
@@ -431,19 +445,19 @@ void showDialog()
 			return;
 		}
 		QDialog rd(&dlg);
-		rd.setWindowTitle("Add rule");
+		rd.setWindowTitle("Pair scene with layout");
 		QVBoxLayout *v = new QVBoxLayout(&rd);
 		v->addWidget(new QLabel("When OBS switches to this scene:", &rd));
 		QComboBox *sceneBox = new QComboBox(&rd);
 		sceneBox->addItems(sceneNames());
 		v->addWidget(sceneBox);
-		v->addWidget(new QLabel("apply this layout:", &rd));
+		v->addWidget(new QLabel("rearrange my docks to this layout:", &rd));
 		QComboBox *layoutBox = new QComboBox(&rd);
 		for (const Layout &l : state().layouts)
 			layoutBox->addItem(l.name, l.id);
 		v->addWidget(layoutBox);
 		QHBoxLayout *hb = new QHBoxLayout();
-		QPushButton *ok = new QPushButton("Add", &rd);
+		QPushButton *ok = new QPushButton("Pair them", &rd);
 		QPushButton *cancel = new QPushButton("Cancel", &rd);
 		hb->addStretch(1);
 		hb->addWidget(ok);
@@ -463,7 +477,7 @@ void showDialog()
 				 QListWidgetItem *it = ruleList->currentItem();
 				 if (!it) {
 					 QMessageBox::information(&dlg, "DockX",
-								  "Pick a rule first.");
+								  "Pick a pairing first.");
 					 return;
 				 }
 				 state().sceneLayouts.remove(it->data(Qt::UserRole).toString());
@@ -501,9 +515,25 @@ void showDialog()
 
 	QHBoxLayout *fb = new QHBoxLayout();
 	QPushButton *filterKeyBtn = new QPushButton("Set hotkey", filtersTab);
+	QPushButton *filterUnbindBtn = new QPushButton("Remove hotkey", filtersTab);
 	fb->addWidget(filterKeyBtn);
+	fb->addWidget(filterUnbindBtn);
 	fb->addStretch(1);
 	fv->addLayout(fb);
+
+	QObject::connect(filterUnbindBtn, &QPushButton::clicked, &dlg,
+			 [&dlg, filterListW, reloadFilters]() {
+				 QListWidgetItem *it = filterListW->currentItem();
+				 if (!it) {
+					 QMessageBox::information(&dlg, "DockX",
+								  "Pick a filter first.");
+					 return;
+				 }
+				 applyHotkeyBinding(
+					 (obs_hotkey_id)it->data(Qt::UserRole).toULongLong(),
+					 QKeySequence());
+				 reloadFilters();
+			 });
 
 	QObject::connect(filterKeyBtn, &QPushButton::clicked, &dlg,
 			 [&dlg, filterListW, reloadFilters]() {
