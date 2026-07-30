@@ -78,6 +78,11 @@ off-thesis: encoders, multi-output, NDI, VST, replay buffer.
   align tools, studio mode QoL later)
 - Scene thumbnails in the folder tree (demand #7; folders + thumbnails = the visual
   scene browser nobody ships)
+- Grid mode for Scene Folders (Joey 2026-07-30): tile grid like the native panel's
+  Grid Mode but folder aware (folders as collapsible sections of tiles, nesting) and
+  color first: the WHOLE tile carries the scene color, not a dot. Pairs with scene
+  thumbnails = the visual scene browser. (Native grid + our colors already fixed in
+  v0.6.2: full tile tint there too.)
 - Profile + collection linked switching (demand #12, EASY, extends Auto switch)
 - Cross-collection copy of scenes/sources (demand #3, 149 votes)
 - Reorderable audio mixer (demand #4)

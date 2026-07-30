@@ -736,6 +736,11 @@ void showDialog()
 			 state().filterHotkeys = v;
 			 filters::applyEnabled();
 		 });
+	addCheck("New folder button in the Scene Folders dock (off = right click only)",
+		 state().folderNewButton, [](bool v) {
+			 state().folderNewButton = v;
+			 folders::applySettings();
+		 });
 
 	sv->addStretch(1);
 	QLabel *about = new QLabel(

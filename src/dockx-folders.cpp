@@ -44,6 +44,7 @@ namespace folders {
 
 static QPointer<QTreeWidget> g_tree;
 static QPointer<QLineEdit> g_search;
+static QPointer<QToolButton> g_newBtn;
 static QPointer<QTimer> g_timer;
 static bool g_applying = false;
 static bool g_shutdown = false;
@@ -820,12 +821,26 @@ void createDock()
 	v->setContentsMargins(4, 4, 4, 4);
 	v->setSpacing(4);
 
+	/* search + the small new folder button share one row (setting can hide the
+	   button; everything it does is also in the right click menu) */
+	QHBoxLayout *topRow = new QHBoxLayout();
+	topRow->setContentsMargins(0, 0, 0, 0);
+	topRow->setSpacing(4);
 	g_search = new QLineEdit(panel);
 	g_search->setPlaceholderText("Search scenes");
 	g_search->setClearButtonEnabled(true);
 	QObject::connect(g_search, &QLineEdit::textChanged, panel,
 			 [](const QString &) { applySearch(); });
-	v->addWidget(g_search);
+	topRow->addWidget(g_search, 1);
+	g_newBtn = new QToolButton(panel);
+	g_newBtn->setAutoRaise(true);
+	g_newBtn->setIcon(panel->style()->standardIcon(QStyle::SP_FileDialogNewFolder));
+	g_newBtn->setToolTip("New folder");
+	g_newBtn->setVisible(state().folderNewButton);
+	QObject::connect(g_newBtn, &QToolButton::clicked, panel,
+			 [panel]() { newFolderPrompt(panel); });
+	topRow->addWidget(g_newBtn);
+	v->addLayout(topRow);
 
 	g_tree = new FolderTree(panel);
 	g_tree->setHeaderHidden(true);
@@ -893,27 +908,19 @@ void createDock()
 		stateSave();
 	});
 
-	/* slim footer, like the native panel: one icon button; everything else
-	   (rename/delete folder, all scene actions) lives in the right click menu */
-	QHBoxLayout *row = new QHBoxLayout();
-	row->setContentsMargins(0, 0, 0, 0);
-	QToolButton *newBtn = new QToolButton(panel);
-	newBtn->setAutoRaise(true);
-	newBtn->setIcon(panel->style()->standardIcon(QStyle::SP_FileDialogNewFolder));
-	newBtn->setToolTip("New folder");
-	row->addWidget(newBtn);
-	row->addStretch(1);
-	v->addLayout(row);
-
-	QObject::connect(newBtn, &QToolButton::clicked, panel,
-			 [panel]() { newFolderPrompt(panel); });
-
 	if (!obs_frontend_add_dock_by_id("dockx_scene_folders", "Scene Folders", panel)) {
 		obs_log(LOG_WARNING, "could not register the Scene Folders dock");
 		delete panel;
 		g_tree = nullptr;
 		g_search = nullptr;
+		g_newBtn = nullptr;
 	}
+}
+
+void applySettings()
+{
+	if (g_newBtn)
+		g_newBtn->setVisible(state().folderNewButton);
 }
 
 void showFirstRun()

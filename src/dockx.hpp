@@ -42,6 +42,7 @@ struct State {
 	bool sceneColors = true;
 	bool dockColors = true;
 	bool filterHotkeys = true;
+	bool folderNewButton = true;       /* the small new folder button in the dock */
 	bool folderDockIntroduced = false; /* first run pops the Scene Folders dock open */
 
 	int nextId = 1;
@@ -104,8 +105,9 @@ void shutdown();
 
 /* the Scene Folders dock: collapsible folder tree over the scene list */
 namespace folders {
-void createDock();  /* register the dock; call once at module load */
-void rebuildSoon(); /* debounced tree rebuild from OBS scene list + state */
+void createDock();   /* register the dock; call once at module load */
+void rebuildSoon();  /* debounced tree rebuild from OBS scene list + state */
+void applySettings(); /* honor state().folderNewButton */
 void showFirstRun(); /* pop the dock open once so people discover it */
 void shutdown();
 } // namespace folders

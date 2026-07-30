@@ -108,6 +108,7 @@ void stateLoad()
 	obs_data_set_default_bool(d, "scene_colors", true);
 	obs_data_set_default_bool(d, "dock_colors", true);
 	obs_data_set_default_bool(d, "filter_hotkeys", true);
+	obs_data_set_default_bool(d, "folder_new_button", true);
 	obs_data_set_default_int(d, "next_id", 1);
 
 	g_state.nesting = obs_data_get_bool(d, "nesting");
@@ -116,6 +117,7 @@ void stateLoad()
 	g_state.sceneColors = obs_data_get_bool(d, "scene_colors");
 	g_state.dockColors = obs_data_get_bool(d, "dock_colors");
 	g_state.filterHotkeys = obs_data_get_bool(d, "filter_hotkeys");
+	g_state.folderNewButton = obs_data_get_bool(d, "folder_new_button");
 	g_state.folderDockIntroduced = obs_data_get_bool(d, "folder_dock_introduced");
 	g_state.sepSize = (int)obs_data_get_int(d, "sep_size");
 	g_state.sepColor = QString::fromUtf8(obs_data_get_string(d, "sep_color"));
@@ -231,6 +233,7 @@ void stateSave()
 	obs_data_set_bool(d, "scene_colors", g_state.sceneColors);
 	obs_data_set_bool(d, "dock_colors", g_state.dockColors);
 	obs_data_set_bool(d, "filter_hotkeys", g_state.filterHotkeys);
+	obs_data_set_bool(d, "folder_new_button", g_state.folderNewButton);
 	obs_data_set_bool(d, "folder_dock_introduced", g_state.folderDockIntroduced);
 	obs_data_set_int(d, "sep_size", g_state.sepSize);
 	obs_data_set_string(d, "sep_color", g_state.sepColor.toUtf8().constData());
@@ -586,26 +589,68 @@ static void applySceneColorsNow()
 	if (!list)
 		return;
 	applying = true;
+	/* grid mode: a dot icon stacks above the name and doubles the tile height,
+	   so color the whole tile instead (contrast aware text) */
+	const bool grid = list->viewMode() == QListView::IconMode;
 	for (int i = 0; i < list->count(); i++) {
 		QListWidgetItem *it = list->item(i);
 		const QString hex = state().sceneColors ? state().colors.value(it->text())
 						       : QString();
 		if (!hex.isEmpty()) {
-			it->setForeground(QBrush(QColor(hex)));
-			it->setIcon(colorDot(QColor(hex)));
+			const QColor c(hex);
+			if (grid) {
+				it->setIcon(QIcon());
+				it->setBackground(QBrush(c));
+				it->setForeground(QBrush(
+					c.lightness() > 140 ? Qt::black : Qt::white));
+			} else {
+				it->setData(Qt::BackgroundRole, QVariant());
+				it->setForeground(QBrush(c));
+				it->setIcon(colorDot(c));
+			}
 		} else {
 			it->setData(Qt::ForegroundRole, QVariant());
+			it->setData(Qt::BackgroundRole, QVariant());
 			it->setIcon(QIcon());
 		}
 	}
 	applying = false;
 }
 
+/* OBS's Grid Mode toggle emits no frontend event; watch the scenes list for the
+   view mode flipping and re-decorate (dots in list mode, full tiles in grid) */
+class GridWatcher : public QObject {
+public:
+	using QObject::QObject;
+	int lastMode = -1;
+
+protected:
+	bool eventFilter(QObject *obj, QEvent *ev) override
+	{
+		const QEvent::Type t = ev->type();
+		if (t == QEvent::LayoutRequest || t == QEvent::Resize ||
+		    t == QEvent::Show) {
+			QListWidget *list = qobject_cast<QListWidget *>(obj);
+			if (list && (int)list->viewMode() != lastMode) {
+				lastMode = (int)list->viewMode();
+				refreshSoon();
+			}
+		}
+		return false;
+	}
+};
+
 /* OBS rebuilds both lists behind our back (scene switches, renames, collection
    changes). Watch the current models and re-decorate shortly after they move. */
 static void watchModels()
 {
 	QListWidget *scenes = sceneList();
+	if (scenes && !scenes->property("dockx_grid_watch").toBool()) {
+		scenes->setProperty("dockx_grid_watch", true);
+		GridWatcher *gw = new GridWatcher(scenes);
+		gw->lastMode = (int)scenes->viewMode();
+		scenes->installEventFilter(gw);
+	}
 	if (scenes && scenes->model() && scenes->model() != watchedScenesModel) {
 		watchedScenesModel = scenes->model();
 		QObject::connect(watchedScenesModel, &QAbstractItemModel::rowsInserted, scenes,
