@@ -91,6 +91,10 @@ off-thesis: encoders, multi-output, NDI, VST, replay buffer.
   color first: the WHOLE tile carries the scene color, not a dot. Pairs with scene
   thumbnails = the visual scene browser. (Native grid + our colors already fixed in
   v0.6.2: full tile tint there too.)
+- Nested folders in Scene Folders (Joey 2026-07-30, QC ask): folder inside folder,
+  as an option. Needs the data model to go hierarchical (assign scene->path or
+  folder->parent); drag drop currently un-nests on purpose. Worth doing with the
+  grid mode work.
 - Profile + collection linked switching (demand #12, EASY, extends Auto switch)
 - Cross-collection copy of scenes/sources (demand #3, 149 votes)
 - Reorderable audio mixer (demand #4)

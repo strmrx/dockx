@@ -95,6 +95,7 @@ public:
 	~VideoWidget() override
 	{
 		destroyDisplay();
+		releaseShowing();
 		setWeak(nullptr);
 	}
 
@@ -159,6 +160,35 @@ public:
 
 	void clearWeak() { setWeak(nullptr); }
 
+	/* tell OBS the source is on screen even when it is not in the current
+	   scene; without this cameras/browsers/media that deactivate when
+	   hidden go dark in their dock */
+	void updateShowing()
+	{
+		obs_source_t *cur = lockSource();
+		if (cur && isVisible()) {
+			if (shownSrc != cur) {
+				releaseShowing();
+				shownSrc = obs_source_get_ref(cur);
+				if (shownSrc)
+					obs_source_inc_showing(shownSrc);
+			}
+		} else {
+			releaseShowing();
+		}
+		if (cur)
+			obs_source_release(cur);
+	}
+
+	void releaseShowing()
+	{
+		if (!shownSrc)
+			return;
+		obs_source_dec_showing(shownSrc);
+		obs_source_release(shownSrc);
+		shownSrc = nullptr;
+	}
+
 protected:
 	void showEvent(QShowEvent *e) override
 	{
@@ -166,6 +196,7 @@ protected:
 		ensureDisplay();
 		if (display)
 			obs_display_set_enabled(display, true);
+		updateShowing();
 	}
 
 	void hideEvent(QHideEvent *e) override
@@ -173,6 +204,7 @@ protected:
 		QWidget::hideEvent(e);
 		if (display)
 			obs_display_set_enabled(display, false); /* no GPU work while hidden */
+		updateShowing();
 	}
 
 	void resizeEvent(QResizeEvent *e) override
@@ -251,6 +283,7 @@ protected:
 private:
 	obs_display_t *display = nullptr;
 	obs_weak_source_t *weak = nullptr;
+	obs_source_t *shownSrc = nullptr; /* holds the inc_showing ref */
 	std::mutex weakMutex;
 
 	void ensureDisplay()
@@ -479,6 +512,7 @@ public:
 	void refresh()
 	{
 		video->resolve();
+		video->updateShowing();
 		uint32_t flags = 0;
 		if (obs_source_t *src = video->lockSource()) {
 			flags = obs_source_get_output_flags(src);
@@ -501,6 +535,7 @@ public:
 	{
 		poll->stop();
 		video->destroyDisplay();
+		video->releaseShowing();
 		video->clearWeak();
 	}
 

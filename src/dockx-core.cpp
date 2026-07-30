@@ -28,6 +28,7 @@ if the UI does not look the way we expect, do NOTHING. Never crash OBS.
 #include <QMainWindow>
 #include <QMetaObject>
 #include <QPointer>
+#include <QSlider>
 #include <QTimer>
 
 #include <algorithm>
@@ -748,7 +749,12 @@ static QString volControlName(QWidget *w)
 
 static bool isVolControl(QWidget *w)
 {
-	return w && qstrcmp(w->metaObject()->className(), "VolControl") == 0;
+	if (!w)
+		return false;
+	if (qstrcmp(w->metaObject()->className(), "VolControl") == 0)
+		return true;
+	/* fallback: any mixer row has a fader slider in it */
+	return w->findChild<QSlider *>() != nullptr;
 }
 
 QStringList mixerSourceNames()

@@ -12,6 +12,8 @@ GPL v2, see plugin-main.cpp for the full notice.
 #include <QCheckBox>
 #include <QColorDialog>
 #include <QComboBox>
+#include <QCompleter>
+#include <QStandardItemModel>
 #include <QDialog>
 #include <QHBoxLayout>
 #include <QInputDialog>
@@ -60,6 +62,25 @@ static QStringList dockableInputNames()
 {
 	QStringList out;
 	obs_enum_sources(collectDockableInput, &out);
+	out.sort(Qt::CaseInsensitive);
+	return out;
+}
+
+static bool collectAudioInput(void *param, obs_source_t *src)
+{
+	auto *out = static_cast<QStringList *>(param);
+	if (obs_source_get_output_flags(src) & OBS_SOURCE_AUDIO) {
+		const char *n = obs_source_get_name(src);
+		if (n && *n)
+			*out << QString::fromUtf8(n);
+	}
+	return true;
+}
+
+static QStringList audioInputNames()
+{
+	QStringList out;
+	obs_enum_sources(collectAudioInput, &out);
 	out.sort(Qt::CaseInsensitive);
 	return out;
 }
@@ -260,7 +281,7 @@ void showDialog()
 	QMainWindow *main = mainWindow();
 	QDialog dlg(main);
 	dlg.setWindowTitle("DockX");
-	dlg.setMinimumSize(580, 470);
+	dlg.setMinimumSize(880, 500); /* wide enough that every tab shows */
 
 	QVBoxLayout *root = new QVBoxLayout(&dlg);
 	QTabWidget *tabs = new QTabWidget(&dlg);
@@ -738,12 +759,28 @@ void showDialog()
 
 	QHBoxLayout *sdRow = new QHBoxLayout();
 	QComboBox *sdCombo = new QComboBox(sdTab);
+	auto addHeader = [sdCombo](const QString &text) {
+		sdCombo->addItem(text, -1);
+		auto *m = qobject_cast<QStandardItemModel *>(sdCombo->model());
+		if (m)
+			m->item(sdCombo->count() - 1)->setEnabled(false);
+	};
 	sdCombo->addItem("Program (main output)", (int)sourcedocks::KIND_PROGRAM);
 	sdCombo->addItem("Preview (studio mode)", (int)sourcedocks::KIND_PREVIEW);
+	addHeader("--- Scenes ---");
 	for (const QString &n : sceneNames())
 		sdCombo->addItem(n, (int)sourcedocks::KIND_SOURCE);
+	addHeader("--- Sources ---");
 	for (const QString &n : dockableInputNames())
 		sdCombo->addItem(n, (int)sourcedocks::KIND_SOURCE);
+	/* type to search */
+	sdCombo->setEditable(true);
+	sdCombo->setInsertPolicy(QComboBox::NoInsert);
+	if (sdCombo->completer()) {
+		sdCombo->completer()->setCompletionMode(QCompleter::PopupCompletion);
+		sdCombo->completer()->setFilterMode(Qt::MatchContains);
+		sdCombo->completer()->setCaseSensitivity(Qt::CaseInsensitive);
+	}
 	sdRow->addWidget(sdCombo, 1);
 	QPushButton *sdAdd = new QPushButton("Add dock", sdTab);
 	QPushButton *sdRemove = new QPushButton("Remove", sdTab);
@@ -752,9 +789,14 @@ void showDialog()
 	sdv->addLayout(sdRow);
 
 	QObject::connect(sdAdd, &QPushButton::clicked, sdTab, [sdCombo, sdReload]() {
-		const int kind = sdCombo->currentData().toInt();
+		const int idx = sdCombo->findText(sdCombo->currentText());
+		if (idx < 0)
+			return;
+		const int kind = sdCombo->itemData(idx).toInt();
+		if (kind < 0)
+			return; /* a section header */
 		const QString name = kind == sourcedocks::KIND_SOURCE
-					     ? sdCombo->currentText()
+					     ? sdCombo->itemText(idx)
 					     : QString();
 		sourcedocks::addDock(kind, name);
 		sdReload();
@@ -787,9 +829,13 @@ void showDialog()
 	mixList->setSelectionMode(QAbstractItemView::SingleSelection);
 	auto mixReload = [mixList]() {
 		mixList->clear();
-		/* current custom order first, then whatever the mixer shows */
+		/* custom order first, then live mixer rows, then every audio
+		   source OBS knows (so the list is never empty) */
 		QStringList names = state().mixerOrder;
 		for (const QString &n : panels::mixerSourceNames())
+			if (!names.contains(n))
+				names << n;
+		for (const QString &n : audioInputNames())
 			if (!names.contains(n))
 				names << n;
 		for (const QString &n : names)

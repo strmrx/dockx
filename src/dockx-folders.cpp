@@ -336,10 +336,13 @@ protected:
 		persistFromTree();
 	}
 
-	/* arrows only in the branch column; none of the dotted connector lines */
+	/* arrows only in the branch column; none of the dotted connector lines.
+	   The gutter is painted opaque first so no theme decoration survives. */
 	void drawBranches(QPainter *painter, const QRect &rect,
 			  const QModelIndex &index) const override
 	{
+		painter->fillRect(rect,
+				  viewport()->palette().color(viewport()->backgroundRole()));
 		if (!model()->hasChildren(index))
 			return;
 		QStyleOption opt;
@@ -768,6 +771,9 @@ static void showContextMenu(const QPoint &pos)
 		});
 		colorMenu->addAction("No color",
 				     [name]() { setSceneColor(name, QString()); });
+		menu.addAction("Add Source Dock", [name]() {
+			sourcedocks::addDock(sourcedocks::KIND_SOURCE, name);
+		});
 
 		menu.addSeparator();
 		QMenu *projMenu = menu.addMenu("Open Scene Projector");
@@ -928,7 +934,10 @@ void createDock()
 	g_tree->setFont(treeFont);
 	g_tree->setIconSize(QSize(18, 18));
 	g_tree->setUniformRowHeights(true);
-	g_tree->setStyleSheet("QTreeWidget::item { min-height: 30px; padding-left: 2px; }");
+	g_tree->setStyleSheet(
+		"QTreeWidget::item { min-height: 30px; padding-left: 2px; }"
+		"QTreeWidget::branch { background: transparent; border: none;"
+		" border-image: none; image: none; }");
 	g_tree->setContextMenuPolicy(Qt::CustomContextMenu);
 	QObject::connect(g_tree, &QTreeWidget::customContextMenuRequested, g_tree,
 			 [](const QPoint &pos) { showContextMenu(pos); });
