@@ -110,6 +110,7 @@ void stateLoad()
 	obs_data_set_default_bool(d, "dock_colors", true);
 	obs_data_set_default_bool(d, "filter_hotkeys", true);
 	obs_data_set_default_bool(d, "folder_new_button", true);
+	obs_data_set_default_bool(d, "folder_nesting", true);
 	obs_data_set_default_int(d, "next_id", 1);
 	obs_data_set_default_int(d, "next_source_dock_id", 1);
 
@@ -120,6 +121,8 @@ void stateLoad()
 	g_state.dockColors = obs_data_get_bool(d, "dock_colors");
 	g_state.filterHotkeys = obs_data_get_bool(d, "filter_hotkeys");
 	g_state.folderNewButton = obs_data_get_bool(d, "folder_new_button");
+	g_state.folderNesting = obs_data_get_bool(d, "folder_nesting");
+	g_state.folderGridMode = obs_data_get_bool(d, "folder_grid_mode");
 	g_state.folderDockIntroduced = obs_data_get_bool(d, "folder_dock_introduced");
 	g_state.sepSize = (int)obs_data_get_int(d, "sep_size");
 	g_state.sepColor = QString::fromUtf8(obs_data_get_string(d, "sep_color"));
@@ -267,6 +270,8 @@ void stateSave()
 	obs_data_set_bool(d, "dock_colors", g_state.dockColors);
 	obs_data_set_bool(d, "filter_hotkeys", g_state.filterHotkeys);
 	obs_data_set_bool(d, "folder_new_button", g_state.folderNewButton);
+	obs_data_set_bool(d, "folder_nesting", g_state.folderNesting);
+	obs_data_set_bool(d, "folder_grid_mode", g_state.folderGridMode);
 	obs_data_set_bool(d, "folder_dock_introduced", g_state.folderDockIntroduced);
 	obs_data_set_int(d, "sep_size", g_state.sepSize);
 	obs_data_set_string(d, "sep_color", g_state.sepColor.toUtf8().constData());

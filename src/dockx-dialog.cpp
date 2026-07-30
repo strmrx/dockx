@@ -922,6 +922,8 @@ void showDialog()
 			 state().folderNewButton = v;
 			 folders::applySettings();
 		 });
+	addCheck("Nested folders (drag a folder into a folder)", state().folderNesting,
+		 [](bool v) { state().folderNesting = v; });
 
 	sv->addStretch(1);
 	QLabel *about = new QLabel(

@@ -51,6 +51,8 @@ struct State {
 	bool dockColors = true;
 	bool filterHotkeys = true;
 	bool folderNewButton = true;       /* the small new folder button in the dock */
+	bool folderNesting = true;         /* folders may be dragged into folders */
+	bool folderGridMode = false;       /* Scene Folders dock shows tiles, not the tree */
 	bool folderDockIntroduced = false; /* first run pops the Scene Folders dock open */
 
 	int nextId = 1;
