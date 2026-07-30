@@ -111,3 +111,27 @@ Joey's read: nobody has done this = there is a business here. First good tool fo
 becomes THE tool in the OBS plugin world. Monetization TBD (plugin itself likely free as
 funnel per family playbook; watermark/premium mechanics do not translate directly to GPL
 plugin land, needs its own thinking).
+
+## Business model -- DECIDED (Joey, 2026-07-30)
+- **The plugin is free, forever, StrmrX branded.** DockX is the billboard: "by StrmrX"
+  in the Tools menu of every install. No local feature is ever gated (GPL makes local
+  gates forkable in an afternoon anyway; the StreamFX backlash is the cautionary tale).
+  Once installed it always works; only online extras follow a membership.
+- **Tip jar alongside** (Ko-fi etc. on the obsproject listing + in the dialog). Tips go
+  to Joey personally as the solo dev; framed as tips, never purchases (no promised
+  perks = no obligations). Loop Willy in on the framing since StrmrX is co-owned.
+- **The paid layer is cloud, on StrmrX accounts (S/X tiers).** GPL covers code, not
+  services; nobody can fork a server. Planned ladder:
+  1. Layout + scene-folder sync across machines (small data, easy win).
+  2. Layout sharing gallery (streamers trading layouts; community + marketing moment).
+  3. **"Your OBS anywhere" -- the big one (Joey + Willy had wanted this separately):**
+     full OBS setup backup/restore in the cloud. Travel and connect into your own OBS
+     setup anywhere; PC dies, hit one button on the new machine and your setup is back.
+     Overlaps roadmap #11 (collection zip export/import with media). Media can be GBs,
+     so storage tiers map naturally to S/X. Small per-user cloud element storage too.
+- **Aitum precedent:** free GPL plugins became defaults for thousands of streamers and
+  funnel into their paid product. Same play.
+- **macOS (and Linux) later:** the plugin template ships CI that builds all three
+  platforms; our code is plain Qt/C++ with no Windows-only pieces. Needs GitHub Actions
+  setup + an Apple Developer ID (~$99/yr) for signing/notarization so Mac installs are
+  painless. Do after the Windows feature set settles.
