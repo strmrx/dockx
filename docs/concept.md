@@ -42,6 +42,11 @@ Ranked by demand x feasibility for a Qt frontend plugin. Context: #1 idea sitewi
 2. **Source docks / preview-as-a-dock** -- render any source/scene live inside a dock.
    87 votes; Exeldro's Source Dock has 227k downloads (biggest demand proof found).
    Unlocks multiview/studio-mode/grid follow-ons. MEDIUM.
+   CORRECTED competitive read (verified 2026-07-30): Source Dock is ALIVE and healthy
+   (updated Mar 2026, OBS 32 support, 79% five star), NOT abandoned. Known gaps: Mac
+   load failures, crash on exit reports, groups don't list members, year-old open
+   issues, utilitarian UI. Our angle = integration (docks + layouts + hotkeys +
+   folders + auto switch in one download) + polish, not rescue of a dead plugin.
 3. **Cross-collection copy** -- copy scenes/sources between scene collections without
    export files. 149 votes (highest plugin-territory idea). MEDIUM.
 4. **Reorderable audio mixer** -- drag to reorder mixer channels. 32+29 votes, constant
