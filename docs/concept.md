@@ -69,11 +69,26 @@ history with a beatable incumbent; #2 is proven at 227k downloads and unlocks 6/
 "planned" status on the OBS portal has meant years of nothing (ship first). Excluded as
 off-thesis: encoders, multi-output, NDI, VST, replay buffer.
 
-## Roadmap (in rough order)
+## Roadmap (in rough order; folds in the validated demand list above -- Joey 2026-07-30:
+## ALL remaining items from that list stay on this roadmap; DockX is the ONE mega plugin,
+## every OBS QoL fix ships in this single download, never ten separate plugins)
+- Scene Folders visual pass (Joey: must read as large/clear as the native panel) + his
+  v0.4/v0.5 test feedback
+- Source docks / preview-as-a-dock (demand #2, 227k downloads proof; unlocks multiview,
+  align tools, studio mode QoL later)
+- Scene thumbnails in the folder tree (demand #7; folders + thumbnails = the visual
+  scene browser nobody ships)
+- Profile + collection linked switching (demand #12, EASY, extends Auto switch)
+- Cross-collection copy of scenes/sources (demand #3, 149 votes)
+- Reorderable audio mixer (demand #4)
+- Source tagging / bulk ops / find-usages (demand #13)
+- Align + distribute tools (#8), projector management (#9), multiview upgrades (#6),
+  studio mode QoL (#10), collection zip export/import (#11), second-monitor dock
+  container (#14)
 - Starter layouts gallery: "Chat right, tools left", "Podcast", "Just Chatting" etc.
 - Layout export/share (streamers trading layouts = the community moment + marketing)
-- Port LoadoutX features natively: source loadouts (save/restore source positions),
-  one click scene lock, profile/collection switching
+- Port remaining LoadoutX features natively: source loadouts (save/restore source
+  positions), one click scene lock
 - Guided drag hints (first-run tip explaining edge drops vs center drops = tabs)
 - macOS build (template supports it; needs a Mac or CI to compile)
 - Distribution: obsproject.com forum resource (free, the funnel) + strmrx.com page;

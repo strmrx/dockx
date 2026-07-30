@@ -166,6 +166,7 @@ static void rebuildNow()
 		folderItems[fname] = fi;
 	}
 
+	QTreeWidgetItem *curItem = nullptr;
 	for (const SceneRow &s : scenes) {
 		QTreeWidgetItem *parent = folderItems.value(fd.assign.value(s.uuid), nullptr);
 		QTreeWidgetItem *si = parent ? new QTreeWidgetItem(parent)
@@ -185,6 +186,7 @@ static void rebuildNow()
 			f.setBold(true);
 			si->setFont(0, f);
 			si->setSelected(true);
+			curItem = si;
 		}
 	}
 
@@ -192,6 +194,14 @@ static void rebuildNow()
 		QTreeWidgetItem *fi = it.value();
 		fi->setText(0, QString("%1  (%2)").arg(it.key()).arg(fi->childCount()));
 		fi->setExpanded(!fd.collapsed.contains(it.key()));
+	}
+
+	/* always show where you are: peek into the folder holding the live scene
+	   and scroll to it (a collapsed folder stays collapsed next rebuild) */
+	if (curItem) {
+		if (curItem->parent())
+			curItem->parent()->setExpanded(true);
+		g_tree->scrollToItem(curItem);
 	}
 
 	g_applying = false;
