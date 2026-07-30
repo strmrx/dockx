@@ -902,9 +902,7 @@ void createDock()
 	g_tree->setSelectionMode(QAbstractItemView::SingleSelection);
 	g_tree->setAnimated(true);
 	g_tree->setIndentation(18);
-	/* no disclosure arrows: dots and folder icons own the left edge; folders
-	   expand and collapse on click instead */
-	g_tree->setRootIsDecorated(false);
+	/* arrows stay (Joey's call); folders also toggle on click */
 	/* read as large and clear as the native Scenes panel: bigger font,
 	   taller rows, bigger icons (metrics only; theme keeps its colors) */
 	QFont treeFont = g_tree->font();
