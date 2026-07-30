@@ -166,8 +166,10 @@ void showDialog()
 	for (const QString &name : sceneNames()) {
 		QListWidgetItem *it = new QListWidgetItem(name, sceneListW);
 		const QString hex = state().colors.value(name);
-		if (!hex.isEmpty())
+		if (!hex.isEmpty()) {
 			it->setForeground(QBrush(QColor(hex)));
+			it->setIcon(colorDot(QColor(hex)));
+		}
 	}
 	cv->addWidget(sceneListW, 1);
 
@@ -180,9 +182,11 @@ void showDialog()
 		if (hex.isEmpty()) {
 			state().colors.remove(it->text());
 			it->setData(Qt::ForegroundRole, QVariant());
+			it->setIcon(QIcon());
 		} else {
 			state().colors[it->text()] = hex;
 			it->setForeground(QBrush(QColor(hex)));
+			it->setIcon(colorDot(QColor(hex)));
 		}
 		stateSave();
 		panels::refreshSoon();

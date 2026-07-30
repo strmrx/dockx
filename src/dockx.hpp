@@ -8,6 +8,7 @@ GPL v2, see plugin-main.cpp for the full notice.
 
 #include <QByteArray>
 #include <QHash>
+#include <QIcon>
 #include <QString>
 
 #include <vector>
@@ -54,5 +55,9 @@ void shutdown();
 } // namespace panels
 
 void showDialog();
+
+/* colored dot icon for a scene row; theme stylesheets cannot override icons,
+   so the color always shows even when the theme repaints item text */
+QIcon colorDot(const QColor &c);
 
 } // namespace dockx

@@ -18,6 +18,8 @@ if the UI does not look the way we expect, do NOTHING. Never crash OBS.
 #include <QBrush>
 #include <QColor>
 #include <QLabel>
+#include <QPainter>
+#include <QPixmap>
 #include <QLineEdit>
 #include <QListView>
 #include <QListWidget>
@@ -27,6 +29,19 @@ if the UI does not look the way we expect, do NOTHING. Never crash OBS.
 #include <QTimer>
 
 namespace dockx {
+
+QIcon colorDot(const QColor &c)
+{
+	QPixmap pm(16, 16);
+	pm.fill(Qt::transparent);
+	QPainter p(&pm);
+	p.setRenderHint(QPainter::Antialiasing);
+	p.setBrush(c);
+	p.setPen(Qt::NoPen);
+	p.drawEllipse(3, 3, 10, 10);
+	p.end();
+	return QIcon(pm);
+}
 
 /* ================= state & persistence ================= */
 
@@ -320,10 +335,13 @@ static void applySceneColorsNow()
 		QListWidgetItem *it = list->item(i);
 		const QString hex = state().sceneColors ? state().colors.value(it->text())
 						       : QString();
-		if (!hex.isEmpty())
+		if (!hex.isEmpty()) {
 			it->setForeground(QBrush(QColor(hex)));
-		else
+			it->setIcon(colorDot(QColor(hex)));
+		} else {
 			it->setData(Qt::ForegroundRole, QVariant());
+			it->setIcon(QIcon());
+		}
 	}
 	applying = false;
 }
