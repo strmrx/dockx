@@ -101,6 +101,12 @@ off-thesis: encoders, multi-output, NDI, VST, replay buffer.
 - Scene sorting -- SHIPPED v0.11 (drag scenes to reorder in the folder tree, pushed
   into the native list so it sticks; "Sort scenes A to Z" per folder + "Sort all
   scenes A to Z" on the dock background, tree and grid)
+- Missing Media cleaner -- SHIPPED v0.13 (Joey ask 2026-07-31: OBS's built in
+  Missing Files dialog only relinks or cancels, never lets you just delete a dead
+  source). Lists every source with a missing file; Relink / Remove source / Remove
+  source + delete file (when the file exists) / Remove all. Tools menu + Settings
+  button. Optional startup auto-pop, OFF by default (can't suppress OBS's own popup,
+  so it stays a choice). Uses obs_source_get_missing_files + obs_source_remove.
 - Starter layouts gallery: "Chat right, tools left", "Podcast", "Just Chatting" etc.
 - Layout export/share (streamers trading layouts = the community moment + marketing)
 - LoadoutX parity -- SHIPPED v0.12 (2026-07-30): source loadouts (save/restore all

@@ -84,6 +84,7 @@ struct State {
 	bool folderDockIntroduced = false; /* first run pops the Scene Folders dock open */
 	bool dragHintsShown = false;       /* first run showed the dock layout guide */
 	bool folderSources = true;         /* source rows under scenes in the folder dock */
+	bool missingAutoPop = false;       /* pop the Missing Media cleaner at startup */
 
 	int nextId = 1;
 	std::vector<Layout> layouts;
@@ -136,6 +137,14 @@ QStringList mixerSourceNames(); /* mixer rows in current visual order */
 } // namespace panels
 
 void showDialog();
+
+/* the Missing Media cleaner: find sources whose file is gone and get rid of
+   them (or relink), the delete button OBS's own missing files dialog lacks */
+namespace missing {
+int count();                     /* how many sources have a missing file */
+void showDialog(QWidget *parent); /* the cleaner window; parent may be null */
+void autoPopIfNeeded();          /* startup: pop it if opted in and any missing */
+} // namespace missing
 
 /* toggle hotkeys for every filter on every source; bindings are registered on
    the parent source so OBS persists them inside the scene collection */

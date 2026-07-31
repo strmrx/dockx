@@ -1224,6 +1224,21 @@ void showDialog()
 			 state().folderSources = v;
 			 folders::rebuildSoon();
 		 });
+	addCheck("Pop the Missing Media cleaner at startup when files are missing",
+		 state().missingAutoPop, [](bool v) { state().missingAutoPop = v; });
+
+	QHBoxLayout *missingRow = new QHBoxLayout();
+	QPushButton *missingBtn =
+		new QPushButton("Open Missing Media cleaner", settingsTab);
+	missingBtn->setToolTip(
+		"Find sources whose file is gone and remove or relink them");
+	QObject::connect(missingBtn, &QPushButton::clicked, settingsTab,
+			 [settingsTab]() {
+				 missing::showDialog(settingsTab->window());
+			 });
+	missingRow->addWidget(missingBtn);
+	missingRow->addStretch(1);
+	sv->addLayout(missingRow);
 
 	QHBoxLayout *helpRow = new QHBoxLayout();
 	QPushButton *guideBtn = new QPushButton("Dock layout guide", settingsTab);

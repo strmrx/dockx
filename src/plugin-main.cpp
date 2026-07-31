@@ -37,6 +37,7 @@ static void on_frontend_event(enum obs_frontend_event event, void *)
 		dockx::folders::showFirstRun();
 		dockx::hints::showFirstRun();
 		dockx::sourcedocks::refreshAll();
+		dockx::missing::autoPopIfNeeded();
 		break;
 	case OBS_FRONTEND_EVENT_SCENE_CHANGED:
 		dockx::panels::autoSceneLayout();
@@ -75,6 +76,11 @@ static void tools_menu_clicked(void *)
 	dockx::showDialog();
 }
 
+static void missing_menu_clicked(void *)
+{
+	dockx::missing::showDialog(nullptr);
+}
+
 bool obs_module_load(void)
 {
 	obs_log(LOG_INFO, "DockX loaded (version %s)", PLUGIN_VERSION);
@@ -84,6 +90,8 @@ bool obs_module_load(void)
 	dockx::sourcedocks::createFromState();
 	obs_frontend_add_event_callback(on_frontend_event, nullptr);
 	obs_frontend_add_tools_menu_item("DockX", tools_menu_clicked, nullptr);
+	obs_frontend_add_tools_menu_item("DockX: Missing media", missing_menu_clicked,
+					 nullptr);
 	return true;
 }
 
