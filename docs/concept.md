@@ -49,8 +49,19 @@ Ranked by demand x feasibility for a Qt frontend plugin. Context: #1 idea sitewi
    load failures, crash on exit reports, groups don't list members, year-old open
    issues, utilitarian UI. Our angle = integration (docks + layouts + hotkeys +
    folders + auto switch in one download) + polish, not rescue of a dead plugin.
-3. **Cross-collection copy** -- copy scenes/sources between scene collections without
-   export files. 149 votes (highest plugin-territory idea). MEDIUM.
+3. **Cross-collection copy** -- SHIPPED v0.17 (2026-08-01, 149 votes, highest
+   plugin-territory idea). Right-click a scene in the folder dock -> "Copy to
+   Collection" -> pick a target. Works with NO export files and no collection
+   switch, by additively editing the target collection's saved JSON on disk
+   (dockx-collections.cpp): OBS only reads a collection file when it loads it, so
+   an inactive file is safe to append to. SAFETY: never the active collection;
+   ADDITIVE ONLY (a source whose name exists in the target is left alone, the
+   scene binds to it; the scene is unique-named if taken); source uuids stripped
+   so no cross-file uuid clash; a full .dockx-bak written before any write; save
+   is atomic (obs_data_save_json_safe). Recurses groups + nested scenes. Seen
+   after switching to the target. LIMITATION: on-disk path via
+   os_get_config_path_ptr, so OBS portable mode may not resolve (fails safe with
+   "could not find on disk").
 4. **Reorderable audio mixer** -- SHIPPED v0.8 (drag rows in the DockX dialog Mixer
    tab; order persists + reapplies on every mixer rebuild; in-mixer dragging maybe
    later). 32+29 votes, constant forum pain (people rename sources "1 Mic, 2 Game").

@@ -1080,6 +1080,36 @@ static void removeScenePrompt(const QString &uuid, const QString &name)
 
 /* ---- context menus (shared by tree and grid) ---- */
 
+static void copyToCollectionPrompt(const QString &uuid, const QString &name,
+				   const QString &target)
+{
+	QWidget *parent = g_tree ? static_cast<QWidget *>(g_tree) : nullptr;
+	const auto answer = QMessageBox::question(
+		parent, "Copy scene to collection",
+		QString("Copy \"%1\" into the \"%2\" scene collection?\n\nIt is ADDED to "
+			"that collection (nothing there is overwritten), and a backup of "
+			"the collection is saved first. You'll see the scene when you "
+			"switch to \"%2\".")
+			.arg(name, target));
+	if (answer != QMessageBox::Yes)
+		return;
+	const collections::CopyReport r = collections::copySceneToCollection(uuid, target);
+	if (!r.ok) {
+		QMessageBox::warning(parent, "DockX", r.error);
+		return;
+	}
+	QString msg = QString("Copied \"%1\" into \"%2\".").arg(r.finalSceneName, target);
+	if (r.finalSceneName != name)
+		msg += QString("\n\nRenamed to \"%1\" (that name was already used there).")
+			       .arg(r.finalSceneName);
+	msg += QString("\n\n%1 source(s) copied").arg(r.sourcesCopied);
+	if (r.sourcesSkipped > 0)
+		msg += QString(", %1 already existed and were left as is")
+			       .arg(r.sourcesSkipped);
+	msg += ".";
+	QMessageBox::information(parent, "DockX", msg);
+}
+
 static void buildSceneMenu(QMenu &menu, const QString &uuid, const QString &name)
 {
 	/* current per-scene state, read once for the checkmarks */
@@ -1102,6 +1132,17 @@ static void buildSceneMenu(QMenu &menu, const QString &uuid, const QString &name
 		       [uuid]() { addScenePrompt(data().assign.value(uuid)); });
 	menu.addAction("Duplicate...",
 		       [uuid, name]() { duplicateScenePrompt(uuid, name); });
+	QMenu *copyToMenu = menu.addMenu("Copy to Collection");
+	const QStringList others = collections::otherCollections();
+	if (others.isEmpty()) {
+		QAction *none = copyToMenu->addAction("No other collections");
+		none->setEnabled(false);
+	} else {
+		for (const QString &target : others)
+			copyToMenu->addAction(target, [uuid, name, target]() {
+				copyToCollectionPrompt(uuid, name, target);
+			});
+	}
 	QAction *copyF =
 		menu.addAction("Copy Filters", [uuid]() { g_copyFiltersUuid = uuid; });
 	copyF->setEnabled(hasFilters);

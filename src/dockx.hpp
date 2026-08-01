@@ -231,6 +231,22 @@ void lockAllScenes(bool locked);
 void lockScenes(const QStringList &uuids, bool locked);
 } // namespace locks
 
+/* cross-collection copy: copy a scene + its sources into another scene
+   collection by additively editing that collection's saved JSON on disk
+   (never the active one; a .dockx-bak is written first) */
+namespace collections {
+struct CopyReport {
+	bool ok = false;
+	QString error;
+	int sourcesCopied = 0;
+	int sourcesSkipped = 0; /* name already existed in the target */
+	QString finalSceneName; /* may be unique-ified if the name was taken */
+	QString backupPath;
+};
+QStringList otherCollections(); /* every collection except the current one */
+CopyReport copySceneToCollection(const QString &sceneUuid, const QString &target);
+} // namespace collections
+
 /* live scene thumbnails: render any scene (loaded or not, current or not) to a
    small cached preview for the folder grid. All GPU work is per-call (create +
    destroy inside one graphics lock), so nothing persists to clean up at exit */
