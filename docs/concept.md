@@ -107,6 +107,16 @@ off-thesis: encoders, multi-output, NDI, VST, replay buffer.
   source + delete file (when the file exists) / Remove all. Tools menu + Settings
   button. Optional startup auto-pop, OFF by default (can't suppress OBS's own popup,
   so it stays a choice). Uses obs_source_get_missing_files + obs_source_remove.
+- Layout locking -- SHIPPED v0.14 (Joey ask 2026-08-01: lock in a layout and snap
+  back if it drifts). New Locks tab, two independent dock modes: a HARD lock
+  (docks can't be dragged/floated -- toggles QDockWidget Movable/Floatable features)
+  and a SOFT lock (Set revert point captures the arrangement, Revert to point snaps
+  it back while docks stay draggable -- his mid-stream mode). Revert reachable three
+  ways: Locks tab button, Tools > DockX: Revert dock layout, and a hotkey. Also lock
+  ALL sources in a scene / every scene / a checklist of selected scenes at once
+  (wraps the v0.12 loadouts::lockScene/lockAll, finally surfaced with buttons +
+  lock/unlock current scene hotkeys). Hard lock + revert point persist in dockx.json;
+  hard lock reasserts on startup and after any layout apply/revert.
 - Starter layouts gallery: "Chat right, tools left", "Podcast", "Just Chatting" etc.
 - Layout export/share (streamers trading layouts = the community moment + marketing)
 - LoadoutX parity -- SHIPPED v0.12 (2026-07-30): source loadouts (save/restore all

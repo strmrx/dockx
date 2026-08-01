@@ -100,6 +100,7 @@ void stateLoad()
 	bfree(file);
 	if (!d) {
 		obs_log(LOG_INFO, "no saved config, starting fresh");
+		locks::registerHotkeys();
 		return;
 	}
 
@@ -281,6 +282,11 @@ void stateLoad()
 		}
 		obs_data_array_release(arr);
 	}
+	g_state.hardLock = obs_data_get_bool(d, "hard_lock");
+	g_state.lockPoint = QByteArray::fromBase64(obs_data_get_string(d, "lock_point"));
+	locks::registerHotkeys();
+	locks::loadHotkeys(d);
+
 	obs_data_release(d);
 	obs_log(LOG_INFO, "config loaded: %d layouts, %d scene colors", (int)g_state.layouts.size(),
 		(int)g_state.colors.size());
@@ -407,6 +413,10 @@ void stateSave()
 	}
 	obs_data_set_array(d, "layouts", arr);
 	obs_data_array_release(arr);
+
+	obs_data_set_bool(d, "hard_lock", g_state.hardLock);
+	obs_data_set_string(d, "lock_point", g_state.lockPoint.toBase64().constData());
+	locks::saveHotkeys(d);
 
 	char *dir = obs_module_config_path("");
 	if (dir) {
@@ -1003,6 +1013,7 @@ bool applyLayout(int id)
 		return false;
 	state().undoState = m->saveState();
 	bool ok = m->restoreState(l->state);
+	locks::applyHardLock(); /* restoreState can re-show docks; reassert the freeze */
 	obs_log(LOG_INFO, "applied layout \"%s\" (%s)", l->name.toUtf8().constData(),
 		ok ? "ok" : "restore reported failure");
 	return ok;
@@ -1026,6 +1037,7 @@ void initAfterLoad()
 	applySeparators();
 	watchDocks();
 	refreshNow();
+	locks::applyHardLock(); /* honor a saved dock freeze on startup */
 }
 
 void shutdown()

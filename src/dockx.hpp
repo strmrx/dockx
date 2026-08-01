@@ -102,6 +102,14 @@ struct State {
 	int nextLoadoutId = 1;
 	SourceLoadout loadoutUndo; /* pre-restore snapshot; undo twice = redo */
 	bool hasLoadoutUndo = false;
+
+	/* lock tools */
+	QByteArray lockPoint;  /* dock arrangement to snap back to (soft lock) */
+	bool hardLock = false; /* docks frozen: can't be dragged or floated */
+	obs_hotkey_id hkRevert = OBS_INVALID_HOTKEY_ID;
+	obs_hotkey_id hkLockScene = OBS_INVALID_HOTKEY_ID;
+	obs_hotkey_id hkUnlockScene = OBS_INVALID_HOTKEY_ID;
+	obs_hotkey_id hkHardLock = OBS_INVALID_HOTKEY_ID;
 };
 
 State &state();
@@ -194,6 +202,29 @@ void lockAll(bool locked);
 obs_data_t *toData(const SourceLoadout &l); /* caller releases */
 SourceLoadout fromData(obs_data_t *d);
 } // namespace loadouts
+
+/* lock tools: freeze the docks so nothing drifts, keep a one-tap revert point
+   to snap a moved layout back, and lock every source in a scene (or all
+   scenes) at once so nothing on the canvas can be nudged */
+namespace locks {
+void registerHotkeys();          /* register the frontend hotkeys; idempotent */
+void unregisterHotkeys();
+void loadHotkeys(obs_data_t *d);  /* restore saved key bindings */
+void saveHotkeys(obs_data_t *d);
+
+/* dock layout */
+bool hasLockPoint();
+void setLockPoint();      /* capture the current dock arrangement */
+bool revertToLockPoint(); /* snap docks back to the saved point */
+void setHardLock(bool on); /* freeze/unfreeze dock dragging + floating */
+bool hardLock();
+void applyHardLock();      /* reassert state().hardLock onto the docks */
+
+/* scene source locks (wrap loadouts::lockScene/lockAll) */
+void lockCurrentScene(bool locked);
+void lockAllScenes(bool locked);
+void lockScenes(const QStringList &uuids, bool locked);
+} // namespace locks
 
 /* the dock layout guide: illustrated first-run walkthrough of dock dragging
    (title bar grab, edge drop = split, center drop = tabs, DockX columns) */

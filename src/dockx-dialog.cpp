@@ -18,6 +18,7 @@ GPL v2, see plugin-main.cpp for the full notice.
 #include <QUrl>
 #include <QStandardItemModel>
 #include <QDialog>
+#include <QGroupBox>
 #include <QHBoxLayout>
 #include <QInputDialog>
 #include <QKeySequenceEdit>
@@ -46,6 +47,26 @@ static QStringList sceneNames()
 	obs_frontend_get_scenes(&list);
 	for (size_t i = 0; i < list.sources.num; i++)
 		out << QString::fromUtf8(obs_source_get_name(list.sources.array[i]));
+	obs_frontend_source_list_free(&list);
+	return out;
+}
+
+struct SceneRef {
+	QString uuid;
+	QString name;
+};
+
+static QList<SceneRef> sceneRefs()
+{
+	QList<SceneRef> out;
+	obs_frontend_source_list list = {};
+	obs_frontend_get_scenes(&list);
+	for (size_t i = 0; i < list.sources.num; i++) {
+		SceneRef r;
+		r.uuid = QString::fromUtf8(obs_source_get_uuid(list.sources.array[i]));
+		r.name = QString::fromUtf8(obs_source_get_name(list.sources.array[i]));
+		out << r;
+	}
 	obs_frontend_source_list_free(&list);
 	return out;
 }
@@ -622,6 +643,186 @@ void showDialog()
 			 });
 
 	tabs->addTab(loTab, "Loadouts");
+
+	/* ---------- Locks tab ---------- */
+	QWidget *lockTab = new QWidget();
+	QVBoxLayout *lkv = new QVBoxLayout(lockTab);
+
+	/* -- dock layout locking -- */
+	QGroupBox *dockGroup = new QGroupBox("Dock layout", lockTab);
+	QVBoxLayout *dg = new QVBoxLayout(dockGroup);
+
+	QCheckBox *hardLockChk = new QCheckBox(
+		"Lock docks in place (they can't be dragged or floated by accident)",
+		dockGroup);
+	hardLockChk->setChecked(locks::hardLock());
+	dg->addWidget(hardLockChk);
+	QObject::connect(hardLockChk, &QCheckBox::toggled, dockGroup,
+			 [](bool on) { locks::setHardLock(on); });
+
+	QLabel *pointLbl = new QLabel(dockGroup);
+	pointLbl->setWordWrap(true);
+	auto refreshPoint = [pointLbl]() {
+		pointLbl->setText(
+			locks::hasLockPoint()
+				? "Revert point saved. If a dock drifts, snap the whole "
+				  "layout back with Revert to point."
+				: "No revert point saved yet. Arrange your docks, then Set "
+				  "revert point to lock in that spot.");
+	};
+	refreshPoint();
+	dg->addWidget(pointLbl);
+
+	QHBoxLayout *dgb = new QHBoxLayout();
+	QPushButton *setPointBtn = new QPushButton("Set revert point", dockGroup);
+	QPushButton *revertBtn = new QPushButton("Revert to point", dockGroup);
+	dgb->addWidget(setPointBtn);
+	dgb->addWidget(revertBtn);
+	dgb->addStretch(1);
+	dg->addLayout(dgb);
+	QObject::connect(setPointBtn, &QPushButton::clicked, dockGroup,
+			 [refreshPoint]() {
+				 locks::setLockPoint();
+				 refreshPoint();
+			 });
+	QObject::connect(revertBtn, &QPushButton::clicked, &dlg, [&dlg]() {
+		if (!locks::revertToLockPoint())
+			QMessageBox::information(
+				&dlg, "DockX",
+				"Set a revert point first, then this snaps your docks "
+				"back to it.");
+	});
+
+	QLabel *dockTip = new QLabel(
+		"Tip: give Revert to point and the dock lock a hotkey in OBS Settings "
+		"> Hotkeys (search DockX) so you can snap back mid stream without "
+		"opening this window. Tools > DockX: Revert dock layout works too.",
+		dockGroup);
+	dockTip->setWordWrap(true);
+	dg->addWidget(dockTip);
+	lkv->addWidget(dockGroup);
+
+	/* -- scene source locking -- */
+	QGroupBox *srcGroup = new QGroupBox("Scene sources", lockTab);
+	QVBoxLayout *sg = new QVBoxLayout(srcGroup);
+	QLabel *srcLbl = new QLabel(
+		"Lock every source in a scene at once so nothing on the canvas can be "
+		"dragged or resized. Perfect for a Just Chatting scene you never want to "
+		"nudge. This flips the same lock you see on each source, just all "
+		"together.",
+		srcGroup);
+	srcLbl->setWordWrap(true);
+	sg->addWidget(srcLbl);
+
+	auto currentSceneName = []() -> QString {
+		obs_source_t *cur = obs_frontend_get_current_scene();
+		QString n = cur ? QString::fromUtf8(obs_source_get_name(cur)) : QString();
+		if (cur)
+			obs_source_release(cur);
+		return n;
+	};
+
+	QHBoxLayout *sgb = new QHBoxLayout();
+	QPushButton *lockCur = new QPushButton("Lock this scene", srcGroup);
+	QPushButton *unlockCur = new QPushButton("Unlock this scene", srcGroup);
+	sgb->addWidget(lockCur);
+	sgb->addWidget(unlockCur);
+	sgb->addStretch(1);
+	sg->addLayout(sgb);
+
+	QHBoxLayout *sgb2 = new QHBoxLayout();
+	QPushButton *lockAllBtn = new QPushButton("Lock every scene", srcGroup);
+	QPushButton *unlockAllBtn = new QPushButton("Unlock every scene", srcGroup);
+	QPushButton *pickBtn = new QPushButton("Selected scenes...", srcGroup);
+	sgb2->addWidget(lockAllBtn);
+	sgb2->addWidget(unlockAllBtn);
+	sgb2->addWidget(pickBtn);
+	sgb2->addStretch(1);
+	sg->addLayout(sgb2);
+	lkv->addWidget(srcGroup);
+	lkv->addStretch(1);
+
+	QObject::connect(lockCur, &QPushButton::clicked, &dlg, [&dlg, currentSceneName]() {
+		const QString n = currentSceneName();
+		locks::lockCurrentScene(true);
+		QMessageBox::information(&dlg, "DockX",
+					 n.isEmpty()
+						 ? "Locked every source in the current scene."
+						 : QString("Locked every source in \"%1\".")
+							   .arg(n));
+	});
+	QObject::connect(unlockCur, &QPushButton::clicked, &dlg, [&dlg, currentSceneName]() {
+		const QString n = currentSceneName();
+		locks::lockCurrentScene(false);
+		QMessageBox::information(
+			&dlg, "DockX",
+			n.isEmpty() ? "Unlocked every source in the current scene."
+				    : QString("Unlocked every source in \"%1\".").arg(n));
+	});
+	QObject::connect(lockAllBtn, &QPushButton::clicked, &dlg, [&dlg]() {
+		locks::lockAllScenes(true);
+		QMessageBox::information(&dlg, "DockX",
+					 "Locked every source in every scene.");
+	});
+	QObject::connect(unlockAllBtn, &QPushButton::clicked, &dlg, [&dlg]() {
+		locks::lockAllScenes(false);
+		QMessageBox::information(&dlg, "DockX",
+					 "Unlocked every source in every scene.");
+	});
+	QObject::connect(pickBtn, &QPushButton::clicked, &dlg, [&dlg]() {
+		QDialog pick(&dlg);
+		pick.setWindowTitle("Lock selected scenes");
+		pick.setMinimumWidth(340);
+		QVBoxLayout *pv = new QVBoxLayout(&pick);
+		pv->addWidget(new QLabel("Check the scenes, then lock or unlock them:",
+					 &pick));
+		QListWidget *plist = new QListWidget(&pick);
+		for (const SceneRef &r : sceneRefs()) {
+			QListWidgetItem *it = new QListWidgetItem(r.name, plist);
+			it->setFlags(it->flags() | Qt::ItemIsUserCheckable);
+			it->setCheckState(Qt::Unchecked);
+			it->setData(Qt::UserRole, r.uuid);
+		}
+		pv->addWidget(plist, 1);
+		QHBoxLayout *pb = new QHBoxLayout();
+		QPushButton *lockSel = new QPushButton("Lock checked", &pick);
+		QPushButton *unlockSel = new QPushButton("Unlock checked", &pick);
+		QPushButton *cancelSel = new QPushButton("Cancel", &pick);
+		pb->addStretch(1);
+		pb->addWidget(lockSel);
+		pb->addWidget(unlockSel);
+		pb->addWidget(cancelSel);
+		pv->addLayout(pb);
+		int action = 0; /* 1 = lock, 2 = unlock */
+		QObject::connect(lockSel, &QPushButton::clicked, &pick, [&]() {
+			action = 1;
+			pick.accept();
+		});
+		QObject::connect(unlockSel, &QPushButton::clicked, &pick, [&]() {
+			action = 2;
+			pick.accept();
+		});
+		QObject::connect(cancelSel, &QPushButton::clicked, &pick,
+				 [&pick]() { pick.reject(); });
+		if (pick.exec() != QDialog::Accepted || action == 0)
+			return;
+		QStringList uuids;
+		for (int i = 0; i < plist->count(); i++) {
+			QListWidgetItem *it = plist->item(i);
+			if (it->checkState() == Qt::Checked)
+				uuids << it->data(Qt::UserRole).toString();
+		}
+		if (uuids.isEmpty())
+			return;
+		locks::lockScenes(uuids, action == 1);
+		QMessageBox::information(
+			&dlg, "DockX",
+			QString("%1 every source in %2 scene(s).")
+				.arg(action == 1 ? "Locked" : "Unlocked")
+				.arg(uuids.size()));
+	});
+
+	tabs->addTab(lockTab, "Locks");
 
 	/* ---------- Auto switch tab ---------- */
 	QWidget *autoTab = new QWidget();
