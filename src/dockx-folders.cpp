@@ -71,6 +71,9 @@ static bool g_applying = false;
 static bool g_shutdown = false;
 static QString g_gridPath; /* folder the grid is inside ("" = root); per session */
 
+static QPointer<QTimer> g_thumbTimer;   /* renders pending scene thumbnails, one per tick */
+static QStringList g_thumbPending;      /* scene uuids waiting for a first render */
+
 static const char *ROLE_TYPE_FOLDER = "f";
 static const char *ROLE_TYPE_SCENE = "s";
 static const char *ROLE_TYPE_UP = "u";
@@ -1409,10 +1412,74 @@ static void updateCrumb()
 		g_crumb->setText(QString("Folder: %1").arg(pathDisplay(g_gridPath)));
 }
 
+/* ---- scene thumbnails in the grid ---- */
+
+static QIcon thumbPlaceholder(const QColor &bg)
+{
+	QPixmap pm(thumbs::size());
+	pm.fill(bg.darker(115));
+	return QIcon(pm);
+}
+
+/* drop a freshly rendered thumbnail onto its scene tile, if it is still shown */
+static void setGridThumb(const QString &uuid, const QPixmap &pm)
+{
+	if (!g_grid || pm.isNull())
+		return;
+	for (int i = 0; i < g_grid->count(); i++) {
+		QListWidgetItem *it = g_grid->item(i);
+		if (it->data(Qt::UserRole).toString() == QLatin1String(ROLE_TYPE_SCENE) &&
+		    it->data(Qt::UserRole + 1).toString() == uuid) {
+			it->setIcon(QIcon(pm));
+			return;
+		}
+	}
+}
+
+/* render one queued thumbnail per tick so a big collection fills in smoothly
+   instead of hitching the whole grid at once */
+static void serviceThumbs()
+{
+	if (g_shutdown || !g_grid || !state().sceneThumbs) {
+		g_thumbPending.clear();
+		if (g_thumbTimer)
+			g_thumbTimer->stop();
+		return;
+	}
+	while (!g_thumbPending.isEmpty()) {
+		const QString uuid = g_thumbPending.takeFirst();
+		if (!thumbs::cached(uuid).isNull())
+			continue; /* filled in already */
+		const QPixmap pm = thumbs::render(uuid);
+		if (!pm.isNull())
+			setGridThumb(uuid, pm);
+		return; /* just one per tick */
+	}
+	if (g_thumbTimer)
+		g_thumbTimer->stop();
+}
+
+static void startThumbTimer()
+{
+	if (!g_thumbTimer) {
+		g_thumbTimer = new QTimer(g_grid);
+		g_thumbTimer->setInterval(120);
+		QObject::connect(g_thumbTimer, &QTimer::timeout, []() { serviceThumbs(); });
+	}
+	if (!g_thumbPending.isEmpty() && !g_thumbTimer->isActive())
+		g_thumbTimer->start();
+}
+
 static void rebuildGrid()
 {
 	if (g_shutdown || !g_grid || !state().folderGridMode)
 		return;
+	const bool thumbsOn = state().sceneThumbs;
+	g_grid->setIconSize(thumbsOn ? thumbs::size() : QSize(20, 20));
+	g_grid->setGridSize(thumbsOn ? QSize(thumbs::size().width() + 16,
+					     thumbs::size().height() + 34)
+				     : QSize(112, 66));
+	g_thumbPending.clear();
 	const bool wasApplying = g_applying;
 	g_applying = true;
 	g_grid->clear();
@@ -1442,6 +1509,18 @@ static void rebuildGrid()
 		return it;
 	};
 
+	/* a scene tile shows its live thumbnail (cached now, or a colored
+	   placeholder while the render timer catches up); off = no icon */
+	auto sceneIcon = [&](const QString &uuid, const QColor &bg) -> QIcon {
+		if (!thumbsOn)
+			return QIcon();
+		const QPixmap pm = thumbs::cached(uuid);
+		if (!pm.isNull())
+			return QIcon(pm);
+		g_thumbPending << uuid;
+		return thumbPlaceholder(bg);
+	};
+
 	if (!q.isEmpty()) {
 		/* searching: flat matches from everywhere */
 		for (const SceneRow &s : sceneRows()) {
@@ -1452,10 +1531,12 @@ static void rebuildGrid()
 						    : QString();
 			const QColor bg = hex.isEmpty() ? GRID_TILE_BG : QColor(hex);
 			QListWidgetItem *it =
-				addTile(ROLE_TYPE_SCENE, s.uuid, s.name, bg, QIcon());
+				addTile(ROLE_TYPE_SCENE, s.uuid, s.name, bg, sceneIcon(s.uuid, bg));
 			if (s.uuid == curUuid)
 				it->setSelected(true);
 		}
+		if (thumbsOn)
+			startThumbTimer();
 		g_applying = wasApplying;
 		return;
 	}
@@ -1488,7 +1569,7 @@ static void rebuildGrid()
 		const QString hex = state().sceneColors ? state().colors.value(s.name)
 						       : QString();
 		const QColor bg = hex.isEmpty() ? GRID_TILE_BG : QColor(hex);
-		QListWidgetItem *it = addTile(ROLE_TYPE_SCENE, s.uuid, s.name, bg, QIcon());
+		QListWidgetItem *it = addTile(ROLE_TYPE_SCENE, s.uuid, s.name, bg, sceneIcon(s.uuid, bg));
 		if (s.uuid == curUuid) {
 			QFont f = it->font();
 			f.setBold(true);
@@ -1496,6 +1577,8 @@ static void rebuildGrid()
 			it->setSelected(true);
 		}
 	}
+	if (thumbsOn)
+		startThumbTimer();
 	g_applying = wasApplying;
 }
 
@@ -1542,6 +1625,11 @@ static void showGridMenu(const QPoint &pos)
 		});
 		menu.addAction("Sort all scenes A to Z",
 			       []() { sortScenesAtoZ(true, QString()); });
+		if (state().sceneThumbs)
+			menu.addAction("Refresh thumbnails", []() {
+				thumbs::invalidateAll();
+				rebuildGrid();
+			});
 	}
 	menu.exec(g_grid->viewport()->mapToGlobal(pos));
 }
@@ -1780,6 +1868,9 @@ void shutdown()
 	g_shutdown = true;
 	if (g_timer)
 		g_timer->stop();
+	if (g_thumbTimer)
+		g_thumbTimer->stop();
+	g_thumbPending.clear();
 }
 
 } // namespace folders

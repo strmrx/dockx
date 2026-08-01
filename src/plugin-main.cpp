@@ -50,6 +50,7 @@ static void on_frontend_event(enum obs_frontend_event event, void *)
 		dockx::sourcedocks::refreshAll();
 		break;
 	case OBS_FRONTEND_EVENT_SCENE_COLLECTION_CHANGED:
+		dockx::thumbs::invalidateAll(); /* uuids belong to the old collection */
 		dockx::panels::refreshSoon();
 		dockx::filters::rescanSoon();
 		dockx::sourcedocks::refreshAll();
@@ -65,6 +66,7 @@ static void on_frontend_event(enum obs_frontend_event event, void *)
 		dockx::sourcedocks::shutdown(); /* displays first, while graphics lives */
 		dockx::filters::shutdown();
 		dockx::folders::shutdown();
+		dockx::thumbs::shutdown();
 		dockx::panels::shutdown();
 		break;
 	default:

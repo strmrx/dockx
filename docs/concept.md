@@ -84,8 +84,14 @@ off-thesis: encoders, multi-output, NDI, VST, replay buffer.
   v0.4/v0.5 test feedback
 - Source docks / preview-as-a-dock (demand #2, 227k downloads proof; unlocks multiview,
   align tools, studio mode QoL later)
-- Scene thumbnails in the folder tree (demand #7; folders + thumbnails = the visual
-  scene browser nobody ships)
+- Scene thumbnails -- SHIPPED v0.16 (2026-08-01, demand #7). Live scene previews power
+  the folder GRID view (grid = a visual scene browser). Any scene renders to a 160x90
+  offscreen texture (obs_source_video_render -> gs_texrender -> gs_stagesurface readback,
+  all GPU objects created + destroyed in one obs_enter/leave_graphics so nothing leaks at
+  exit), cached by uuid in dockx-thumbs.cpp. Tiles fill in progressively (one render per
+  120ms timer tick) so a big collection never hitches; colored placeholder until ready.
+  Cache invalidates on scene-collection change; "Refresh thumbnails" on the grid bg menu;
+  Settings toggle (default on). Tree/list view unchanged. NEXT: thumbnails in tree rows.
 - Grid mode for Scene Folders -- SHIPPED v0.10 (file explorer model: colored tiles,
   enter folders, Up tile, flattened search, full context menus; drag in grid = later).
   Pairs with scene thumbnails = the visual scene browser.

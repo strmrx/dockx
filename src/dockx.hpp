@@ -9,6 +9,8 @@ GPL v2, see plugin-main.cpp for the full notice.
 #include <QByteArray>
 #include <QHash>
 #include <QIcon>
+#include <QPixmap>
+#include <QSize>
 #include <QList>
 #include <QSet>
 #include <QString>
@@ -85,6 +87,7 @@ struct State {
 	bool dragHintsShown = false;       /* first run showed the dock layout guide */
 	bool folderSources = true;         /* source rows under scenes in the folder dock */
 	bool missingAutoPop = false;       /* pop the Missing Media cleaner at startup */
+	bool sceneThumbs = true;           /* live scene previews in the folder grid */
 
 	int nextId = 1;
 	std::vector<Layout> layouts;
@@ -227,6 +230,17 @@ void lockCurrentScene(bool locked);
 void lockAllScenes(bool locked);
 void lockScenes(const QStringList &uuids, bool locked);
 } // namespace locks
+
+/* live scene thumbnails: render any scene (loaded or not, current or not) to a
+   small cached preview for the folder grid. All GPU work is per-call (create +
+   destroy inside one graphics lock), so nothing persists to clean up at exit */
+namespace thumbs {
+QSize size();                        /* the thumbnail pixel size */
+QPixmap cached(const QString &uuid);  /* cache lookup; null if not rendered yet */
+QPixmap render(const QString &uuid);  /* render now on the graphics thread + cache */
+void invalidateAll();                /* drop the cache (scene collection change) */
+void shutdown();                     /* clear the cache; no GPU handles to free */
+} // namespace thumbs
 
 /* the dock layout guide: illustrated first-run walkthrough of dock dragging
    (title bar grab, edge drop = split, center drop = tabs, DockX columns) */

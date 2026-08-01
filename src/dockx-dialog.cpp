@@ -1472,6 +1472,13 @@ void showDialog()
 			 state().folderSources = v;
 			 folders::rebuildSoon();
 		 });
+	addCheck("Live scene thumbnails in the folder grid (grid view = visual browser)",
+		 state().sceneThumbs, [](bool v) {
+			 state().sceneThumbs = v;
+			 if (!v)
+				 thumbs::invalidateAll();
+			 folders::rebuildSoon();
+		 });
 	addCheck("Pop the Missing Media cleaner at startup when files are missing",
 		 state().missingAutoPop, [](bool v) { state().missingAutoPop = v; });
 
