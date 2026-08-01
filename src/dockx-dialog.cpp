@@ -14,6 +14,7 @@ GPL v2, see plugin-main.cpp for the full notice.
 #include <QComboBox>
 #include <QCompleter>
 #include <QDesktopServices>
+#include <QFileDialog>
 #include <QFont>
 #include <QUrl>
 #include <QStandardItemModel>
@@ -545,15 +546,21 @@ void showDialog()
 	QHBoxLayout *lob2 = new QHBoxLayout();
 	QPushButton *loRename = new QPushButton("Rename", loTab);
 	QPushButton *loDelete = new QPushButton("Delete", loTab);
+	QPushButton *loExport = new QPushButton("Back up to file", loTab);
+	QPushButton *loImport = new QPushButton("Import from file", loTab);
 	lob2->addWidget(loRename);
 	lob2->addWidget(loDelete);
+	lob2->addWidget(loExport);
+	lob2->addWidget(loImport);
 	lob2->addStretch(1);
 	lov->addLayout(lob2);
 
 	QLabel *loHint = new QLabel(
 		"A loadout remembers where every source sits: position, size, rotation, "
 		"crop, visibility, and lock. Restore snaps them all back. Restoring "
-		"always keeps an undo; pressing Undo restore twice flips back again.",
+		"always keeps an undo; pressing Undo restore twice flips back again. "
+		"Back up to file saves your loadouts as a JSON file you can move to "
+		"another PC or share; Import adds them back without overwriting anything.",
 		loTab);
 	loHint->setWordWrap(true);
 	lov->addWidget(loHint);
@@ -641,6 +648,46 @@ void showDialog()
 				 stateSave();
 				 reloadLoadouts();
 			 });
+	QObject::connect(loExport, &QPushButton::clicked, &dlg, [&dlg]() {
+		if (state().loadouts.empty()) {
+			QMessageBox::information(&dlg, "DockX",
+						 "You have no loadouts to back up yet.");
+			return;
+		}
+		const QString path = QFileDialog::getSaveFileName(
+			&dlg, "Back up loadouts", "dockx-loadouts.json",
+			"DockX loadouts (*.json)");
+		if (path.isEmpty())
+			return;
+		if (loadouts::exportFile(path))
+			QMessageBox::information(
+				&dlg, "DockX",
+				QString("Backed up %1 loadout(s). Keep this file to move "
+					"them to another PC or share them.")
+					.arg((int)state().loadouts.size()));
+		else
+			QMessageBox::warning(&dlg, "DockX",
+					     "Could not write that file.");
+	});
+	QObject::connect(loImport, &QPushButton::clicked, &dlg, [&dlg, reloadLoadouts]() {
+		const QString path = QFileDialog::getOpenFileName(
+			&dlg, "Import loadouts", QString(), "DockX loadouts (*.json)");
+		if (path.isEmpty())
+			return;
+		const int n = loadouts::importFile(path);
+		if (n < 0) {
+			QMessageBox::warning(
+				&dlg, "DockX",
+				"That file could not be read as a DockX loadouts backup.");
+			return;
+		}
+		reloadLoadouts();
+		QMessageBox::information(
+			&dlg, "DockX",
+			QString("Imported %1 loadout(s). They were added to your list; "
+				"nothing was overwritten.")
+				.arg(n));
+	});
 
 	tabs->addTab(loTab, "Loadouts");
 

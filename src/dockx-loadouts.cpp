@@ -347,5 +347,54 @@ SourceLoadout fromData(obs_data_t *d)
 	return l;
 }
 
+/* ---- file backup / import (portability + sharing across machines) ---- */
+
+bool exportFile(const QString &path)
+{
+	obs_data_t *root = obs_data_create();
+	obs_data_set_string(root, "dockx_loadouts", "1"); /* format marker */
+	obs_data_array_t *arr = obs_data_array_create();
+	for (const SourceLoadout &l : state().loadouts) {
+		obs_data_t *e = toData(l);
+		obs_data_array_push_back(arr, e);
+		obs_data_release(e);
+	}
+	obs_data_set_array(root, "loadouts", arr);
+	obs_data_array_release(arr);
+	bool ok = obs_data_save_json_pretty_safe(root, path.toUtf8().constData(), "tmp",
+						 "bak");
+	obs_data_release(root);
+	return ok;
+}
+
+int importFile(const QString &path)
+{
+	obs_data_t *root = obs_data_create_from_json_file(path.toUtf8().constData());
+	if (!root)
+		return -1;
+	obs_data_array_t *arr = obs_data_get_array(root, "loadouts");
+	if (!arr) {
+		obs_data_release(root);
+		return -1;
+	}
+	int added = 0;
+	const size_t n = obs_data_array_count(arr);
+	for (size_t i = 0; i < n; i++) {
+		obs_data_t *e = obs_data_array_item(arr, i);
+		SourceLoadout l = fromData(e);
+		obs_data_release(e);
+		if (l.name.isEmpty() && l.items.empty())
+			continue;
+		l.id = state().nextLoadoutId++; /* fresh local id; append, never clobber */
+		state().loadouts.push_back(l);
+		added++;
+	}
+	obs_data_array_release(arr);
+	obs_data_release(root);
+	if (added > 0)
+		stateSave();
+	return added;
+}
+
 } // namespace loadouts
 } // namespace dockx

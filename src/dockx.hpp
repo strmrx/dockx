@@ -201,6 +201,8 @@ void lockScene(const QString &sceneUuid, bool locked); /* incl. group children *
 void lockAll(bool locked);
 obs_data_t *toData(const SourceLoadout &l); /* caller releases */
 SourceLoadout fromData(obs_data_t *d);
+bool exportFile(const QString &path); /* write all loadouts to a JSON backup */
+int importFile(const QString &path);  /* append loadouts from JSON; -1 = bad file */
 } // namespace loadouts
 
 /* lock tools: freeze the docks so nothing drifts, keep a one-tap revert point

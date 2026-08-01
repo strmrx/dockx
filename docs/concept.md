@@ -124,8 +124,12 @@ off-thesis: encoders, multi-output, NDI, VST, replay buffer.
   everywhere), source rows under scenes in the folder dock (eye/lock icons, double
   click toggle, right click controls, search matches sources = find-usages), and the
   live-guarded Switch tab (profiles + collections). StrmrX Midnight theme staged in
-  assets/themes/ for the strmrx.com/dockx page. LoadoutX is now fully replaced;
-  retire it after Joey's parity check.
+  assets/themes/ for the strmrx.com/dockx page.
+- Loadout backup / import -- SHIPPED v0.15 (2026-08-01): "Back up to file" writes all
+  loadouts to a shareable JSON (obs_data_save_json_pretty_safe); "Import from file"
+  appends them with fresh local ids, never overwriting. This was LoadoutX's last
+  unmatched feature (file export/import for portability + sharing). With it, LoadoutX
+  is 100% replaced -- Joey retired it 2026-08-01 (folder, hub card, Railway, repo).
 - Guided drag hints -- SHIPPED v0.11 (illustrated Dock Layout Guide dialog: title bar
   grab, edge drop = split, center drop = tabs, DockX columns; auto opens once on first
   run, reopenable from Settings, linked to strmrx.com/dockx)
