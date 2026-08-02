@@ -120,8 +120,34 @@ off-thesis: encoders, multi-output, NDI, VST, replay buffer.
 - Source tagging / bulk ops / find-usages (demand #13)
 - Align + distribute tools -- SHIPPED v0.18 (align edges + space evenly + center on
   canvas, Align tab, dockx-align.cpp; snap-grid overlay still open)
+- Multi-monitor dock manager -- SHIPPED v0.19 (2026-08-01, demand #14 + Joey ask).
+  Monitors tab in Tools > DockX: pick a screen, pick one or more docks, "Send docks
+  to monitor" floats + tiles them onto that screen (grid, respects availableGeometry);
+  their positions then save with any dock layout. Two safety nets so a dock is never
+  lost: (a) every layout apply runs monitors::validateVisible() so a layout saved for
+  more screens than are attached can't strand a dock off canvas; (b) DockX listens for
+  QGuiApplication::screenRemoved and, 400ms after a monitor is unplugged, auto-rescues
+  any floating dock whose title bar sits on no screen back onto the OBS screen (cascaded).
+  A manual "Rescue lost docks to this screen" button + Tools menu item does the same on
+  demand -- the elegant recovery for someone with no saved layout to fall back on.
+  Auto rescue has a Settings toggle (default ON). Handles 2, 3, N monitors. New file
+  dockx-monitors.cpp; setting auto_rescue persisted in dockx.json.
 - Projector management (#9), multiview upgrades (#6), studio mode QoL (#10),
-  collection zip export/import (#11), second-monitor dock container (#14)
+  collection zip export/import (#11)
+
+## Build order (Joey, 2026-08-01)
+1. Multi-monitor dock manager -- DONE v0.19.
+2. **NEXT: "Better OBS Blade"** -- a phone/tablet controller for OBS. Starts with DEEP
+   RESEARCH: what's missing in OBS Blade + rival controllers (Deckboard, Touch Portal,
+   the OBS remote apps), what streamers are asking for that nobody ships, and killer
+   features to invent. Folds in a tablet Stream Deck for users, and connecting to
+   whatever Willy already built (this is ControlX territory -- ControlX Ph2 = the Stream
+   Deck relay; likely built AS ControlX mobile, powered by the relay, not a new silo).
+   A mobile app is NOT an OBS plugin, so it is NOT bound by GPL -- can be closed-source
+   and paid.
+3. **AFTER: cloud sync + "Your OBS anywhere" + AI metering** (the paid layer below),
+   plus a deeper monetization research pass on everything else DockX could earn from
+   once it pulls real traffic. Server-side value = fork-proof; that is the business.
 - Scene sorting -- SHIPPED v0.11 (drag scenes to reorder in the folder tree, pushed
   into the native list so it sticks; "Sort scenes A to Z" per folder + "Sort all
   scenes A to Z" on the dock background, tree and grid)

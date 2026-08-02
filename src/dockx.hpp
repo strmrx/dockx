@@ -10,6 +10,7 @@ GPL v2, see plugin-main.cpp for the full notice.
 #include <QHash>
 #include <QIcon>
 #include <QPixmap>
+#include <QRect>
 #include <QSize>
 #include <QList>
 #include <QSet>
@@ -89,6 +90,7 @@ struct State {
 	bool missingAutoPop = false;       /* pop the Missing Media cleaner at startup */
 	bool sceneThumbs = true;           /* live scene previews in the folder grid */
 	bool alignTools = false;           /* the Align + distribute tab (opt in) */
+	bool autoRescue = true;            /* pull stranded docks home on unplug */
 
 	int nextId = 1;
 	std::vector<Layout> layouts;
@@ -277,6 +279,22 @@ int selectedCount(); /* selected, unlocked top-level items in the current scene 
 void run(Op op);     /* align needs >= 2 items; distribute needs >= 3 */
 void center(bool horizontal, bool vertical); /* center the selection on the canvas */
 } // namespace align
+
+/* multi monitor dock manager: send docks to any screen (tiled), keep saved
+   layouts safe across a changed monitor setup, and bring stranded docks home
+   the moment a monitor is unplugged so one can never be lost off screen */
+namespace monitors {
+struct ScreenInfo {
+	int index;      /* 0 based screen index */
+	QString label;  /* "Monitor 2 · 1920×1080 (main)" */
+	QRect geometry; /* full virtual desktop rect */
+};
+QList<ScreenInfo> listScreens();
+int sendDocksToScreen(const QStringList &dockKeys, int screenIndex); /* returns moved */
+int rescueStrayDocks();  /* reflow every off screen dock home; returns moved */
+void validateVisible();  /* call after restoreState so no dock lands off screen */
+void installWatch();     /* listen for monitor unplug; call once after load */
+} // namespace monitors
 
 /* the dock layout guide: illustrated first-run walkthrough of dock dragging
    (title bar grab, edge drop = split, center drop = tabs, DockX columns) */

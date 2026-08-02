@@ -115,6 +115,7 @@ void stateLoad()
 	obs_data_set_default_bool(d, "folder_sources", true);
 	obs_data_set_default_bool(d, "scene_thumbs", true);
 	obs_data_set_default_bool(d, "align_tools", false);
+	obs_data_set_default_bool(d, "auto_rescue", true);
 	obs_data_set_default_int(d, "next_id", 1);
 	obs_data_set_default_int(d, "next_source_dock_id", 1);
 	obs_data_set_default_int(d, "next_loadout_id", 1);
@@ -134,6 +135,7 @@ void stateLoad()
 	g_state.missingAutoPop = obs_data_get_bool(d, "missing_auto_pop");
 	g_state.sceneThumbs = obs_data_get_bool(d, "scene_thumbs");
 	g_state.alignTools = obs_data_get_bool(d, "align_tools");
+	g_state.autoRescue = obs_data_get_bool(d, "auto_rescue");
 	g_state.nextLoadoutId = (int)obs_data_get_int(d, "next_loadout_id");
 	obs_data_array_t *louts = obs_data_get_array(d, "loadouts");
 	if (louts) {
@@ -314,6 +316,7 @@ void stateSave()
 	obs_data_set_bool(d, "missing_auto_pop", g_state.missingAutoPop);
 	obs_data_set_bool(d, "scene_thumbs", g_state.sceneThumbs);
 	obs_data_set_bool(d, "align_tools", g_state.alignTools);
+	obs_data_set_bool(d, "auto_rescue", g_state.autoRescue);
 	obs_data_set_int(d, "next_loadout_id", g_state.nextLoadoutId);
 	obs_data_array_t *louts = obs_data_array_create();
 	for (const SourceLoadout &l : g_state.loadouts) {
@@ -1020,6 +1023,7 @@ bool applyLayout(int id)
 	state().undoState = m->saveState();
 	bool ok = m->restoreState(l->state);
 	locks::applyHardLock(); /* restoreState can re-show docks; reassert the freeze */
+	monitors::validateVisible(); /* a layout saved for more screens can't strand a dock */
 	obs_log(LOG_INFO, "applied layout \"%s\" (%s)", l->name.toUtf8().constData(),
 		ok ? "ok" : "restore reported failure");
 	return ok;

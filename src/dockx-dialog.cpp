@@ -9,6 +9,7 @@ GPL v2, see plugin-main.cpp for the full notice.
 #include <obs-frontend-api.h>
 #include <plugin-support.h>
 
+#include <QAbstractItemView>
 #include <QCheckBox>
 #include <QColorDialog>
 #include <QComboBox>
@@ -1593,6 +1594,106 @@ void showDialog()
 
 	tabs->addTab(swTab, "Switch");
 
+	/* ---------- Monitors tab ---------- */
+	QWidget *monTab = new QWidget();
+	QVBoxLayout *mv = new QVBoxLayout(monTab);
+
+	QLabel *monIntro = new QLabel(
+		"Send docks to any monitor and DockX tiles them there. Save a layout "
+		"afterward and your multi monitor setup rides along with it. If a "
+		"monitor gets unplugged, DockX brings any stranded dock back onto your "
+		"main screen so you never lose one.",
+		monTab);
+	monIntro->setWordWrap(true);
+	mv->addWidget(monIntro);
+
+	QHBoxLayout *monCols = new QHBoxLayout();
+
+	QVBoxLayout *monLeft = new QVBoxLayout();
+	monLeft->addWidget(new QLabel("Monitors", monTab));
+	QListWidget *monScreens = new QListWidget(monTab);
+	monLeft->addWidget(monScreens, 1);
+	monCols->addLayout(monLeft, 1);
+
+	QVBoxLayout *monRight = new QVBoxLayout();
+	monRight->addWidget(new QLabel("Docks (pick one or more)", monTab));
+	QListWidget *monDocks = new QListWidget(monTab);
+	monDocks->setSelectionMode(QAbstractItemView::ExtendedSelection);
+	monRight->addWidget(monDocks, 1);
+	monCols->addLayout(monRight, 1);
+
+	mv->addLayout(monCols, 1);
+
+	auto monReloadScreens = [monScreens]() {
+		const int keep = monScreens->currentRow();
+		monScreens->clear();
+		for (const monitors::ScreenInfo &s : monitors::listScreens()) {
+			QListWidgetItem *it = new QListWidgetItem(s.label, monScreens);
+			it->setData(Qt::UserRole, s.index);
+		}
+		if (keep >= 0 && keep < monScreens->count())
+			monScreens->setCurrentRow(keep);
+		else if (monScreens->count() > 0)
+			monScreens->setCurrentRow(0);
+	};
+	auto monReloadDocks = [monDocks]() {
+		monDocks->clear();
+		for (const panels::DockInfo &di : panels::listDocks()) {
+			QListWidgetItem *it = new QListWidgetItem(di.title, monDocks);
+			it->setData(Qt::UserRole, di.key);
+		}
+	};
+	monReloadScreens();
+	monReloadDocks();
+
+	QHBoxLayout *monBtns = new QHBoxLayout();
+	QPushButton *monSend = new QPushButton("Send docks to monitor", monTab);
+	QPushButton *monRescue =
+		new QPushButton("Rescue lost docks to this screen", monTab);
+	QPushButton *monRefresh = new QPushButton("Refresh", monTab);
+	monBtns->addWidget(monSend);
+	monBtns->addWidget(monRescue);
+	monBtns->addStretch(1);
+	monBtns->addWidget(monRefresh);
+	mv->addLayout(monBtns);
+
+	QObject::connect(monRefresh, &QPushButton::clicked, monTab,
+			 [monReloadScreens, monReloadDocks]() {
+				 monReloadScreens();
+				 monReloadDocks();
+			 });
+	QObject::connect(monSend, &QPushButton::clicked, monTab, [monScreens, monDocks]() {
+		QListWidgetItem *si = monScreens->currentItem();
+		if (!si)
+			return;
+		QStringList keys;
+		const QList<QListWidgetItem *> sel = monDocks->selectedItems();
+		for (QListWidgetItem *it : sel)
+			keys << it->data(Qt::UserRole).toString();
+		if (keys.isEmpty())
+			return;
+		monitors::sendDocksToScreen(keys, si->data(Qt::UserRole).toInt());
+	});
+	QObject::connect(monRescue, &QPushButton::clicked, monTab, [monTab]() {
+		const int n = monitors::rescueStrayDocks();
+		const QString msg =
+			n == 0 ? QString("No off screen docks found. Everything is "
+					 "already in view.")
+			       : QString("Brought %1 dock%2 back onto this screen.")
+					 .arg(n)
+					 .arg(n == 1 ? "" : "s");
+		QMessageBox::information(monTab->window(), "DockX", msg);
+	});
+
+	QLabel *monHint = new QLabel(
+		"Tip: pull a dock out of OBS by its title bar to float it, then send it "
+		"where you want. Auto rescue on an unplug can be turned off in Settings.",
+		monTab);
+	monHint->setWordWrap(true);
+	mv->addWidget(monHint);
+
+	tabs->addTab(monTab, "Monitors");
+
 	/* ---------- Settings tab ---------- */
 	QWidget *settingsTab = new QWidget();
 	QVBoxLayout *sv = new QVBoxLayout(settingsTab);
@@ -1656,6 +1757,8 @@ void showDialog()
 	addCheck("Align and distribute tools (off by default; adds an Align tab, reopen this "
 		 "window to see it)",
 		 state().alignTools, [](bool v) { state().alignTools = v; });
+	addCheck("Bring stranded docks back when a monitor is unplugged (auto rescue)",
+		 state().autoRescue, [](bool v) { state().autoRescue = v; });
 	addCheck("Pop the Missing Media cleaner at startup when files are missing",
 		 state().missingAutoPop, [](bool v) { state().missingAutoPop = v; });
 
