@@ -19,11 +19,13 @@ GPL v2, see plugin-main.cpp for the full notice.
 #include <QUrl>
 #include <QStandardItemModel>
 #include <QDialog>
+#include <QGridLayout>
 #include <QGroupBox>
 #include <QHBoxLayout>
 #include <QInputDialog>
 #include <QKeySequenceEdit>
 #include <QLabel>
+#include <QLineEdit>
 #include <QListWidget>
 #include <QMainWindow>
 #include <QMessageBox>
@@ -1044,6 +1046,7 @@ void showDialog()
 	QVBoxLayout *cv = new QVBoxLayout(colorsTab);
 
 	QListWidget *sceneListW = new QListWidget(colorsTab);
+	sceneListW->setSelectionMode(QAbstractItemView::ExtendedSelection);
 	for (const QString &name : sceneNames()) {
 		QListWidgetItem *it = new QListWidgetItem(name, sceneListW);
 		const QString hex = state().colors.value(name);
@@ -1055,19 +1058,22 @@ void showDialog()
 	cv->addWidget(sceneListW, 1);
 
 	auto setSceneColor = [sceneListW, &dlg](const QString &hex) {
-		QListWidgetItem *it = sceneListW->currentItem();
-		if (!it) {
-			QMessageBox::information(&dlg, "DockX", "Pick a scene first.");
+		const QList<QListWidgetItem *> sel = sceneListW->selectedItems();
+		if (sel.isEmpty()) {
+			QMessageBox::information(&dlg, "DockX",
+						 "Pick one or more scenes first.");
 			return;
 		}
-		if (hex.isEmpty()) {
-			state().colors.remove(it->text());
-			it->setData(Qt::ForegroundRole, QVariant());
-			it->setIcon(QIcon());
-		} else {
-			state().colors[it->text()] = hex;
-			it->setForeground(QBrush(QColor(hex)));
-			it->setIcon(colorDot(QColor(hex)));
+		for (QListWidgetItem *it : sel) {
+			if (hex.isEmpty()) {
+				state().colors.remove(it->text());
+				it->setData(Qt::ForegroundRole, QVariant());
+				it->setIcon(QIcon());
+			} else {
+				state().colors[it->text()] = hex;
+				it->setForeground(QBrush(QColor(hex)));
+				it->setIcon(colorDot(QColor(hex)));
+			}
 		}
 		stateSave();
 		panels::refreshSoon();
@@ -1075,9 +1081,10 @@ void showDialog()
 
 	addPaletteRow(colorsTab, cv, &dlg, setSceneColor);
 
-	QLabel *chint = new QLabel("Pick a scene, then a color. The scene name shows in that "
-				   "color in the Scenes panel. Sources already have this built "
-				   "into OBS: right click a source and pick Set Color.",
+	QLabel *chint = new QLabel("Pick a scene (Ctrl click or Shift click for several at "
+				   "once), then a color. The scene name shows in that color in "
+				   "the Scenes panel. Sources already have this built into OBS: "
+				   "right click a source and pick Set Color.",
 				   colorsTab);
 	chint->setWordWrap(true);
 	cv->addWidget(chint);
@@ -1089,6 +1096,7 @@ void showDialog()
 	QVBoxLayout *dv = new QVBoxLayout(dockTab);
 
 	QListWidget *dockListW = new QListWidget(dockTab);
+	dockListW->setSelectionMode(QAbstractItemView::ExtendedSelection);
 	for (const panels::DockInfo &info : panels::listDocks()) {
 		QListWidgetItem *it = new QListWidgetItem(info.title, dockListW);
 		it->setData(Qt::UserRole, info.key);
@@ -1101,20 +1109,23 @@ void showDialog()
 	dv->addWidget(dockListW, 1);
 
 	auto setDockColor = [dockListW, &dlg](const QString &hex) {
-		QListWidgetItem *it = dockListW->currentItem();
-		if (!it) {
-			QMessageBox::information(&dlg, "DockX", "Pick a dock first.");
+		const QList<QListWidgetItem *> sel = dockListW->selectedItems();
+		if (sel.isEmpty()) {
+			QMessageBox::information(&dlg, "DockX",
+						 "Pick one or more docks first.");
 			return;
 		}
-		const QString key = it->data(Qt::UserRole).toString();
-		if (hex.isEmpty()) {
-			state().dockColorMap.remove(key);
-			it->setData(Qt::ForegroundRole, QVariant());
-			it->setIcon(QIcon());
-		} else {
-			state().dockColorMap[key] = hex;
-			it->setForeground(QBrush(QColor(hex)));
-			it->setIcon(colorDot(QColor(hex)));
+		for (QListWidgetItem *it : sel) {
+			const QString key = it->data(Qt::UserRole).toString();
+			if (hex.isEmpty()) {
+				state().dockColorMap.remove(key);
+				it->setData(Qt::ForegroundRole, QVariant());
+				it->setIcon(QIcon());
+			} else {
+				state().dockColorMap[key] = hex;
+				it->setForeground(QBrush(QColor(hex)));
+				it->setIcon(colorDot(QColor(hex)));
+			}
 		}
 		stateSave();
 		panels::applyDockColors();
@@ -1122,8 +1133,9 @@ void showDialog()
 
 	addPaletteRow(dockTab, dv, &dlg, setDockColor);
 
-	QLabel *dhint = new QLabel("Pick a dock, then a color. The dock gets a colored border "
-				   "and title bar so you can spot it instantly.",
+	QLabel *dhint = new QLabel("Pick a dock (Ctrl click or Shift click for several at "
+				   "once), then a color. The dock gets a colored border and "
+				   "title bar so you can spot it instantly.",
 				   dockTab);
 	dhint->setWordWrap(true);
 	dv->addWidget(dhint);
@@ -1188,57 +1200,106 @@ void showDialog()
 		}
 	};
 	sdReload();
+
+	/* --- your current docks --- */
+	QLabel *sdListLbl = new QLabel("Your source docks", sdTab);
+	sdv->addWidget(sdListLbl);
 	sdv->addWidget(sdListW, 1);
 
-	QHBoxLayout *sdRow = new QHBoxLayout();
-	QComboBox *sdCombo = new QComboBox(sdTab);
-	auto addHeader = [sdCombo](const QString &text) {
-		sdCombo->addItem(text, -1);
-		auto *m = qobject_cast<QStandardItemModel *>(sdCombo->model());
-		if (m)
-			m->item(sdCombo->count() - 1)->setEnabled(false);
-	};
-	sdCombo->addItem("Program (main output)", (int)sourcedocks::KIND_PROGRAM);
-	sdCombo->addItem("Preview (studio mode)", (int)sourcedocks::KIND_PREVIEW);
-	addHeader("--- Scenes ---");
-	for (const QString &n : sceneNames())
-		sdCombo->addItem(n, (int)sourcedocks::KIND_SOURCE);
-	addHeader("--- Sources ---");
-	for (const QString &n : dockableInputNames())
-		sdCombo->addItem(n, (int)sourcedocks::KIND_SOURCE);
-	/* type to search */
-	sdCombo->setEditable(true);
-	sdCombo->setInsertPolicy(QComboBox::NoInsert);
-	if (sdCombo->completer()) {
-		sdCombo->completer()->setCompletionMode(QCompleter::PopupCompletion);
-		sdCombo->completer()->setFilterMode(Qt::MatchContains);
-		sdCombo->completer()->setCaseSensitivity(Qt::CaseInsensitive);
-	}
-	sdRow->addWidget(sdCombo, 1);
-	QPushButton *sdAdd = new QPushButton("Add dock", sdTab);
-	QPushButton *sdRemove = new QPushButton("Remove", sdTab);
-	sdRow->addWidget(sdAdd);
-	sdRow->addWidget(sdRemove);
-	sdv->addLayout(sdRow);
-
-	QObject::connect(sdAdd, &QPushButton::clicked, sdTab, [sdCombo, sdReload]() {
-		const int idx = sdCombo->findText(sdCombo->currentText());
-		if (idx < 0)
-			return;
-		const int kind = sdCombo->itemData(idx).toInt();
-		if (kind < 0)
-			return; /* a section header */
-		const QString name = kind == sourcedocks::KIND_SOURCE
-					     ? sdCombo->itemText(idx)
-					     : QString();
-		sourcedocks::addDock(kind, name);
-		sdReload();
-	});
+	QHBoxLayout *sdListBtns = new QHBoxLayout();
+	QPushButton *sdRemove = new QPushButton("Remove selected", sdTab);
+	sdListBtns->addWidget(sdRemove);
+	sdListBtns->addStretch(1);
+	sdv->addLayout(sdListBtns);
 	QObject::connect(sdRemove, &QPushButton::clicked, sdTab, [sdListW, sdReload]() {
 		QListWidgetItem *it = sdListW->currentItem();
 		if (!it)
 			return;
 		sourcedocks::removeDock(it->data(Qt::UserRole).toInt());
+		sdReload();
+	});
+
+	/* --- add a new dock: scenes and sources live in their own searchable
+	   dropdowns so the two never blur together --- */
+	auto makeSearchCombo = [sdTab](const QStringList &items,
+				       const QString &placeholder) {
+		QComboBox *c = new QComboBox(sdTab);
+		c->addItems(items);
+		c->setEditable(true);
+		c->setInsertPolicy(QComboBox::NoInsert);
+		c->setCurrentIndex(-1);
+		c->lineEdit()->setPlaceholderText(placeholder);
+		c->lineEdit()->setClearButtonEnabled(true);
+		if (c->completer()) {
+			c->completer()->setCompletionMode(QCompleter::PopupCompletion);
+			c->completer()->setFilterMode(Qt::MatchContains);
+			c->completer()->setCaseSensitivity(Qt::CaseInsensitive);
+		}
+		return c;
+	};
+
+	auto addNamed = [sdReload](QComboBox *c) {
+		const QString name = c->currentText().trimmed();
+		if (name.isEmpty())
+			return;
+		if (c->findText(name, Qt::MatchFixedString) < 0)
+			return; /* only add a real list entry, never free text */
+		sourcedocks::addDock(sourcedocks::KIND_SOURCE, name);
+		sdReload();
+		c->setCurrentIndex(-1);
+		c->clearEditText();
+	};
+
+	QGroupBox *addGroup = new QGroupBox("Add a live dock", sdTab);
+	QVBoxLayout *ag = new QVBoxLayout(addGroup);
+
+	QHBoxLayout *sceneRow = new QHBoxLayout();
+	QLabel *sceneLbl = new QLabel("Scene", addGroup);
+	sceneLbl->setMinimumWidth(60);
+	QComboBox *sceneCombo = makeSearchCombo(sceneNames(), "Type to search scenes");
+	QPushButton *addSceneBtn = new QPushButton("Add", addGroup);
+	sceneRow->addWidget(sceneLbl);
+	sceneRow->addWidget(sceneCombo, 1);
+	sceneRow->addWidget(addSceneBtn);
+	ag->addLayout(sceneRow);
+
+	QHBoxLayout *srcRow = new QHBoxLayout();
+	QLabel *sdSrcLbl = new QLabel("Source", addGroup);
+	sdSrcLbl->setMinimumWidth(60);
+	QComboBox *srcCombo = makeSearchCombo(dockableInputNames(), "Type to search sources");
+	QPushButton *addSrcBtn = new QPushButton("Add", addGroup);
+	srcRow->addWidget(sdSrcLbl);
+	srcRow->addWidget(srcCombo, 1);
+	srcRow->addWidget(addSrcBtn);
+	ag->addLayout(srcRow);
+
+	QHBoxLayout *outRow = new QHBoxLayout();
+	QLabel *outLbl = new QLabel("Outputs", addGroup);
+	outLbl->setMinimumWidth(60);
+	QPushButton *progBtn = new QPushButton("Program (main output)", addGroup);
+	QPushButton *prevBtn = new QPushButton("Preview (studio mode)", addGroup);
+	outRow->addWidget(outLbl);
+	outRow->addWidget(progBtn);
+	outRow->addWidget(prevBtn);
+	outRow->addStretch(1);
+	ag->addLayout(outRow);
+
+	sdv->addWidget(addGroup);
+
+	QObject::connect(addSceneBtn, &QPushButton::clicked, sdTab,
+			 [addNamed, sceneCombo]() { addNamed(sceneCombo); });
+	QObject::connect(sceneCombo->lineEdit(), &QLineEdit::returnPressed, sdTab,
+			 [addNamed, sceneCombo]() { addNamed(sceneCombo); });
+	QObject::connect(addSrcBtn, &QPushButton::clicked, sdTab,
+			 [addNamed, srcCombo]() { addNamed(srcCombo); });
+	QObject::connect(srcCombo->lineEdit(), &QLineEdit::returnPressed, sdTab,
+			 [addNamed, srcCombo]() { addNamed(srcCombo); });
+	QObject::connect(progBtn, &QPushButton::clicked, sdTab, [sdReload]() {
+		sourcedocks::addDock(sourcedocks::KIND_PROGRAM, QString());
+		sdReload();
+	});
+	QObject::connect(prevBtn, &QPushButton::clicked, sdTab, [sdReload]() {
+		sourcedocks::addDock(sourcedocks::KIND_PREVIEW, QString());
 		sdReload();
 	});
 
@@ -1308,6 +1369,119 @@ void showDialog()
 	mxv->addWidget(mixHint);
 
 	tabs->addTab(mixTab, "Mixer");
+
+	/* ---------- Align tab (optional; toggled in Settings) ---------- */
+	if (state().alignTools) {
+		QWidget *alignTab = new QWidget();
+		QVBoxLayout *alv = new QVBoxLayout(alignTab);
+
+		QLabel *alIntro = new QLabel(
+			"Select two or more sources on the canvas (Ctrl click them in the "
+			"preview, or drag a box around them), then line them up or space "
+			"them out. It lines up the visible edges, so scaled, cropped, or "
+			"rotated sources still land right. Locked sources are left alone.",
+			alignTab);
+		alIntro->setWordWrap(true);
+		alv->addWidget(alIntro);
+
+		auto doAlign = [&dlg](align::Op op) {
+			if (align::selectedCount() < 2) {
+				QMessageBox::information(
+					&dlg, "DockX",
+					"Select at least two sources on the canvas first. "
+					"Ctrl click them in the preview, or drag a box "
+					"around them.");
+				return;
+			}
+			align::run(op);
+		};
+		auto doDist = [&dlg](align::Op op) {
+			if (align::selectedCount() < 3) {
+				QMessageBox::information(
+					&dlg, "DockX",
+					"Pick at least three sources to space them evenly. "
+					"The two on the ends stay put and the rest spread "
+					"out between them.");
+				return;
+			}
+			align::run(op);
+		};
+		auto doCenter = [&dlg](bool h, bool v) {
+			if (align::selectedCount() < 1) {
+				QMessageBox::information(
+					&dlg, "DockX",
+					"Select a source on the canvas first.");
+				return;
+			}
+			align::center(h, v);
+		};
+
+		QGroupBox *alignBox = new QGroupBox("Line up edges", alignTab);
+		QGridLayout *alg = new QGridLayout(alignBox);
+		struct AB {
+			const char *label;
+			align::Op op;
+			int row;
+			int col;
+		};
+		const AB ab[] = {
+			{"Left", align::ALIGN_LEFT, 0, 0},
+			{"Center", align::ALIGN_HCENTER, 0, 1},
+			{"Right", align::ALIGN_RIGHT, 0, 2},
+			{"Top", align::ALIGN_TOP, 1, 0},
+			{"Middle", align::ALIGN_VCENTER, 1, 1},
+			{"Bottom", align::ALIGN_BOTTOM, 1, 2},
+		};
+		for (const AB &x : ab) {
+			QPushButton *b = new QPushButton(x.label, alignBox);
+			alg->addWidget(b, x.row, x.col);
+			const align::Op op = x.op;
+			QObject::connect(b, &QPushButton::clicked, alignBox,
+					 [doAlign, op]() { doAlign(op); });
+		}
+		alv->addWidget(alignBox);
+
+		QGroupBox *distBox = new QGroupBox("Space evenly", alignTab);
+		QHBoxLayout *dgl = new QHBoxLayout(distBox);
+		QPushButton *distH = new QPushButton("Across", distBox);
+		QPushButton *distV = new QPushButton("Down", distBox);
+		dgl->addWidget(distH);
+		dgl->addWidget(distV);
+		dgl->addStretch(1);
+		QObject::connect(distH, &QPushButton::clicked, distBox,
+				 [doDist]() { doDist(align::DIST_H); });
+		QObject::connect(distV, &QPushButton::clicked, distBox,
+				 [doDist]() { doDist(align::DIST_V); });
+		alv->addWidget(distBox);
+
+		QGroupBox *canvasBox = new QGroupBox("Center on the canvas", alignTab);
+		QHBoxLayout *cgl = new QHBoxLayout(canvasBox);
+		QPushButton *cH = new QPushButton("Horizontally", canvasBox);
+		QPushButton *cV = new QPushButton("Vertically", canvasBox);
+		QPushButton *cB = new QPushButton("Both", canvasBox);
+		cgl->addWidget(cH);
+		cgl->addWidget(cV);
+		cgl->addWidget(cB);
+		cgl->addStretch(1);
+		QObject::connect(cH, &QPushButton::clicked, canvasBox,
+				 [doCenter]() { doCenter(true, false); });
+		QObject::connect(cV, &QPushButton::clicked, canvasBox,
+				 [doCenter]() { doCenter(false, true); });
+		QObject::connect(cB, &QPushButton::clicked, canvasBox,
+				 [doCenter]() { doCenter(true, true); });
+		alv->addWidget(canvasBox);
+
+		QLabel *alHint = new QLabel(
+			"Center lines everything up along one line through the middle of "
+			"your selection. Space evenly keeps the two end sources put and "
+			"spreads the rest between them.",
+			alignTab);
+		alHint->setWordWrap(true);
+		alv->addWidget(alHint);
+		alv->addStretch(1);
+
+		tabs->addTab(alignTab, "Align");
+	}
 
 	/* ---------- Switch tab (profiles + collections, live guarded) ---------- */
 	QWidget *swTab = new QWidget();
@@ -1479,6 +1653,8 @@ void showDialog()
 				 thumbs::invalidateAll();
 			 folders::rebuildSoon();
 		 });
+	addCheck("Align and distribute tools (adds an Align tab; reopen this window to see it)",
+		 state().alignTools, [](bool v) { state().alignTools = v; });
 	addCheck("Pop the Missing Media cleaner at startup when files are missing",
 		 state().missingAutoPop, [](bool v) { state().missingAutoPop = v; });
 

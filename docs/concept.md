@@ -71,8 +71,13 @@ Ranked by demand x feasibility for a Qt frontend plugin. Context: #1 idea sitewi
    combined. MEDIUM-HARD (needs #2's display machinery).
 7. **Scene thumbnails** -- previews next to scene names. 22 votes; pairs with folders =
    visual scene browser nobody ships. MEDIUM.
-8. **Align/distribute tools** -- snap grid idea has 96 votes; align/distribute buttons are
-   EASY (transform math), grid overlay HARD without our own preview dock.
+8. **Align/distribute tools** -- SHIPPED v0.18 (2026-08-01, snap grid idea has 96 votes).
+   New Align tab (dockx-align.cpp): line up edges (left/center/right, top/middle/bottom),
+   space evenly across/down (3+ items), center on canvas (h/v/both) for the SELECTED
+   sources in the current scene. Works off each item's on-canvas bounding box
+   (obs_sceneitem_get_box_transform) so scale/crop/rotation are respected; only translates
+   (never resizes), skips locked items. Settings toggle gates the tab. STILL OPEN: the
+   snap-grid OVERLAY (HARD without our own preview dock).
 9. **Projector management** -- remember position/borderless/always-on-top (48+26 votes);
    tie projectors into saved layouts = very on-brand. MEDIUM.
 10. **Studio mode QoL** -- resizable split (35), hide transition panel (28). MEDIUM.
@@ -112,9 +117,10 @@ off-thesis: encoders, multi-output, NDI, VST, replay buffer.
 - Cross-collection copy of scenes/sources (demand #3, 149 votes)
 - Reorderable audio mixer (demand #4)
 - Source tagging / bulk ops / find-usages (demand #13)
-- Align + distribute tools (#8), projector management (#9), multiview upgrades (#6),
-  studio mode QoL (#10), collection zip export/import (#11), second-monitor dock
-  container (#14)
+- Align + distribute tools -- SHIPPED v0.18 (align edges + space evenly + center on
+  canvas, Align tab, dockx-align.cpp; snap-grid overlay still open)
+- Projector management (#9), multiview upgrades (#6), studio mode QoL (#10),
+  collection zip export/import (#11), second-monitor dock container (#14)
 - Scene sorting -- SHIPPED v0.11 (drag scenes to reorder in the folder tree, pushed
   into the native list so it sticks; "Sort scenes A to Z" per folder + "Sort all
   scenes A to Z" on the dock background, tree and grid)

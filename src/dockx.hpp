@@ -88,6 +88,7 @@ struct State {
 	bool folderSources = true;         /* source rows under scenes in the folder dock */
 	bool missingAutoPop = false;       /* pop the Missing Media cleaner at startup */
 	bool sceneThumbs = true;           /* live scene previews in the folder grid */
+	bool alignTools = true;            /* the Align + distribute tab */
 
 	int nextId = 1;
 	std::vector<Layout> layouts;
@@ -257,6 +258,25 @@ QPixmap render(const QString &uuid);  /* render now on the graphics thread + cac
 void invalidateAll();                /* drop the cache (scene collection change) */
 void shutdown();                     /* clear the cache; no GPU handles to free */
 } // namespace thumbs
+
+/* align + distribute the selected sources in the current scene, working off
+   each item's on canvas bounding box (scale/crop/rotation respected). Only
+   moves items, never resizes; locked items are skipped */
+namespace align {
+enum Op {
+	ALIGN_LEFT,
+	ALIGN_HCENTER,
+	ALIGN_RIGHT,
+	ALIGN_TOP,
+	ALIGN_VCENTER,
+	ALIGN_BOTTOM,
+	DIST_H,
+	DIST_V,
+};
+int selectedCount(); /* selected, unlocked top-level items in the current scene */
+void run(Op op);     /* align needs >= 2 items; distribute needs >= 3 */
+void center(bool horizontal, bool vertical); /* center the selection on the canvas */
+} // namespace align
 
 /* the dock layout guide: illustrated first-run walkthrough of dock dragging
    (title bar grab, edge drop = split, center drop = tabs, DockX columns) */

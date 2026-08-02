@@ -114,6 +114,7 @@ void stateLoad()
 	obs_data_set_default_bool(d, "folder_nesting", true);
 	obs_data_set_default_bool(d, "folder_sources", true);
 	obs_data_set_default_bool(d, "scene_thumbs", true);
+	obs_data_set_default_bool(d, "align_tools", true);
 	obs_data_set_default_int(d, "next_id", 1);
 	obs_data_set_default_int(d, "next_source_dock_id", 1);
 	obs_data_set_default_int(d, "next_loadout_id", 1);
@@ -132,6 +133,7 @@ void stateLoad()
 	g_state.folderSources = obs_data_get_bool(d, "folder_sources");
 	g_state.missingAutoPop = obs_data_get_bool(d, "missing_auto_pop");
 	g_state.sceneThumbs = obs_data_get_bool(d, "scene_thumbs");
+	g_state.alignTools = obs_data_get_bool(d, "align_tools");
 	g_state.nextLoadoutId = (int)obs_data_get_int(d, "next_loadout_id");
 	obs_data_array_t *louts = obs_data_get_array(d, "loadouts");
 	if (louts) {
@@ -311,6 +313,7 @@ void stateSave()
 	obs_data_set_bool(d, "folder_sources", g_state.folderSources);
 	obs_data_set_bool(d, "missing_auto_pop", g_state.missingAutoPop);
 	obs_data_set_bool(d, "scene_thumbs", g_state.sceneThumbs);
+	obs_data_set_bool(d, "align_tools", g_state.alignTools);
 	obs_data_set_int(d, "next_loadout_id", g_state.nextLoadoutId);
 	obs_data_array_t *louts = obs_data_array_create();
 	for (const SourceLoadout &l : g_state.loadouts) {
