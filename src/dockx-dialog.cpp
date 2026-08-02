@@ -1653,7 +1653,8 @@ void showDialog()
 				 thumbs::invalidateAll();
 			 folders::rebuildSoon();
 		 });
-	addCheck("Align and distribute tools (adds an Align tab; reopen this window to see it)",
+	addCheck("Align and distribute tools (off by default; adds an Align tab, reopen this "
+		 "window to see it)",
 		 state().alignTools, [](bool v) { state().alignTools = v; });
 	addCheck("Pop the Missing Media cleaner at startup when files are missing",
 		 state().missingAutoPop, [](bool v) { state().missingAutoPop = v; });

@@ -76,8 +76,9 @@ Ranked by demand x feasibility for a Qt frontend plugin. Context: #1 idea sitewi
    space evenly across/down (3+ items), center on canvas (h/v/both) for the SELECTED
    sources in the current scene. Works off each item's on-canvas bounding box
    (obs_sceneitem_get_box_transform) so scale/crop/rotation are respected; only translates
-   (never resizes), skips locked items. Settings toggle gates the tab. STILL OPEN: the
-   snap-grid OVERLAY (HARD without our own preview dock).
+   (never resizes), skips locked items. Settings toggle gates the tab, DEFAULT OFF
+   (opt in -- don't force layout design on people; first-run guide points to it).
+   STILL OPEN: the snap-grid OVERLAY (HARD without our own preview dock).
 9. **Projector management** -- remember position/borderless/always-on-top (48+26 votes);
    tie projectors into saved layouts = very on-brand. MEDIUM.
 10. **Studio mode QoL** -- resizable split (35), hide transition panel (28). MEDIUM.

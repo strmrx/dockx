@@ -88,7 +88,7 @@ struct State {
 	bool folderSources = true;         /* source rows under scenes in the folder dock */
 	bool missingAutoPop = false;       /* pop the Missing Media cleaner at startup */
 	bool sceneThumbs = true;           /* live scene previews in the folder grid */
-	bool alignTools = true;            /* the Align + distribute tab */
+	bool alignTools = false;           /* the Align + distribute tab (opt in) */
 
 	int nextId = 1;
 	std::vector<Layout> layouts;

@@ -196,6 +196,15 @@ void showGuide(QWidget *parent)
 		"height chat next to a column of tools finally works. Happy with a "
 		"layout? Save it in Tools &gt; DockX and give it a hotkey.");
 
+	QLabel *optional = new QLabel(
+		"Prefer to keep things simple? DockX stays out of your way. Optional "
+		"extras, like Align &amp; distribute tools for lining sources up on the "
+		"canvas, start switched off. Turn on anything you want any time in "
+		"Tools &gt; DockX &gt; Settings.",
+		dlg);
+	optional->setWordWrap(true);
+	v->addWidget(optional);
+
 	QLabel *more = new QLabel(
 		QString("More help and guides: <a href=\"%1\">strmrx.com/dockx</a>").arg(HELP_URL),
 		dlg);

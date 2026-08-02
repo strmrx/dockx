@@ -114,7 +114,7 @@ void stateLoad()
 	obs_data_set_default_bool(d, "folder_nesting", true);
 	obs_data_set_default_bool(d, "folder_sources", true);
 	obs_data_set_default_bool(d, "scene_thumbs", true);
-	obs_data_set_default_bool(d, "align_tools", true);
+	obs_data_set_default_bool(d, "align_tools", false);
 	obs_data_set_default_int(d, "next_id", 1);
 	obs_data_set_default_int(d, "next_source_dock_id", 1);
 	obs_data_set_default_int(d, "next_loadout_id", 1);
