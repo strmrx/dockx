@@ -10,7 +10,9 @@ GPL v2, see plugin-main.cpp for the full notice.
 #include <plugin-support.h>
 
 #include <QAbstractItemView>
+#include <QBrush>
 #include <QCheckBox>
+#include <QColor>
 #include <QColorDialog>
 #include <QComboBox>
 #include <QCompleter>
@@ -33,9 +35,12 @@ GPL v2, see plugin-main.cpp for the full notice.
 #include <QPushButton>
 #include <QSpinBox>
 #include <QTabWidget>
+#include <QHeaderView>
+#include <QTreeWidget>
 #include <QVBoxLayout>
 
 #include <functional>
+#include <memory>
 
 namespace dockx {
 
@@ -304,7 +309,7 @@ static int promptHotkey(QWidget *parent, const QString &title, QKeySequence &seq
 	return r == QDialog::Rejected ? 0 : r;
 }
 
-void showDialog()
+void showDialog(const QString &initialTab)
 {
 	QMainWindow *main = mainWindow();
 	QDialog dlg(main);
@@ -314,6 +319,119 @@ void showDialog()
 	QVBoxLayout *root = new QVBoxLayout(&dlg);
 	QTabWidget *tabs = new QTabWidget(&dlg);
 	root->addWidget(tabs);
+
+	/* ---------- Find tab (project-wide source search) ---------- */
+	QWidget *findTab = new QWidget();
+	QVBoxLayout *findV = new QVBoxLayout(findTab);
+
+	QLineEdit *findBox = new QLineEdit(findTab);
+	findBox->setPlaceholderText(
+		"Search every source in your project by name, type, or scene");
+	findBox->setClearButtonEnabled(true);
+	findV->addWidget(findBox);
+
+	QTreeWidget *findTree = new QTreeWidget(findTab);
+	findTree->setColumnCount(3);
+	findTree->setHeaderLabels({"Source", "Type", "In scene"});
+	findTree->setRootIsDecorated(false);
+	findTree->setAlternatingRowColors(true);
+	findTree->setSelectionMode(QAbstractItemView::SingleSelection);
+	findTree->setSortingEnabled(true);
+	findTree->sortByColumn(0, Qt::AscendingOrder);
+	findTree->header()->setStretchLastSection(true);
+	findV->addWidget(findTree, 1);
+
+	QLabel *findStatus = new QLabel(findTab);
+	findV->addWidget(findStatus);
+
+	/* the full scan, rebuilt on open and on Refresh; filtered in memory */
+	auto scan = std::make_shared<QList<search::Hit>>();
+
+	auto repopulate = [findTree, findStatus, scan](const QString &qRaw) {
+		const QString q = qRaw.trimmed();
+		findTree->setSortingEnabled(false);
+		findTree->clear();
+		int shown = 0, unused = 0;
+		for (const search::Hit &h : *scan) {
+			const QString loc =
+				h.sceneUuid.isEmpty()
+					? QStringLiteral("(unused)")
+					: (h.groupName.isEmpty()
+						   ? h.sceneName
+						   : h.sceneName + "  ›  " +
+							     h.groupName);
+			if (!q.isEmpty() &&
+			    !h.sourceName.contains(q, Qt::CaseInsensitive) &&
+			    !h.sourceType.contains(q, Qt::CaseInsensitive) &&
+			    !loc.contains(q, Qt::CaseInsensitive))
+				continue;
+			QTreeWidgetItem *it = new QTreeWidgetItem(findTree);
+			it->setText(0, h.sourceName);
+			it->setText(1, h.sourceType);
+			it->setText(2, loc);
+			it->setData(0, Qt::UserRole, h.sceneUuid);
+			it->setData(0, Qt::UserRole + 1, (qlonglong)h.itemId);
+			if (h.sceneUuid.isEmpty()) {
+				it->setForeground(0, QBrush(QColor(150, 150, 150, 160)));
+				it->setForeground(2, QBrush(QColor(150, 150, 150, 160)));
+				unused++;
+			} else if (!h.visible) {
+				it->setForeground(0, QBrush(QColor(150, 150, 150, 140)));
+			}
+			shown++;
+		}
+		findTree->setSortingEnabled(true);
+		for (int c = 0; c < 3; c++)
+			findTree->resizeColumnToContents(c);
+		findStatus->setText(QString("%1 shown · %2 unused source%3")
+					    .arg(shown)
+					    .arg(unused)
+					    .arg(unused == 1 ? "" : "s"));
+	};
+
+	auto rescan = [scan, repopulate, findBox]() {
+		*scan = search::findAll();
+		repopulate(findBox->text());
+	};
+	rescan();
+
+	QObject::connect(findBox, &QLineEdit::textChanged, findTab,
+			 [repopulate](const QString &t) { repopulate(t); });
+
+	auto revealSel = [findTree]() {
+		QTreeWidgetItem *it = findTree->currentItem();
+		if (!it)
+			return;
+		const QString uuid = it->data(0, Qt::UserRole).toString();
+		if (uuid.isEmpty())
+			return; /* an unused source has nowhere to jump to */
+		search::reveal(uuid, it->data(0, Qt::UserRole + 1).toLongLong());
+	};
+	QObject::connect(findTree, &QTreeWidget::itemDoubleClicked, findTab,
+			 [revealSel](QTreeWidgetItem *, int) { revealSel(); });
+
+	QHBoxLayout *findBtns = new QHBoxLayout();
+	QPushButton *revealBtn = new QPushButton("Go to source", findTab);
+	QPushButton *refreshBtn = new QPushButton("Refresh", findTab);
+	findBtns->addWidget(revealBtn);
+	findBtns->addWidget(refreshBtn);
+	findBtns->addStretch(1);
+	findV->addLayout(findBtns);
+	QObject::connect(revealBtn, &QPushButton::clicked, findTab,
+			 [revealSel]() { revealSel(); });
+	QObject::connect(refreshBtn, &QPushButton::clicked, findTab,
+			 [rescan]() { rescan(); });
+
+	QLabel *findHint = new QLabel(
+		"Search every scene in this collection at once. Double-click a "
+		"result (or Go to source) to jump to that scene and select it. "
+		"Sources listed as (unused) are loaded in your project but not "
+		"placed in any scene.",
+		findTab);
+	findHint->setWordWrap(true);
+	findV->addWidget(findHint);
+
+	tabs->addTab(findTab, "Find");
 
 	/* ---------- Layouts tab ---------- */
 	QWidget *layoutsTab = new QWidget();
@@ -1805,6 +1923,14 @@ void showDialog()
 	QObject::connect(closeBtn, &QPushButton::clicked, &dlg, [&dlg]() { dlg.accept(); });
 	bottom->addWidget(closeBtn);
 	root->addLayout(bottom);
+
+	if (!initialTab.isEmpty()) {
+		for (int i = 0; i < tabs->count(); i++)
+			if (tabs->tabText(i) == initialTab) {
+				tabs->setCurrentIndex(i);
+				break;
+			}
+	}
 
 	dlg.exec();
 }

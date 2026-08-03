@@ -117,7 +117,8 @@ off-thesis: encoders, multi-output, NDI, VST, replay buffer.
 - Profile + collection linked switching (demand #12, EASY, extends Auto switch)
 - Cross-collection copy of scenes/sources (demand #3, 149 votes)
 - Reorderable audio mixer (demand #4)
-- Source tagging / bulk ops / find-usages (demand #13)
+- Source tagging / bulk ops / find-usages (demand #13) -- find-usages SHIPPED v0.20
+  (project-wide source search); tagging + bulk ops still open
 - Align + distribute tools -- SHIPPED v0.18 (align edges + space evenly + center on
   canvas, Align tab, dockx-align.cpp; snap-grid overlay still open)
 - Multi-monitor dock manager -- SHIPPED v0.19 (2026-08-01, demand #14 + Joey ask).
@@ -132,6 +133,15 @@ off-thesis: encoders, multi-output, NDI, VST, replay buffer.
   demand -- the elegant recovery for someone with no saved layout to fall back on.
   Auto rescue has a Settings toggle (default ON). Handles 2, 3, N monitors. New file
   dockx-monitors.cpp; setting auto_rescue persisted in dockx.json.
+- Project-wide source search -- SHIPPED v0.20 (2026-08-03, demand #13 find-usages +
+  Joey ask). New Find tab (first tab in Tools > DockX) + a "DockX: Find source" Tools
+  menu item that opens straight to it. One search box scans every scene in the collection
+  at once (group children + nested scenes descended), matching source name, type, or
+  scene. Results are name / type / in-scene (with a scene › group breadcrumb when nested);
+  double-click or "Go to source" switches to that scene and selects the item on canvas.
+  Also surfaces sources that are loaded but placed in no scene (listed "(unused)") -- OBS
+  itself can't tell you this. In-memory filter over one scan (Refresh re-scans). New file
+  dockx-search.cpp (search::findAll + search::reveal); no persisted state.
 - Projector management (#9), multiview upgrades (#6), studio mode QoL (#10),
   collection zip export/import (#11)
 

@@ -80,6 +80,11 @@ static void tools_menu_clicked(void *)
 	dockx::showDialog();
 }
 
+static void find_menu_clicked(void *)
+{
+	dockx::showDialog("Find");
+}
+
 static void missing_menu_clicked(void *)
 {
 	dockx::missing::showDialog(nullptr);
@@ -104,6 +109,7 @@ bool obs_module_load(void)
 	dockx::sourcedocks::createFromState();
 	obs_frontend_add_event_callback(on_frontend_event, nullptr);
 	obs_frontend_add_tools_menu_item("DockX", tools_menu_clicked, nullptr);
+	obs_frontend_add_tools_menu_item("DockX: Find source", find_menu_clicked, nullptr);
 	obs_frontend_add_tools_menu_item("DockX: Missing media", missing_menu_clicked,
 					 nullptr);
 	obs_frontend_add_tools_menu_item("DockX: Revert dock layout", revert_menu_clicked,

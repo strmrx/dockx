@@ -150,7 +150,7 @@ void applyMixerOrder();         /* reorder the native Audio Mixer per state */
 QStringList mixerSourceNames(); /* mixer rows in current visual order */
 } // namespace panels
 
-void showDialog();
+void showDialog(const QString &initialTab = QString());
 
 /* the Missing Media cleaner: find sources whose file is gone and get rid of
    them (or relink), the delete button OBS's own missing files dialog lacks */
@@ -295,6 +295,25 @@ int rescueStrayDocks();  /* reflow every off screen dock home; returns moved */
 void validateVisible();  /* call after restoreState so no dock lands off screen */
 void installWatch();     /* listen for monitor unplug; call once after load */
 } // namespace monitors
+
+/* project-wide source search: one index of every source across every scene in
+   the collection (group children + nested scenes included), so a single box can
+   find any source and jump to it. Also surfaces sources loaded but in no scene */
+namespace search {
+struct Hit {
+	QString sourceName;
+	QString sourceType; /* friendly type: "Browser", "Image", "Scene", "Group" */
+	bool isGroup = false;
+	QString sceneUuid;  /* empty = source is in no scene (unused) */
+	QString sceneName;
+	QString groupName;  /* containing group, if nested; else empty */
+	long long itemId = 0; /* obs_sceneitem_get_id, for reveal */
+	bool visible = true;
+	bool locked = false;
+};
+QList<Hit> findAll(); /* every source occurrence across all scenes + unused inputs */
+bool reveal(const QString &sceneUuid, long long itemId); /* switch scene + select */
+} // namespace search
 
 /* the dock layout guide: illustrated first-run walkthrough of dock dragging
    (title bar grab, edge drop = split, center drop = tabs, DockX columns) */
