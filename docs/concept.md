@@ -137,14 +137,21 @@ off-thesis: encoders, multi-output, NDI, VST, replay buffer.
 
 ## Build order (Joey, 2026-08-01)
 1. Multi-monitor dock manager -- DONE v0.19.
-2. **NEXT: "Better OBS Blade"** -- a phone/tablet controller for OBS. Starts with DEEP
-   RESEARCH: what's missing in OBS Blade + rival controllers (Deckboard, Touch Portal,
-   the OBS remote apps), what streamers are asking for that nobody ships, and killer
-   features to invent. Folds in a tablet Stream Deck for users, and connecting to
-   whatever Willy already built (this is ControlX territory -- ControlX Ph2 = the Stream
-   Deck relay; likely built AS ControlX mobile, powered by the relay, not a new silo).
-   A mobile app is NOT an OBS plugin, so it is NOT bound by GPL -- can be closed-source
-   and paid.
+2. **NEXT: "Better OBS Blade"** -- a phone/tablet controller for OBS. RESEARCH DONE
+   2026-08-01 (3 verified deep-research passes -> `docs/obs-controller-research.md`).
+   Verdict: the standalone feature set is now commoditized (a fresh rival, Control OBS
+   v0.1.2 July 2026, already ships hybrid dashboard+grid, panic mute, VU meters, health,
+   and remote-over-internet with no port forwarding). The defensible play is NOT a
+   standalone "better Blade" -- it's the INTEGRATED version: a cross-platform tablet-first
+   HYBRID that is the mobile face of the StrmrX ecosystem, paired with the DockX plugin
+   (zero-setup pairing brokered by the account -- kills the #1 pain; plus push health
+   alerts to the phone even when the app is closed, which websocket-only rivals can't do).
+   Recommended: build AS ControlX mobile (ControlX Ph2 = the relay realized), not a new
+   silo. Money: plugin free funnel; paid = server-side (relay, alerts, sync, OBS-anywhere
+   backup, metered AI); Aitum-proven ~$5/mo band. A mobile app is NOT GPL-bound.
+   **OPEN DECISION (Joey):** ControlX-mobile+DockX vs standalone vs teardown-first vs
+   shelve. Also PENDING: dedicated AI-features research pass (got dropped) + a hands-on
+   teardown of Control OBS/ProducerPad before committing.
 3. **AFTER: cloud sync + "Your OBS anywhere" + AI metering** (the paid layer below),
    plus a deeper monetization research pass on everything else DockX could earn from
    once it pulls real traffic. Server-side value = fork-proof; that is the business.
