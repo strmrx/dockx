@@ -348,13 +348,18 @@ void showDialog(const QString &initialTab)
 
 	/* the full scan, rebuilt on open and on Refresh; filtered in memory */
 	auto scan = std::make_shared<QList<search::Hit>>();
+	/* sources deleted this session: hide them even if a live ref still
+	   lingers (OBS won't save a removed source, so it is gone for good) */
+	auto removed = std::make_shared<QSet<QString>>();
 
-	auto repopulate = [findTree, findStatus, scan](const QString &qRaw) {
+	auto repopulate = [findTree, findStatus, scan, removed](const QString &qRaw) {
 		const QString q = qRaw.trimmed();
 		findTree->setSortingEnabled(false);
 		findTree->clear();
 		int shown = 0, unused = 0;
 		for (const search::Hit &h : *scan) {
+			if (removed->contains(h.sourceName))
+				continue;
 			const QString loc =
 				h.sceneUuid.isEmpty()
 					? QStringLiteral("(unused)")
@@ -441,7 +446,7 @@ void showDialog(const QString &initialTab)
 		rescan();
 	};
 
-	auto doDelete = [findTree, scan, rescan]() {
+	auto doDelete = [findTree, scan, removed, rescan]() {
 		QTreeWidgetItem *it = findTree->currentItem();
 		if (!it)
 			return;
@@ -467,14 +472,27 @@ void showDialog(const QString &initialTab)
 					 QMessageBox::Yes | QMessageBox::No,
 					 QMessageBox::No) != QMessageBox::Yes)
 			return;
-		if (!search::deleteSource(name))
-			QMessageBox::information(
-				findTree, "DockX",
-				QString("OBS still has \"%1\" in use, so it could not "
-					"be fully removed. It may be open in a dock, a "
-					"browser panel, or another tool. Close anything "
-					"using it and try again.")
-					.arg(name));
+		const bool freed = search::deleteSource(name);
+		/* removed from the project either way (OBS won't save it), so drop it
+		   from the list now; if a live ref lingers, say what holds it */
+		removed->insert(name);
+		if (!freed) {
+			const QString who = search::describeHolders(name);
+			QString info =
+				QString("\"%1\" has been removed from your project and "
+					"will not come back after you restart OBS. ")
+					.arg(name);
+			if (!who.isEmpty())
+				info += "It is still open this session because " + who +
+					". Fix that and it clears right away, or just "
+					"restart OBS.";
+			else
+				info += "Something in this session is still holding it "
+					"live, usually a browser dock, a Streamer.bot or "
+					"websocket link, or another plugin. It clears on "
+					"its own when you restart OBS.";
+			QMessageBox::information(findTree, "DockX", info);
+		}
 		rescan();
 	};
 

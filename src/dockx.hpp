@@ -316,6 +316,7 @@ bool reveal(const QString &sceneUuid, long long itemId);       /* switch scene +
 void openProperties(const QString &sourceName);                /* open its OBS Properties */
 bool removeFromScene(const QString &sceneUuid, long long itemId); /* drop just this scene item */
 bool deleteSource(const QString &sourceName); /* remove from whole project; true if fully gone */
+QString describeHolders(const QString &sourceName); /* best-effort: what still holds it live */
 } // namespace search
 
 /* the dock layout guide: illustrated first-run walkthrough of dock dragging

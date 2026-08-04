@@ -233,5 +233,61 @@ bool deleteSource(const QString &sourceName)
 	return true;
 }
 
+namespace {
+struct FilterParentCtx {
+	QString name;
+	QString parent;
+};
+static bool findFilterParent(void *param, obs_source_t *src)
+{
+	auto *ctx = static_cast<FilterParentCtx *>(param);
+	obs_source_t *f =
+		obs_source_get_filter_by_name(src, ctx->name.toUtf8().constData());
+	if (f) {
+		ctx->parent = QString::fromUtf8(obs_source_get_name(src));
+		obs_source_release(f);
+		return false;
+	}
+	return true;
+}
+} // namespace
+
+QString describeHolders(const QString &sourceName)
+{
+	QStringList reasons;
+
+	/* our own live source docks (the one holder DockX itself can create) */
+	for (const SourceDockEntry &e : state().sourceDocks)
+		if (e.kind == sourcedocks::KIND_SOURCE &&
+		    e.sourceName == sourceName) {
+			reasons << "a DockX live dock is showing it (Tools > DockX > "
+				   "Source docks, remove that dock)";
+			break;
+		}
+
+	/* assigned as a global audio device in Settings > Audio */
+	for (uint32_t ch = 0; ch < MAX_CHANNELS; ch++) {
+		obs_source_t *s = obs_get_output_source(ch);
+		if (!s)
+			continue;
+		const char *n = obs_source_get_name(s);
+		if (n && QString::fromUtf8(n) == sourceName)
+			reasons << "it is assigned as a global audio device (OBS "
+				   "Settings > Audio, set it to Disabled)";
+		obs_source_release(s);
+	}
+
+	/* used as a filter on another source */
+	FilterParentCtx fc;
+	fc.name = sourceName;
+	obs_enum_sources(findFilterParent, &fc);
+	if (!fc.parent.isEmpty())
+		reasons << QString("it is a filter on \"%1\" (open that source's "
+				   "Filters and remove it)")
+				   .arg(fc.parent);
+
+	return reasons.join("; ");
+}
+
 } // namespace search
 } // namespace dockx

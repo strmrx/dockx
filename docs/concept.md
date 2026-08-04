@@ -150,6 +150,10 @@ off-thesis: encoders, multi-output, NDI, VST, replay buffer.
   Delete from project); Remove from scene drops one scene item (obs_sceneitem_remove)
   without leaving DockX; delete now verifies (re-lookup after obs_source_remove) and
   tells the user honestly when a source can't be freed because something still holds it.
+  v0.20.3: OBS skips removed sources on save (obs.c:2510), so delete is durable even if a
+  live ref lingers -- deleted sources now hide from the list at once (per-session removed
+  set), and search::describeHolders names what still holds a source (DockX dock / global
+  audio assignment / filter parent) with the fix, honest fallback for un-introspectable refs.
 - Projector management (#9), multiview upgrades (#6), studio mode QoL (#10),
   collection zip export/import (#11)
 
