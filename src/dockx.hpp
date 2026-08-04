@@ -312,7 +312,10 @@ struct Hit {
 	bool locked = false;
 };
 QList<Hit> findAll(); /* every source occurrence across all scenes + unused inputs */
-bool reveal(const QString &sceneUuid, long long itemId); /* switch scene + select */
+bool reveal(const QString &sceneUuid, long long itemId);       /* switch scene + select */
+void openProperties(const QString &sourceName);                /* open its OBS Properties */
+bool removeFromScene(const QString &sceneUuid, long long itemId); /* drop just this scene item */
+bool deleteSource(const QString &sourceName); /* remove from whole project; true if fully gone */
 } // namespace search
 
 /* the dock layout guide: illustrated first-run walkthrough of dock dragging

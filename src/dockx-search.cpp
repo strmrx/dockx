@@ -179,5 +179,59 @@ bool reveal(const QString &sceneUuid, long long itemId)
 	return ok;
 }
 
+void openProperties(const QString &sourceName)
+{
+	obs_source_t *src =
+		obs_get_source_by_name(sourceName.toUtf8().constData());
+	if (!src)
+		return;
+	obs_frontend_open_source_properties(src);
+	obs_source_release(src);
+}
+
+bool removeFromScene(const QString &sceneUuid, long long itemId)
+{
+	if (sceneUuid.isEmpty())
+		return false;
+	obs_source_t *sceneSrc =
+		obs_get_source_by_uuid(sceneUuid.toUtf8().constData());
+	if (!sceneSrc)
+		return false;
+	obs_scene_t *scene = obs_scene_from_source(sceneSrc);
+	bool ok = false;
+	if (scene) {
+		FindCtx fc;
+		fc.id = itemId;
+		fc.hit = nullptr;
+		obs_scene_enum_items(scene, findEnum, &fc);
+		if (fc.hit) {
+			obs_sceneitem_remove(fc.hit);
+			ok = true;
+		}
+	}
+	obs_source_release(sceneSrc);
+	return ok;
+}
+
+bool deleteSource(const QString &sourceName)
+{
+	obs_source_t *src =
+		obs_get_source_by_name(sourceName.toUtf8().constData());
+	if (!src)
+		return true; /* already gone */
+	obs_source_remove(src);
+	obs_source_release(src);
+	/* obs_source_destroy synchronously unlinks a source from the public list
+	   the instant its last ref drops, so a name lookup now tells us for sure
+	   whether it truly went away or something else still holds it */
+	obs_source_t *check =
+		obs_get_source_by_name(sourceName.toUtf8().constData());
+	if (check) {
+		obs_source_release(check);
+		return false;
+	}
+	return true;
+}
+
 } // namespace search
 } // namespace dockx

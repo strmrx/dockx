@@ -30,7 +30,9 @@ GPL v2, see plugin-main.cpp for the full notice.
 #include <QLabel>
 #include <QLineEdit>
 #include <QListWidget>
+#include <QAction>
 #include <QMainWindow>
+#include <QMenu>
 #include <QMessageBox>
 #include <QPushButton>
 #include <QSpinBox>
@@ -398,40 +400,52 @@ void showDialog(const QString &initialTab)
 	QObject::connect(findBox, &QLineEdit::textChanged, findTab,
 			 [repopulate](const QString &t) { repopulate(t); });
 
-	auto openProps = [findTree]() {
+	auto doProps = [findTree]() {
 		QTreeWidgetItem *it = findTree->currentItem();
-		if (!it)
-			return;
-		obs_source_t *src =
-			obs_get_source_by_name(it->text(0).toUtf8().constData());
-		if (!src)
-			return;
-		obs_frontend_open_source_properties(src);
-		obs_source_release(src);
+		if (it)
+			search::openProperties(it->text(0));
 	};
 
 	/* placed source -> jump to it; orphan (no scene) -> show what it is */
-	auto goToOrInspect = [findTree, openProps]() {
+	auto goToOrInspect = [findTree, doProps]() {
 		QTreeWidgetItem *it = findTree->currentItem();
 		if (!it)
 			return;
 		const QString uuid = it->data(0, Qt::UserRole).toString();
 		if (uuid.isEmpty()) {
-			openProps();
+			doProps();
 			return;
 		}
 		search::reveal(uuid, it->data(0, Qt::UserRole + 1).toLongLong());
 	};
 
-	auto deleteSel = [findTree, scan, rescan]() {
+	/* drop the source from just the one scene this row represents */
+	auto doRemoveFromScene = [findTree, rescan]() {
+		QTreeWidgetItem *it = findTree->currentItem();
+		if (!it)
+			return;
+		const QString uuid = it->data(0, Qt::UserRole).toString();
+		if (uuid.isEmpty())
+			return; /* not placed in any scene */
+		if (QMessageBox::question(
+			    findTree, "DockX",
+			    QString("Remove \"%1\" from the scene \"%2\"? The source "
+				    "stays in your project and in any other scenes it "
+				    "is in.")
+				    .arg(it->text(0), it->text(2)),
+			    QMessageBox::Yes | QMessageBox::No,
+			    QMessageBox::No) != QMessageBox::Yes)
+			return;
+		search::removeFromScene(uuid,
+					it->data(0, Qt::UserRole + 1).toLongLong());
+		rescan();
+	};
+
+	auto doDelete = [findTree, scan, rescan]() {
 		QTreeWidgetItem *it = findTree->currentItem();
 		if (!it)
 			return;
 		const QString name = it->text(0);
-		obs_source_t *src =
-			obs_get_source_by_name(name.toUtf8().constData());
-		if (!src)
-			return;
 		QSet<QString> sceneSet;
 		for (const search::Hit &h : *scan)
 			if (h.sourceName == name && !h.sceneUuid.isEmpty())
@@ -451,44 +465,77 @@ void showDialog(const QString &initialTab)
 					  .arg(scenes == 1 ? "" : "s");
 		if (QMessageBox::warning(findTree, "DockX", msg,
 					 QMessageBox::Yes | QMessageBox::No,
-					 QMessageBox::No) != QMessageBox::Yes) {
-			obs_source_release(src);
+					 QMessageBox::No) != QMessageBox::Yes)
 			return;
-		}
-		obs_source_remove(src);
-		obs_source_release(src);
+		if (!search::deleteSource(name))
+			QMessageBox::information(
+				findTree, "DockX",
+				QString("OBS still has \"%1\" in use, so it could not "
+					"be fully removed. It may be open in a dock, a "
+					"browser panel, or another tool. Close anything "
+					"using it and try again.")
+					.arg(name));
 		rescan();
 	};
 
 	QObject::connect(findTree, &QTreeWidget::itemDoubleClicked, findTab,
 			 [goToOrInspect](QTreeWidgetItem *, int) { goToOrInspect(); });
 
+	/* right-click a result for the full action set */
+	findTree->setContextMenuPolicy(Qt::CustomContextMenu);
+	QObject::connect(
+		findTree, &QTreeWidget::customContextMenuRequested, findTab,
+		[findTree, goToOrInspect, doProps, doRemoveFromScene,
+		 doDelete](const QPoint &pos) {
+			QTreeWidgetItem *it = findTree->itemAt(pos);
+			if (!it)
+				return;
+			findTree->setCurrentItem(it);
+			const bool placed =
+				!it->data(0, Qt::UserRole).toString().isEmpty();
+			QMenu menu(findTree);
+			if (placed) {
+				QObject::connect(menu.addAction("Go to source"),
+						 &QAction::triggered, findTree,
+						 [goToOrInspect]() { goToOrInspect(); });
+			}
+			QObject::connect(menu.addAction("Properties"),
+					 &QAction::triggered, findTree,
+					 [doProps]() { doProps(); });
+			if (placed) {
+				QObject::connect(
+					menu.addAction(
+						QString("Remove from scene \"%1\"")
+							.arg(it->text(2))),
+					&QAction::triggered, findTree,
+					[doRemoveFromScene]() { doRemoveFromScene(); });
+			}
+			menu.addSeparator();
+			QObject::connect(menu.addAction("Delete source from project"),
+					 &QAction::triggered, findTree,
+					 [doDelete]() { doDelete(); });
+			menu.exec(findTree->viewport()->mapToGlobal(pos));
+		});
+
 	QHBoxLayout *findBtns = new QHBoxLayout();
 	QPushButton *revealBtn = new QPushButton("Go to source", findTab);
-	QPushButton *propsBtn = new QPushButton("Properties", findTab);
-	QPushButton *findDeleteBtn = new QPushButton("Delete source", findTab);
 	QPushButton *refreshBtn = new QPushButton("Refresh", findTab);
 	findBtns->addWidget(revealBtn);
-	findBtns->addWidget(propsBtn);
-	findBtns->addWidget(findDeleteBtn);
 	findBtns->addStretch(1);
 	findBtns->addWidget(refreshBtn);
 	findV->addLayout(findBtns);
 	QObject::connect(revealBtn, &QPushButton::clicked, findTab,
 			 [goToOrInspect]() { goToOrInspect(); });
-	QObject::connect(propsBtn, &QPushButton::clicked, findTab,
-			 [openProps]() { openProps(); });
-	QObject::connect(findDeleteBtn, &QPushButton::clicked, findTab,
-			 [deleteSel]() { deleteSel(); });
 	QObject::connect(refreshBtn, &QPushButton::clicked, findTab,
 			 [rescan]() { rescan(); });
 
 	QLabel *findHint = new QLabel(
 		"Search every scene in this collection at once. Double-click a "
-		"result to jump to that scene and select it. Sources listed as "
+		"result to jump to that scene and select it. Right-click any "
+		"result for more: open its Properties, remove it from just that "
+		"scene, or delete it from the whole project. Sources listed as "
 		"(unused) are loaded in your project but not placed in any scene "
-		"(OBS can't show these); use Properties to see what one is, or "
-		"Delete source to clear it out.",
+		"(OBS can't show these), so right-click to identify or clear them.",
 		findTab);
 	findHint->setWordWrap(true);
 	findV->addWidget(findHint);

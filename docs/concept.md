@@ -146,6 +146,10 @@ off-thesis: encoders, multi-output, NDI, VST, replay buffer.
   what double-click does on an orphan since there's no scene to jump to) and Delete
   source (remove it from the collection; confirm shows scene-use count). Makes the
   (unused) list a real cleanup tool for orphaned sources OBS can't otherwise show.
+  v0.20.2: right-click context menu (Go to source / Properties / Remove from scene /
+  Delete from project); Remove from scene drops one scene item (obs_sceneitem_remove)
+  without leaving DockX; delete now verifies (re-lookup after obs_source_remove) and
+  tells the user honestly when a source can't be freed because something still holds it.
 - Projector management (#9), multiview upgrades (#6), studio mode QoL (#10),
   collection zip export/import (#11)
 
