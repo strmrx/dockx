@@ -398,35 +398,97 @@ void showDialog(const QString &initialTab)
 	QObject::connect(findBox, &QLineEdit::textChanged, findTab,
 			 [repopulate](const QString &t) { repopulate(t); });
 
-	auto revealSel = [findTree]() {
+	auto openProps = [findTree]() {
+		QTreeWidgetItem *it = findTree->currentItem();
+		if (!it)
+			return;
+		obs_source_t *src =
+			obs_get_source_by_name(it->text(0).toUtf8().constData());
+		if (!src)
+			return;
+		obs_frontend_open_source_properties(src);
+		obs_source_release(src);
+	};
+
+	/* placed source -> jump to it; orphan (no scene) -> show what it is */
+	auto goToOrInspect = [findTree, openProps]() {
 		QTreeWidgetItem *it = findTree->currentItem();
 		if (!it)
 			return;
 		const QString uuid = it->data(0, Qt::UserRole).toString();
-		if (uuid.isEmpty())
-			return; /* an unused source has nowhere to jump to */
+		if (uuid.isEmpty()) {
+			openProps();
+			return;
+		}
 		search::reveal(uuid, it->data(0, Qt::UserRole + 1).toLongLong());
 	};
+
+	auto deleteSel = [findTree, scan, rescan]() {
+		QTreeWidgetItem *it = findTree->currentItem();
+		if (!it)
+			return;
+		const QString name = it->text(0);
+		obs_source_t *src =
+			obs_get_source_by_name(name.toUtf8().constData());
+		if (!src)
+			return;
+		QSet<QString> sceneSet;
+		for (const search::Hit &h : *scan)
+			if (h.sourceName == name && !h.sceneUuid.isEmpty())
+				sceneSet.insert(h.sceneUuid);
+		const int scenes = sceneSet.size();
+		const QString msg =
+			scenes == 0
+				? QString("\"%1\" is not used in any scene. Delete it "
+					  "from your project permanently? This cannot "
+					  "be undone.")
+					  .arg(name)
+				: QString("\"%1\" is used in %2 scene%3. Deleting it "
+					  "removes it from all of them permanently. "
+					  "This cannot be undone.\n\nDelete it?")
+					  .arg(name)
+					  .arg(scenes)
+					  .arg(scenes == 1 ? "" : "s");
+		if (QMessageBox::warning(findTree, "DockX", msg,
+					 QMessageBox::Yes | QMessageBox::No,
+					 QMessageBox::No) != QMessageBox::Yes) {
+			obs_source_release(src);
+			return;
+		}
+		obs_source_remove(src);
+		obs_source_release(src);
+		rescan();
+	};
+
 	QObject::connect(findTree, &QTreeWidget::itemDoubleClicked, findTab,
-			 [revealSel](QTreeWidgetItem *, int) { revealSel(); });
+			 [goToOrInspect](QTreeWidgetItem *, int) { goToOrInspect(); });
 
 	QHBoxLayout *findBtns = new QHBoxLayout();
 	QPushButton *revealBtn = new QPushButton("Go to source", findTab);
+	QPushButton *propsBtn = new QPushButton("Properties", findTab);
+	QPushButton *findDeleteBtn = new QPushButton("Delete source", findTab);
 	QPushButton *refreshBtn = new QPushButton("Refresh", findTab);
 	findBtns->addWidget(revealBtn);
-	findBtns->addWidget(refreshBtn);
+	findBtns->addWidget(propsBtn);
+	findBtns->addWidget(findDeleteBtn);
 	findBtns->addStretch(1);
+	findBtns->addWidget(refreshBtn);
 	findV->addLayout(findBtns);
 	QObject::connect(revealBtn, &QPushButton::clicked, findTab,
-			 [revealSel]() { revealSel(); });
+			 [goToOrInspect]() { goToOrInspect(); });
+	QObject::connect(propsBtn, &QPushButton::clicked, findTab,
+			 [openProps]() { openProps(); });
+	QObject::connect(findDeleteBtn, &QPushButton::clicked, findTab,
+			 [deleteSel]() { deleteSel(); });
 	QObject::connect(refreshBtn, &QPushButton::clicked, findTab,
 			 [rescan]() { rescan(); });
 
 	QLabel *findHint = new QLabel(
 		"Search every scene in this collection at once. Double-click a "
-		"result (or Go to source) to jump to that scene and select it. "
-		"Sources listed as (unused) are loaded in your project but not "
-		"placed in any scene.",
+		"result to jump to that scene and select it. Sources listed as "
+		"(unused) are loaded in your project but not placed in any scene "
+		"(OBS can't show these); use Properties to see what one is, or "
+		"Delete source to clear it out.",
 		findTab);
 	findHint->setWordWrap(true);
 	findV->addWidget(findHint);

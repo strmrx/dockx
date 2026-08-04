@@ -142,6 +142,10 @@ off-thesis: encoders, multi-output, NDI, VST, replay buffer.
   Also surfaces sources that are loaded but placed in no scene (listed "(unused)") -- OBS
   itself can't tell you this. In-memory filter over one scan (Refresh re-scans). New file
   dockx-search.cpp (search::findAll + search::reveal); no persisted state.
+  v0.20.1: Find results are actionable -- Properties (open any source's settings, and
+  what double-click does on an orphan since there's no scene to jump to) and Delete
+  source (remove it from the collection; confirm shows scene-use count). Makes the
+  (unused) list a real cleanup tool for orphaned sources OBS can't otherwise show.
 - Projector management (#9), multiview upgrades (#6), studio mode QoL (#10),
   collection zip export/import (#11)
 
