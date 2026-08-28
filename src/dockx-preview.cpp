@@ -60,9 +60,15 @@ void apply()
 	if (!on && !obs_frontend_preview_program_mode_active())
 		obs_frontend_set_preview_enabled(true);
 	/* collapsed with no visible video dock = a video-less OBS; surface any
-	   Program/Preview dock (covers boot, where no prompt is possible) */
-	if (on)
+	   editable Preview or Program/Preview dock (covers boot, where no prompt
+	   is possible). The editable dock is the real replacement: it renders the
+	   scene straight, so it shows video off-stream (a Program dock goes black
+	   when the preview is disabled and nothing is live) AND it stays editable */
+	if (on) {
+		const bool editShown = editpreview::showDocks();
 		sourcedocks::showVideoDocks();
+		(void)editShown;
+	}
 	obs_log(LOG_INFO, "main preview %s", on ? "collapsed" : "expanded");
 }
 
@@ -77,20 +83,21 @@ void setCollapsed(bool on)
 
 void offerVideoDock(QWidget *parent)
 {
-	/* a video dock the user cannot see may as well not exist: if any
-	   Program/Preview dock is registered, surface it (OBS keeps a closed
-	   dock closed forever) instead of leaving a video-less window */
-	if (sourcedocks::showVideoDocks())
+	/* a video dock the user cannot see may as well not exist: if any editable
+	   Preview or Program/Preview dock is registered, surface it (OBS keeps a
+	   closed dock closed forever) instead of leaving a video-less window */
+	if (editpreview::showDocks() || sourcedocks::showVideoDocks())
 		return;
 	const auto r = QMessageBox::question(
 		parent, "DockX",
 		"The main preview is now collapsed, and you have no video dock "
-		"yet.\n\nAdd a Program dock so you can still see what your "
-		"viewers see? It is a normal dock: place it, resize it, or "
-		"close it like any other.",
+		"yet.\n\nAdd an editable preview so you can still see your scene "
+		"and drag your sources around? It is a normal dock: place it, "
+		"resize it, or close it like any other. Bring the main preview "
+		"back any time from Tools, DockX: Collapse or expand preview.",
 		QMessageBox::Yes | QMessageBox::No, QMessageBox::Yes);
 	if (r == QMessageBox::Yes)
-		sourcedocks::addDock(sourcedocks::KIND_PROGRAM, QString());
+		editpreview::addDock();
 }
 
 void toggleWithPrompt(QWidget *parent)

@@ -1443,6 +1443,13 @@ void showDialog(const QString &initialTab)
 		for (const SourceDockEntry &e : state().sourceDocks) {
 			QListWidgetItem *it = new QListWidgetItem(sdTitle(e), sdListW);
 			it->setData(Qt::UserRole, e.id);
+			it->setData(Qt::UserRole + 1, false); /* not an editable dock */
+		}
+		for (int id : editpreview::dockIds()) {
+			QListWidgetItem *it =
+				new QListWidgetItem("Editable preview", sdListW);
+			it->setData(Qt::UserRole, id);
+			it->setData(Qt::UserRole + 1, true); /* editable dock */
 		}
 	};
 	sdReload();
@@ -1461,7 +1468,11 @@ void showDialog(const QString &initialTab)
 		QListWidgetItem *it = sdListW->currentItem();
 		if (!it)
 			return;
-		sourcedocks::removeDock(it->data(Qt::UserRole).toInt());
+		const int id = it->data(Qt::UserRole).toInt();
+		if (it->data(Qt::UserRole + 1).toBool())
+			editpreview::removeDock(id);
+		else
+			sourcedocks::removeDock(id);
 		sdReload();
 	});
 
@@ -1530,6 +1541,15 @@ void showDialog(const QString &initialTab)
 	outRow->addStretch(1);
 	ag->addLayout(outRow);
 
+	QHBoxLayout *editRow = new QHBoxLayout();
+	QLabel *editLbl = new QLabel("Editable", addGroup);
+	editLbl->setMinimumWidth(60);
+	QPushButton *editBtn = new QPushButton("Editable preview (drag sources)", addGroup);
+	editRow->addWidget(editLbl);
+	editRow->addWidget(editBtn);
+	editRow->addStretch(1);
+	ag->addLayout(editRow);
+
 	sdv->addWidget(addGroup);
 
 	QObject::connect(addSceneBtn, &QPushButton::clicked, sdTab,
@@ -1548,12 +1568,18 @@ void showDialog(const QString &initialTab)
 		sourcedocks::addDock(sourcedocks::KIND_PREVIEW, QString());
 		sdReload();
 	});
+	QObject::connect(editBtn, &QPushButton::clicked, sdTab, [sdReload]() {
+		editpreview::addDock();
+		sdReload();
+	});
 
 	QLabel *sdHint = new QLabel(
 		"Each dock shows that source, scene, or output live. Audio sources get "
 		"volume and mute controls; browser sources are clickable right in the "
-		"dock. Find them in the Docks menu; their position saves with your dock "
-		"layouts.",
+		"dock. An editable preview shows your current scene and lets you click "
+		"a source and drag it, with snapping, right in the dock, so you can "
+		"edit even with the main preview collapsed. Find them in the Docks "
+		"menu; their position saves with your dock layouts.",
 		sdTab);
 	sdHint->setWordWrap(true);
 	sdv->addWidget(sdHint);

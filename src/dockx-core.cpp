@@ -165,6 +165,20 @@ void stateLoad()
 				     .split('\n', Qt::SkipEmptyParts);
 	g_state.nextId = (int)obs_data_get_int(d, "next_id");
 	g_state.nextSourceDockId = (int)obs_data_get_int(d, "next_source_dock_id");
+	g_state.nextEditDockId = (int)obs_data_get_int(d, "next_edit_dock_id");
+
+	obs_data_array_t *edocks = obs_data_get_array(d, "edit_docks");
+	if (edocks) {
+		const size_t n = obs_data_array_count(edocks);
+		for (size_t i = 0; i < n; i++) {
+			obs_data_t *o = obs_data_array_item(edocks, i);
+			const int id = (int)obs_data_get_int(o, "id");
+			if (id > 0)
+				g_state.editDocks.push_back(id);
+			obs_data_release(o);
+		}
+		obs_data_array_release(edocks);
+	}
 
 	obs_data_array_t *sdocks = obs_data_get_array(d, "source_docks");
 	if (sdocks) {
@@ -341,6 +355,17 @@ void stateSave()
 			    g_state.mixerOrder.join(QChar('\n')).toUtf8().constData());
 	obs_data_set_int(d, "next_id", g_state.nextId);
 	obs_data_set_int(d, "next_source_dock_id", g_state.nextSourceDockId);
+	obs_data_set_int(d, "next_edit_dock_id", g_state.nextEditDockId);
+
+	obs_data_array_t *edocks = obs_data_array_create();
+	for (int id : g_state.editDocks) {
+		obs_data_t *o = obs_data_create();
+		obs_data_set_int(o, "id", id);
+		obs_data_array_push_back(edocks, o);
+		obs_data_release(o);
+	}
+	obs_data_set_array(d, "edit_docks", edocks);
+	obs_data_array_release(edocks);
 
 	obs_data_array_t *sdocks = obs_data_array_create();
 	for (const SourceDockEntry &e : g_state.sourceDocks) {

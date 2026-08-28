@@ -171,11 +171,18 @@ off-thesis: encoders, multi-output, NDI, VST, replay buffer.
   now also flips obs_frontend_set_preview_enabled, the same switch as Disable Preview.
   Caveat that drives the next item: a Program view is view-only, so a collapsed preview
   loses click-drag scene editing -- the editable Preview dock below is the real payoff.
-- **Fully interactive (editable) Preview dock** (Joey 2026-08-07). Rebuild OBS's canvas
-  editing inside a DockX dock: scene-item hit-testing, transform handles, move/resize/
-  rotate, snapping -- the interaction that today lives only in OBS's one main preview
-  widget (dockx-sourcedocks.cpp currently renders view-only + forwards clicks into a
-  source, no scene-item editing). Substantial. Unlocks multiple editable previews at once,
+- **Fully interactive (editable) Preview dock** (Joey 2026-08-07) -- FIRST SLICE SHIPPED
+  v0.22.0 (2026-08-28). Rebuild OBS's canvas editing inside a DockX dock: the interaction
+  that today lives only in OBS's one main preview widget. New file dockx-editpreview.cpp
+  renders the current scene through its own obs_display (so it shows video whether or not
+  the main preview is enabled -- a passive Program dock goes black off-stream, which is why
+  collapse now surfaces/offers THIS instead) and rebuilds the editing on top: click to
+  hit-test the topmost source under the cursor and select it (syncs OBS selection),
+  drag to move it (single or multi-select), snap the selection bbox to the canvas edges +
+  center with live snap guide lines. Editable docks persist (state edit_docks), add via
+  Tools "DockX: Add editable preview" or Source docks tab, manage/remove in that tab.
+  STILL OPEN (next slices): transform handles (resize), rotate, per-item snapping to other
+  sources, studio-mode preview-scene editing. Unlocks multiple editable previews at once,
   a per-scene "edit this scene" dock, and custom on-canvas guides. The real payoff of the
   collapse-preview work.
 - **Starter layout gallery / one-click presets** (Joey 2026-08-07) -- headline onboarding.

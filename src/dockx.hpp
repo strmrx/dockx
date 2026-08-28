@@ -104,6 +104,8 @@ struct State {
 	QByteArray undoState;                 /* layout snapshot taken before the last apply */
 	std::vector<SourceDockEntry> sourceDocks;
 	int nextSourceDockId = 1;
+	std::vector<int> editDocks; /* ids of the editable Preview docks */
+	int nextEditDockId = 1;
 	QStringList mixerOrder; /* custom Audio Mixer order (source names, top first) */
 	std::vector<SourceLoadout> loadouts;
 	int nextLoadoutId = 1;
@@ -195,6 +197,22 @@ bool showVideoDocks(); /* reopen closed Program/Preview docks; false = none exis
 void removeDock(int id);
 void shutdown(); /* MUST run at EXIT, before graphics dies */
 } // namespace sourcedocks
+
+/* the editable Preview dock: renders the current scene in a movable dock and
+   rebuilds OBS's on-canvas editing (click to select, drag to move, snap) so a
+   scene can be edited even while the main preview is collapsed. Renders the
+   scene straight (its own display), so it shows video whether or not OBS's main
+   preview is enabled -- unlike a passive Program dock, which goes black
+   off-stream */
+namespace editpreview {
+void createFromState(); /* register saved editable docks; call once at load */
+void refreshAll();      /* re-point at the current scene after scene changes */
+void addDock();         /* add + open a new editable Preview dock */
+void removeDock(int id);
+bool showDocks();       /* reopen closed editable docks; false = none exist */
+QList<int> dockIds();   /* editable dock ids, for the management list */
+void shutdown();        /* MUST run at EXIT, before graphics dies */
+} // namespace editpreview
 
 /* source loadouts + lock tools (LoadoutX's last features, done natively) */
 namespace loadouts {

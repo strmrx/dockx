@@ -37,6 +37,7 @@ static void on_frontend_event(enum obs_frontend_event event, void *)
 		dockx::folders::showFirstRun();
 		dockx::hints::showFirstRun();
 		dockx::sourcedocks::refreshAll();
+		dockx::editpreview::refreshAll();
 		dockx::missing::autoPopIfNeeded();
 		dockx::monitors::installWatch();
 		dockx::preview::apply();
@@ -45,17 +46,20 @@ static void on_frontend_event(enum obs_frontend_event event, void *)
 		dockx::panels::autoSceneLayout();
 		dockx::panels::refreshSoon();
 		dockx::sourcedocks::refreshAll();
+		dockx::editpreview::refreshAll();
 		break;
 	case OBS_FRONTEND_EVENT_PREVIEW_SCENE_CHANGED:
 	case OBS_FRONTEND_EVENT_SCENE_LIST_CHANGED:
 		dockx::panels::refreshSoon();
 		dockx::sourcedocks::refreshAll();
+		dockx::editpreview::refreshAll();
 		break;
 	case OBS_FRONTEND_EVENT_SCENE_COLLECTION_CHANGED:
 		dockx::thumbs::invalidateAll(); /* uuids belong to the old collection */
 		dockx::panels::refreshSoon();
 		dockx::filters::rescanSoon();
 		dockx::sourcedocks::refreshAll();
+		dockx::editpreview::refreshAll();
 		break;
 	case OBS_FRONTEND_EVENT_STUDIO_MODE_ENABLED:
 		dockx::preview::onStudioModeEnabled();
@@ -63,10 +67,12 @@ static void on_frontend_event(enum obs_frontend_event event, void *)
 	case OBS_FRONTEND_EVENT_STUDIO_MODE_DISABLED:
 		dockx::folders::rebuildSoon();
 		dockx::sourcedocks::refreshAll();
+		dockx::editpreview::refreshAll();
 		break;
 	case OBS_FRONTEND_EVENT_EXIT:
 		dockx::stateSave();
 		dockx::locks::unregisterHotkeys();
+		dockx::editpreview::shutdown(); /* displays first, while graphics lives */
 		dockx::sourcedocks::shutdown(); /* displays first, while graphics lives */
 		dockx::filters::shutdown();
 		dockx::folders::shutdown();
@@ -109,6 +115,11 @@ static void collapse_menu_clicked(void *)
 		static_cast<QWidget *>(obs_frontend_get_main_window()));
 }
 
+static void edit_preview_menu_clicked(void *)
+{
+	dockx::editpreview::addDock();
+}
+
 bool obs_module_load(void)
 {
 	obs_log(LOG_INFO, "DockX loaded (version %s)", PLUGIN_VERSION);
@@ -116,6 +127,7 @@ bool obs_module_load(void)
 	dockx::filters::init();
 	dockx::folders::createDock();
 	dockx::sourcedocks::createFromState();
+	dockx::editpreview::createFromState();
 	obs_frontend_add_event_callback(on_frontend_event, nullptr);
 	obs_frontend_add_tools_menu_item("DockX", tools_menu_clicked, nullptr);
 	obs_frontend_add_tools_menu_item("DockX: Find source", find_menu_clicked, nullptr);
@@ -127,6 +139,8 @@ bool obs_module_load(void)
 					 rescue_menu_clicked, nullptr);
 	obs_frontend_add_tools_menu_item("DockX: Collapse or expand preview",
 					 collapse_menu_clicked, nullptr);
+	obs_frontend_add_tools_menu_item("DockX: Add editable preview",
+					 edit_preview_menu_clicked, nullptr);
 	return true;
 }
 
