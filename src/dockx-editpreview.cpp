@@ -152,8 +152,17 @@ protected:
 		float cx, cy;
 		if (!mapToCanvas(e->position(), cx, cy))
 			return;
-		obs_sceneitem_t *hit = hitTest(cx, cy); /* owns a ref, or null */
 		const bool add = (e->modifiers() & Qt::ControlModifier) != 0;
+		/* if the click lands inside something already selected, drag THAT
+		   selection as-is -- so a source picked in the Sources list (or a
+		   lower layer) moves even when another source overlaps the click.
+		   Only a plain click on unselected space re-hit-tests to the top item. */
+		if (!add && pointInSelection(cx, cy)) {
+			beginDrag(cx, cy);
+			setFocus();
+			return;
+		}
+		obs_sceneitem_t *hit = hitTest(cx, cy); /* owns a ref, or null */
 		applySelection(hit, add);
 		if (hit)
 			obs_sceneitem_release(hit);
@@ -296,6 +305,33 @@ private:
 		vec3_set(&p, cx, cy, 0.0f);
 		vec3_transform(&r, &p, &inv);
 		return r.x >= 0.0f && r.x <= 1.0f && r.y >= 0.0f && r.y <= 1.0f;
+	}
+
+	/* is the canvas point inside any currently-selected (draggable) item? */
+	struct SelHit {
+		float cx, cy;
+		bool hit;
+	};
+	static bool selHitCb(obs_scene_t *, obs_sceneitem_t *item, void *param)
+	{
+		auto *s = static_cast<SelHit *>(param);
+		if (!s->hit && obs_sceneitem_selected(item) &&
+		    obs_sceneitem_visible(item) && !obs_sceneitem_locked(item) &&
+		    pointInItem(item, s->cx, s->cy))
+			s->hit = true;
+		return true;
+	}
+	bool pointInSelection(float cx, float cy)
+	{
+		obs_source_t *sceneSrc = lockScene();
+		if (!sceneSrc)
+			return false;
+		obs_scene_t *scene = obs_scene_from_source(sceneSrc);
+		SelHit s{cx, cy, false};
+		if (scene)
+			obs_scene_enum_items(scene, selHitCb, &s);
+		obs_source_release(sceneSrc);
+		return s.hit;
 	}
 
 	/* topmost unlocked, visible item under the canvas point; returns a ref */

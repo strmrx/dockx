@@ -59,15 +59,14 @@ void apply()
 	c->setVisible(!on);
 	if (!on && !obs_frontend_preview_program_mode_active())
 		obs_frontend_set_preview_enabled(true);
-	/* collapsed with no visible video dock = a video-less OBS; surface any
-	   editable Preview or Program/Preview dock (covers boot, where no prompt
-	   is possible). The editable dock is the real replacement: it renders the
-	   scene straight, so it shows video off-stream (a Program dock goes black
-	   when the preview is disabled and nothing is live) AND it stays editable */
+	/* collapsed with no visible video dock = a video-less OBS; surface ONE
+	   video dock -- don't pile them up. Prefer the editable preview (the
+	   movable, editable stand-in that shows video off-stream); only if there
+	   is none fall back to any Program/Preview dock. Covers boot, where no
+	   prompt is possible. */
 	if (on) {
-		const bool editShown = editpreview::showDocks();
-		sourcedocks::showVideoDocks();
-		(void)editShown;
+		if (!editpreview::showDocks())
+			sourcedocks::showVideoDocks();
 	}
 	obs_log(LOG_INFO, "main preview %s", on ? "collapsed" : "expanded");
 }
