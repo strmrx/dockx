@@ -166,6 +166,9 @@ off-thesis: encoders, multi-output, NDI, VST, replay buffer.
   need the canvas). Resource-neutral (a hidden widget stops being exposed so its display
   stops painting; stream/record/sources keep running -- same as OBS's own "Disable
   Preview"). New file dockx-preview.cpp; state preview_collapsed persists across restarts.
+  v0.21.1 hotfix: v0.21.0 only hid the widget and OBS kept rendering the preview into the
+  hidden window, stalling the graphics pipeline (whole-UI stutter on Joey's rig); collapse
+  now also flips obs_frontend_set_preview_enabled, the same switch as Disable Preview.
   Caveat that drives the next item: a Program view is view-only, so a collapsed preview
   loses click-drag scene editing -- the editable Preview dock below is the real payoff.
 - **Fully interactive (editable) Preview dock** (Joey 2026-08-07). Rebuild OBS's canvas

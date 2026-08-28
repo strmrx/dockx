@@ -6,9 +6,11 @@ OBS's video canvas is the QMainWindow central widget, not a dock: docks can
 only ring it, so it always claims a fixed block in the middle of the window.
 Hiding it hands the whole window to the docks; a live Program/Preview source
 dock (dockx-sourcedocks.cpp) becomes the movable, resizable stand in.
-Resource safe: a hidden widget stops being exposed so its display stops
-painting, while stream/record/sources keep running, same as OBS's own
-"Disable Preview".
+Collapse = hide the widget AND disable the preview display (the switch OBS's
+own "Disable Preview" flips). Both are required: a hidden window does NOT
+stop its display from rendering, and presenting frames into a hidden window
+stalls the graphics pipeline on Windows (the v0.21.0 stutter bug).
+Stream/record/sources keep running throughout.
 */
 
 #include "dockx.hpp"
@@ -44,11 +46,20 @@ void apply()
 			"collapse preview: no central widget found, doing nothing");
 		return;
 	}
-	if (c->isHidden() == state().previewCollapsed)
+	const bool on = state().previewCollapsed;
+	if (c->isHidden() == on)
 		return;
-	c->setVisible(!state().previewCollapsed);
-	obs_log(LOG_INFO, "main preview %s",
-		state().previewCollapsed ? "collapsed" : "expanded");
+	/* the preview display must actually STOP rendering, not just lose its
+	   window: presenting frames into a hidden window stalls the graphics
+	   pipeline on Windows (v0.21.0 bug: whole-UI stutter). This is the same
+	   switch OBS's own "Disable Preview" flips. Studio mode never reaches
+	   here collapsed (onStudioModeEnabled expands first) */
+	if (on && !obs_frontend_preview_program_mode_active())
+		obs_frontend_set_preview_enabled(false);
+	c->setVisible(!on);
+	if (!on && !obs_frontend_preview_program_mode_active())
+		obs_frontend_set_preview_enabled(true);
+	obs_log(LOG_INFO, "main preview %s", on ? "collapsed" : "expanded");
 }
 
 void setCollapsed(bool on)
