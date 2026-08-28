@@ -711,6 +711,63 @@ void showDialog(const QString &initialTab)
 
 	tabs->addTab(layoutsTab, "Layouts");
 
+	/* ---------- Templates tab (one-click starter layouts) ---------- */
+	QWidget *tplTab = new QWidget();
+	QVBoxLayout *tplV = new QVBoxLayout(tplTab);
+
+	QListWidget *tplList = new QListWidget(tplTab);
+	for (const templates::Info &t : templates::list()) {
+		QListWidgetItem *it = new QListWidgetItem(t.name, tplList);
+		it->setData(Qt::UserRole, t.id);
+		it->setData(Qt::UserRole + 1, t.desc);
+	}
+	tplV->addWidget(tplList, 1);
+
+	QLabel *tplDesc = new QLabel(
+		"Pick a starting point, then make it yours. Applying a template "
+		"hides OBS's fixed preview, adds a DockX Preview, and arranges your "
+		"docks. It always keeps an undo, so it is safe to try on any layout.",
+		tplTab);
+	tplDesc->setWordWrap(true);
+	tplV->addWidget(tplDesc);
+
+	auto tplSelId = [tplList]() -> QString {
+		QListWidgetItem *it = tplList->currentItem();
+		return it ? it->data(Qt::UserRole).toString() : QString();
+	};
+	QObject::connect(tplList, &QListWidget::currentItemChanged, tplTab,
+			 [tplDesc](QListWidgetItem *cur, QListWidgetItem *) {
+				 if (cur)
+					 tplDesc->setText(
+						 cur->data(Qt::UserRole + 1).toString());
+			 });
+
+	QHBoxLayout *tplBtns = new QHBoxLayout();
+	QPushButton *tplApply = new QPushButton("Apply template", tplTab);
+	QPushButton *tplUndo = new QPushButton("Undo apply", tplTab);
+	tplBtns->addWidget(tplApply);
+	tplBtns->addWidget(tplUndo);
+	tplBtns->addStretch(1);
+	tplV->addLayout(tplBtns);
+
+	QObject::connect(tplApply, &QPushButton::clicked, &dlg, [&dlg, tplSelId]() {
+		const QString id = tplSelId();
+		if (id.isEmpty()) {
+			QMessageBox::information(&dlg, "DockX", "Pick a template first.");
+			return;
+		}
+		if (!templates::apply(id, &dlg))
+			QMessageBox::information(
+				&dlg, "DockX",
+				"Could not apply that template. Your layout was not changed.");
+	});
+	QObject::connect(tplUndo, &QPushButton::clicked, &dlg, [&dlg]() {
+		if (!panels::undoLayout())
+			QMessageBox::information(&dlg, "DockX", "Nothing to undo yet.");
+	});
+
+	tabs->addTab(tplTab, "Templates");
+
 	/* ---------- Loadouts tab (source positions, LoadoutX ported) ---------- */
 	QWidget *loTab = new QWidget();
 	QVBoxLayout *lov = new QVBoxLayout(loTab);

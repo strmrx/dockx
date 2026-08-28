@@ -120,6 +120,11 @@ static void edit_preview_menu_clicked(void *)
 	dockx::editpreview::addDock();
 }
 
+static void templates_menu_clicked(void *)
+{
+	dockx::showDialog("Templates");
+}
+
 bool obs_module_load(void)
 {
 	obs_log(LOG_INFO, "DockX loaded (version %s)", PLUGIN_VERSION);
@@ -141,6 +146,8 @@ bool obs_module_load(void)
 					 collapse_menu_clicked, nullptr);
 	obs_frontend_add_tools_menu_item("DockX: Add DockX Preview (editable)",
 					 edit_preview_menu_clicked, nullptr);
+	obs_frontend_add_tools_menu_item("DockX: Layout templates",
+					 templates_menu_clicked, nullptr);
 	return true;
 }
 

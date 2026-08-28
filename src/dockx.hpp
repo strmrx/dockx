@@ -352,6 +352,22 @@ void toggleWithPrompt(QWidget *parent); /* the Tools menu toggle */
 void onStudioModeEnabled(); /* expand: studio mode edits need the canvas */
 } // namespace preview
 
+/* starter layout templates: one-click dock arrangements for new users (tall
+   chat + editable preview + panels, etc). Each detects the docks it can (chat by
+   name, OBS's core panels, the DockX Preview), places what it finds, and leaves a
+   labeled hint where a dock is missing. Every apply snapshots the current layout
+   first (state().undoState), so it reverts with panels::undoLayout() -- safe even
+   for a power user who fires one at a hand-built layout */
+namespace templates {
+struct Info {
+	QString id;
+	QString name;
+	QString desc;
+};
+QList<Info> list();                              /* the built-in starter templates */
+bool apply(const QString &id, QWidget *parent);  /* build it; snapshots undo first */
+} // namespace templates
+
 /* the dock layout guide: illustrated first-run walkthrough of dock dragging
    (title bar grab, edge drop = split, center drop = tabs, DockX columns) */
 namespace hints {

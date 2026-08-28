@@ -193,10 +193,22 @@ off-thesis: encoders, multi-output, NDI, VST, replay buffer.
   canvas/other sources) and **Alt-drag edge crop** (Alt + an edge handle on a single unrotated
   non-bounds item crops that side in source px, opposite edge pinned; falls back to resize when
   the item can't be cleanly cropped). STILL OPEN (next slices): group rotate, corner (two-side)
-  crop, rotated/bounds crop, studio-mode preview-scene editing, and the "Vertical Chat Focus"
-  one-click preset (needs Joey's target-layout call -- chat/panels are user docks the plugin
-  can't auto-create). Unlocks multiple editable previews at once, a per-scene "edit this scene"
-  dock, and custom on-canvas guides. The real payoff of the collapse work.
+  crop, rotated/bounds crop, studio-mode preview-scene editing. Unlocks multiple editable
+  previews at once, a per-scene "edit this scene" dock, and custom on-canvas guides. The real
+  payoff of the collapse work.
+- **Starter layout templates** (Joey 2026-08-28) -- SHIPPED v0.25.0. One-click dock arrangements
+  for new users, in `src/dockx-templates.cpp` (`dockx::templates`). NOT a saved blob (every
+  user's docks differ) -- it arranges the docks THIS OBS has via the QMainWindow dock API:
+  collapses OBS's fixed preview (flexible mode), adds a DockX Preview if none, detects the chat
+  dock by name (Twitch/YouTube/Kick browser docks all contain "chat") and OBS's core panels
+  (scenes/sources/mixer/transitions/controls), and tiles/tabs them per template. Three ship:
+  **Vertical Chat Focus** (tall chat left, preview top-right, panels tiled beneath), **Wide
+  Preview** (big preview across the top, chat + panels along the bottom), **Compact** (preview
+  left, chat + panels tabbed right). If no chat dock exists, a labeled "add your chat here"
+  placeholder holds the slot. Every apply snapshots the layout into state().undoState first, so
+  panels::undoLayout() ("Undo apply") reverts it -- safe even fired at a hand-built layout. UI:
+  Tools > DockX > Templates tab + a "DockX: Layout templates" Tools item. STILL OPEN: per-user
+  saved templates, more starters, and detecting more service dock names as they appear.
 - **Starter layout gallery / one-click presets** (Joey 2026-08-07) -- headline onboarding.
   Curated one-click layouts (flagship: "Vertical Chat Focus" -- full-height chat + stacked
   side panels, collapsed preview -> Program dock) so a normal streamer gets the flexible
