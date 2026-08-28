@@ -172,7 +172,8 @@ off-thesis: encoders, multi-output, NDI, VST, replay buffer.
   Caveat that drives the next item: a Program view is view-only, so a collapsed preview
   loses click-drag scene editing -- the editable Preview dock below is the real payoff.
 - **Fully interactive (editable) Preview dock** (Joey 2026-08-07) -- FIRST SLICE SHIPPED
-  v0.22.0, SECOND SLICE (resize + rotate + snap-to-sources) SHIPPED v0.23.0 (2026-08-28).
+  v0.22.0, SECOND SLICE (resize + rotate + snap-to-sources) SHIPPED v0.23.0, THIRD SLICE
+  (multi-item group resize + Alt-drag edge crop) SHIPPED v0.24.0 (2026-08-28).
   Rebuild OBS's canvas editing inside a DockX dock: the interaction that today lives only
   in OBS's one main preview widget. New file dockx-editpreview.cpp renders the current
   scene through its own obs_display (so it shows video whether or not the main preview is
@@ -187,9 +188,15 @@ off-thesis: encoders, multi-output, NDI, VST, replay buffer.
   constant on-screen size at any zoom and show only when exactly one unlocked item is
   selected; hover shows the matching resize/rotate cursor. Editable docks persist (state
   edit_docks), add via Tools "DockX: Add DockX Preview (editable)" or Source docks tab,
-  manage/remove in that tab. STILL OPEN (next slices): multi-item group resize, crop-drag,
-  studio-mode preview-scene editing. Unlocks multiple editable previews at once, a per-scene
-  "edit this scene" dock, and custom on-canvas guides. The real payoff of the collapse work.
+  manage/remove in that tab. v0.24.0 adds **multi-item group resize** (2+ selected -> handles
+  wrap the axis-aligned group bbox; each item scales about the shared anchor, snapping to
+  canvas/other sources) and **Alt-drag edge crop** (Alt + an edge handle on a single unrotated
+  non-bounds item crops that side in source px, opposite edge pinned; falls back to resize when
+  the item can't be cleanly cropped). STILL OPEN (next slices): group rotate, corner (two-side)
+  crop, rotated/bounds crop, studio-mode preview-scene editing, and the "Vertical Chat Focus"
+  one-click preset (needs Joey's target-layout call -- chat/panels are user docks the plugin
+  can't auto-create). Unlocks multiple editable previews at once, a per-scene "edit this scene"
+  dock, and custom on-canvas guides. The real payoff of the collapse work.
 - **Starter layout gallery / one-click presets** (Joey 2026-08-07) -- headline onboarding.
   Curated one-click layouts (flagship: "Vertical Chat Focus" -- full-height chat + stacked
   side panels, collapsed preview -> Program dock) so a normal streamer gets the flexible

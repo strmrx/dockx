@@ -183,11 +183,13 @@ protected:
 		if (!mapToCanvas(e->position(), cx, cy))
 			return;
 		const bool add = (e->modifiers() & Qt::ControlModifier) != 0;
+		const bool alt = (e->modifiers() & Qt::AltModifier) != 0;
 		const qreal dpr = devicePixelRatioF();
 		const float mdx = (float)(e->position().x() * dpr);
 		const float mdy = (float)(e->position().y() * dpr);
 		/* a transform handle on a single selected, unlocked item wins first:
-		   the corner/edge squares resize it, the stalk above it rotates it. */
+		   the corner/edge squares resize it (Alt + an edge crops instead), the
+		   stalk above it rotates it. */
 		if (!add) {
 			obs_sceneitem_t *one = singleSelected(); /* owns a ref, or null */
 			if (one) {
@@ -199,12 +201,34 @@ protected:
 					return;
 				}
 				if (h >= 0) {
+					/* Alt + edge handle = crop that side (falls back to
+					   resize if the item can't be cleanly cropped) */
+					if (alt && (h == 1 || h == 3 || h == 5 || h == 7)) {
+						beginCrop(one, h);
+						if (mode == Mode::Crop) {
+							obs_sceneitem_release(one);
+							setFocus();
+							return;
+						}
+					}
 					beginResize(one, h);
 					obs_sceneitem_release(one);
 					setFocus();
 					return;
 				}
 				obs_sceneitem_release(one);
+			} else {
+				/* 2+ selected: handles wrap the whole group's bbox */
+				float L, T, R, B;
+				int cnt;
+				if (groupAABB(L, T, R, B, cnt) && cnt >= 2) {
+					const int h = hitHandleGroup(L, T, R, B, mdx, mdy);
+					if (h >= 0) {
+						beginGroupResize(h, L, T, R, B);
+						setFocus();
+						return;
+					}
+				}
 			}
 		}
 		/* if the click lands inside something already selected, drag THAT
@@ -233,6 +257,10 @@ protected:
 				return;
 			if (mode == Mode::Resize)
 				resizeTo(cx, cy);
+			else if (mode == Mode::Crop)
+				cropTo(cx, cy);
+			else if (mode == Mode::GroupResize)
+				groupResizeTo(cx, cy);
 			else if (mode == Mode::Rotate)
 				rotateTo(cx, cy,
 					 (e->modifiers() & Qt::ControlModifier) != 0);
@@ -255,7 +283,7 @@ private:
 	std::mutex mtx;
 
 	/* interaction state (UI thread only) */
-	enum class Mode { None, Move, Resize, Rotate };
+	enum class Mode { None, Move, Resize, Rotate, GroupResize, Crop };
 	Mode mode = Mode::None;
 
 	/* move-drag state */
@@ -281,6 +309,26 @@ private:
 	bool axX = false, axY = false;
 	float cenX = 0, cenY = 0;     /* box center (canvas) for rotate */
 	float rotGrabAngle = 0;
+
+	/* group resize (2+ items): the handles wrap the axis-aligned group bbox;
+	   each item scales about the shared anchor. Per-item start capture below. */
+	struct GItem {
+		obs_sceneitem_t *item;
+		uint32_t boundsType;
+		vec2 scale, bounds, pos;
+		float refX, refY; /* the item's box (0,0) corner at start (canvas) */
+	};
+	std::vector<GItem> groupItems;
+
+	/* crop-drag (Alt + drag an edge handle) on a single unrotated, non-bounds
+	   item. Crop is measured in SOURCE px, so we map canvas movement through the
+	   item's source->canvas scale, and re-anchor the opposite edge. */
+	int cropEdge = -1; /* 1 top, 3 right, 5 bottom, 7 left (edge handle index) */
+	obs_sceneitem_crop startCrop = {};
+	uint32_t srcW = 0, srcH = 0;
+	float cropScaleX = 0, cropScaleY = 0; /* canvas px per source px */
+	float cropAncX = 0, cropAncY = 0;     /* opposite-edge anchor (canvas) */
+	float cropEdgeStartX = 0, cropEdgeStartY = 0; /* dragged edge start (canvas) */
 
 	/* snap targets, rebuilt at each interaction start: canvas edges/center plus
 	   every other visible item's bbox edges/center. Written on the UI thread. */
@@ -474,6 +522,11 @@ private:
 		if (one) {
 			h = hitHandle(one, mdx, mdy);
 			obs_sceneitem_release(one);
+		} else {
+			float L, T, R, B;
+			int cnt;
+			if (groupAABB(L, T, R, B, cnt) && cnt >= 2)
+				h = hitHandleGroup(L, T, R, B, mdx, mdy);
 		}
 		if (h == -2)
 			setCursor(Qt::PointingHandCursor);
@@ -667,6 +720,177 @@ private:
 		obs_sceneitem_set_pos(xfItem, &pos);
 	}
 
+	/* ---- group resize (2+ items) ---- */
+
+	/* axis-aligned bounding box of all selected, visible, unlocked items */
+	struct GAABB {
+		float L, T, R, B;
+		int count;
+	};
+	static bool gaabbCb(obs_scene_t *, obs_sceneitem_t *item, void *param)
+	{
+		if (obs_sceneitem_selected(item) && obs_sceneitem_visible(item) &&
+		    !obs_sceneitem_locked(item)) {
+			auto *g = static_cast<GAABB *>(param);
+			matrix4 m;
+			obs_sceneitem_get_box_transform(item, &m);
+			const float uv[4][2] = {{0, 0}, {1, 0}, {1, 1}, {0, 1}};
+			for (const auto &u : uv) {
+				float x, y;
+				xf(m, u[0], u[1], x, y);
+				g->L = qMin(g->L, x);
+				g->T = qMin(g->T, y);
+				g->R = qMax(g->R, x);
+				g->B = qMax(g->B, y);
+			}
+			g->count++;
+		}
+		return true;
+	}
+	bool groupAABB(float &L, float &T, float &R, float &B, int &count)
+	{
+		obs_source_t *sceneSrc = lockScene();
+		if (!sceneSrc) {
+			count = 0;
+			return false;
+		}
+		obs_scene_t *scene = obs_scene_from_source(sceneSrc);
+		GAABB g{1e30f, 1e30f, -1e30f, -1e30f, 0};
+		if (scene)
+			obs_scene_enum_items(scene, gaabbCb, &g);
+		obs_source_release(sceneSrc);
+		L = g.L;
+		T = g.T;
+		R = g.R;
+		B = g.B;
+		count = g.count;
+		return count > 0;
+	}
+
+	/* handle (0..7) on the axis-aligned group bbox under a device point, else -1
+	   (no rotate handle for groups) */
+	int hitHandleGroup(float L, float T, float R, float B, float mdx, float mdy)
+	{
+		for (int i = 0; i < 8; i++) {
+			const float hx = L + (R - L) * kHandles[i].gx;
+			const float hy = T + (B - T) * kHandles[i].gy;
+			float dx, dy;
+			if (mapCanvasToDevice(hx, hy, dx, dy) &&
+			    fabsf(dx - mdx) <= GRAB_PX && fabsf(dy - mdy) <= GRAB_PX)
+				return i;
+		}
+		return -1;
+	}
+
+	static bool gcaptureCb(obs_scene_t *, obs_sceneitem_t *item, void *param)
+	{
+		if (obs_sceneitem_selected(item) && obs_sceneitem_visible(item) &&
+		    !obs_sceneitem_locked(item)) {
+			auto *v = static_cast<std::vector<GItem> *>(param);
+			obs_sceneitem_addref(item);
+			GItem gi;
+			gi.item = item;
+			gi.boundsType = (uint32_t)obs_sceneitem_get_bounds_type(item);
+			obs_sceneitem_get_scale(item, &gi.scale);
+			obs_sceneitem_get_bounds(item, &gi.bounds);
+			obs_sceneitem_get_pos(item, &gi.pos);
+			matrix4 m;
+			obs_sceneitem_get_box_transform(item, &m);
+			xf(m, 0, 0, gi.refX, gi.refY);
+			v->push_back(gi);
+		}
+		return true;
+	}
+
+	void beginGroupResize(int h, float L, float T, float R, float B)
+	{
+		endInteraction();
+		if (R - L < 1e-2f || B - T < 1e-2f)
+			return; /* degenerate group */
+		activeHandle = h;
+		uxX = 1;
+		uxY = 0;
+		uyX = 0;
+		uyY = 1; /* the group bbox is axis-aligned */
+		ancX = L + (R - L) * kHandles[h].ax;
+		ancY = T + (B - T) * kHandles[h].ay;
+		span0X = (L + (R - L) * kHandles[h].gx) - ancX;
+		span0Y = (T + (B - T) * kHandles[h].gy) - ancY;
+		axX = kHandles[h].sx;
+		axY = kHandles[h].sy;
+		obs_source_t *sceneSrc = lockScene();
+		if (sceneSrc) {
+			obs_scene_t *scene = obs_scene_from_source(sceneSrc);
+			if (scene)
+				obs_scene_enum_items(scene, gcaptureCb, &groupItems);
+			obs_source_release(sceneSrc);
+		}
+		if (groupItems.empty())
+			return;
+		mode = Mode::GroupResize;
+		buildSnapTargets();
+	}
+
+	void groupResizeTo(float cx, float cy)
+	{
+		if (groupItems.empty())
+			return;
+		float spanX = axX ? (cx - ancX) : span0X;
+		float spanY = axY ? (cy - ancY) : span0Y;
+		float gpx = ancX + spanX; /* group axes are canvas x/y */
+		float gpy = ancY + spanY;
+		snapX = snapY = false;
+		if (axX) {
+			float adj, gpos;
+			if (snap1D(gpx, snapVx, adj, gpos)) {
+				gpx += adj;
+				snapX = true;
+				snapXpos = gpos;
+			}
+		}
+		if (axY) {
+			float adj, gpos;
+			if (snap1D(gpy, snapVy, adj, gpos)) {
+				gpy += adj;
+				snapY = true;
+				snapYpos = gpos;
+			}
+		}
+		float rX = axX ? (gpx - ancX) / span0X : 1.0f;
+		float rY = axY ? (gpy - ancY) / span0Y : 1.0f;
+		const float minR = 0.02f;
+		if (rX < minR)
+			rX = minR;
+		if (rY < minR)
+			rY = minR;
+		for (GItem &gi : groupItems) {
+			if (gi.boundsType != (uint32_t)OBS_BOUNDS_NONE) {
+				vec2 b;
+				b.x = gi.bounds.x * rX;
+				b.y = gi.bounds.y * rY;
+				obs_sceneitem_set_bounds(gi.item, &b);
+			} else {
+				vec2 sc;
+				sc.x = gi.scale.x * rX;
+				sc.y = gi.scale.y * rY;
+				obs_sceneitem_set_scale(gi.item, &sc);
+			}
+			/* each item's top-left corner maps to the group-scaled spot, then
+			   re-anchor it there (a pos shift moves the box rigidly) */
+			const float desX = ancX + (gi.refX - ancX) * rX;
+			const float desY = ancY + (gi.refY - ancY) * rY;
+			matrix4 m2;
+			obs_sceneitem_get_box_transform(gi.item, &m2);
+			float a0x, a0y;
+			xf(m2, 0, 0, a0x, a0y);
+			vec2 pos;
+			obs_sceneitem_get_pos(gi.item, &pos);
+			pos.x += (desX - a0x);
+			pos.y += (desY - a0y);
+			obs_sceneitem_set_pos(gi.item, &pos);
+		}
+	}
+
 	/* ---- rotate ---- */
 
 	void beginRotate(obs_sceneitem_t *item, float cx, float cy)
@@ -705,6 +929,99 @@ private:
 		obs_sceneitem_get_pos(xfItem, &pos);
 		pos.x += (cenX - c2x);
 		pos.y += (cenY - c2y);
+		obs_sceneitem_set_pos(xfItem, &pos);
+	}
+
+	/* ---- crop-drag (Alt + edge handle) ---- */
+
+	/* sets up a crop drag; leaves mode == None (a no-op) if the item is rotated,
+	   bounds-sized, or already fully cropped -- the caller then does a resize */
+	void beginCrop(obs_sceneitem_t *item, int edge)
+	{
+		endInteraction();
+		/* crop maps cleanly only for an axis-aligned, non-bounds item */
+		if (fabsf(obs_sceneitem_get_rot(item)) > 0.5f)
+			return;
+		if (obs_sceneitem_get_bounds_type(item) != OBS_BOUNDS_NONE)
+			return;
+		obs_source_t *src = obs_sceneitem_get_source(item); /* borrowed */
+		if (!src)
+			return;
+		srcW = obs_source_get_width(src);
+		srcH = obs_source_get_height(src);
+		if (!srcW || !srcH)
+			return;
+		obs_sceneitem_get_crop(item, &startCrop);
+		const int visW = (int)srcW - startCrop.left - startCrop.right;
+		const int visH = (int)srcH - startCrop.top - startCrop.bottom;
+		if (visW <= 0 || visH <= 0)
+			return;
+		matrix4 m;
+		obs_sceneitem_get_box_transform(item, &m);
+		float ox, oy, xx, xy, yx, yy;
+		xf(m, 0, 0, ox, oy);
+		xf(m, 1, 0, xx, xy);
+		xf(m, 0, 1, yx, yy);
+		const float boxW = sqrtf((xx - ox) * (xx - ox) + (xy - oy) * (xy - oy));
+		const float boxH = sqrtf((yx - ox) * (yx - ox) + (yy - oy) * (yy - oy));
+		cropScaleX = boxW / (float)visW;
+		cropScaleY = boxH / (float)visH;
+		if (cropScaleX <= 0.0f || cropScaleY <= 0.0f)
+			return;
+		/* anchor = the opposite edge midpoint (kept fixed); dragged edge start */
+		xf(m, kHandles[edge].ax, kHandles[edge].ay, cropAncX, cropAncY);
+		xf(m, kHandles[edge].gx, kHandles[edge].gy, cropEdgeStartX,
+		   cropEdgeStartY);
+		xfItem = item;
+		obs_sceneitem_addref(xfItem);
+		cropEdge = edge;
+		mode = Mode::Crop;
+	}
+
+	void cropTo(float cx, float cy)
+	{
+		if (!xfItem || mode != Mode::Crop)
+			return;
+		obs_sceneitem_crop c = startCrop;
+		if (cropEdge == 3) { /* right: drag left to crop in */
+			const int d = (int)roundf((cropEdgeStartX - cx) / cropScaleX);
+			c.right = startCrop.right + d;
+			if (c.right < 0)
+				c.right = 0;
+			if (c.right > (int)srcW - startCrop.left - 1)
+				c.right = (int)srcW - startCrop.left - 1;
+		} else if (cropEdge == 7) { /* left */
+			const int d = (int)roundf((cx - cropEdgeStartX) / cropScaleX);
+			c.left = startCrop.left + d;
+			if (c.left < 0)
+				c.left = 0;
+			if (c.left > (int)srcW - startCrop.right - 1)
+				c.left = (int)srcW - startCrop.right - 1;
+		} else if (cropEdge == 1) { /* top */
+			const int d = (int)roundf((cy - cropEdgeStartY) / cropScaleY);
+			c.top = startCrop.top + d;
+			if (c.top < 0)
+				c.top = 0;
+			if (c.top > (int)srcH - startCrop.bottom - 1)
+				c.top = (int)srcH - startCrop.bottom - 1;
+		} else if (cropEdge == 5) { /* bottom */
+			const int d = (int)roundf((cropEdgeStartY - cy) / cropScaleY);
+			c.bottom = startCrop.bottom + d;
+			if (c.bottom < 0)
+				c.bottom = 0;
+			if (c.bottom > (int)srcH - startCrop.top - 1)
+				c.bottom = (int)srcH - startCrop.top - 1;
+		}
+		obs_sceneitem_set_crop(xfItem, &c);
+		/* re-anchor: keep the opposite (un-cropped) edge visually fixed */
+		matrix4 m2;
+		obs_sceneitem_get_box_transform(xfItem, &m2);
+		float a2x, a2y;
+		xf(m2, kHandles[cropEdge].ax, kHandles[cropEdge].ay, a2x, a2y);
+		vec2 pos;
+		obs_sceneitem_get_pos(xfItem, &pos);
+		pos.x += (cropAncX - a2x);
+		pos.y += (cropAncY - a2y);
 		obs_sceneitem_set_pos(xfItem, &pos);
 	}
 
@@ -923,6 +1240,9 @@ private:
 		for (Held &h : held)
 			obs_sceneitem_release(h.item);
 		held.clear();
+		for (GItem &gi : groupItems)
+			obs_sceneitem_release(gi.item);
+		groupItems.clear();
 		if (xfItem) {
 			obs_sceneitem_release(xfItem);
 			xfItem = nullptr;
@@ -930,6 +1250,7 @@ private:
 		mode = Mode::None;
 		dragging = false;
 		activeHandle = -1;
+		cropEdge = -1;
 		snapX = snapY = false;
 		snapVx.clear();
 		snapVy.clear();
@@ -1012,17 +1333,42 @@ private:
 		return true;
 	}
 
-	/* the 8 resize squares + the rotate stalk, at a constant on-screen size */
+	/* the 8 resize squares + the rotate stalk, at a constant on-screen size.
+	   One item -> handles on its (possibly rotated) box + a rotate stalk;
+	   two or more -> handles on the axis-aligned group bbox (no rotate). */
 	void drawHandles(obs_scene_t *scene, float scale)
 	{
 		if (scale <= 0.0f)
 			return;
 		std::vector<matrix4> boxes;
 		obs_scene_enum_items(scene, collectHandleBoxes, &boxes);
+		const float half = HANDLE_HALF_PX / scale;
+		if (boxes.size() >= 2) {
+			float L = 1e30f, T = 1e30f, R = -1e30f, B = -1e30f;
+			const float uv[4][2] = {{0, 0}, {1, 0}, {1, 1}, {0, 1}};
+			for (const matrix4 &m : boxes)
+				for (const auto &u : uv) {
+					float x, y;
+					xf(m, u[0], u[1], x, y);
+					L = qMin(L, x);
+					T = qMin(T, y);
+					R = qMax(R, x);
+					B = qMax(B, y);
+				}
+			std::vector<vec2> outline{mk(L, T), mk(R, T), mk(R, B),
+						  mk(L, B), mk(L, T)};
+			drawLineStrip(outline, COLOR_SELECT);
+			for (int i = 0; i < 8; i++) {
+				const float hx = L + (R - L) * kHandles[i].gx;
+				const float hy = T + (B - T) * kHandles[i].gy;
+				drawFilledRect(hx - half, hy - half, hx + half,
+					       hy + half, COLOR_SELECT);
+			}
+			return;
+		}
 		if (boxes.size() != 1)
 			return;
 		const matrix4 &m = boxes[0];
-		const float half = HANDLE_HALF_PX / scale;
 		for (int i = 0; i < 8; i++) {
 			float hx, hy;
 			xf(m, kHandles[i].gx, kHandles[i].gy, hx, hy);
