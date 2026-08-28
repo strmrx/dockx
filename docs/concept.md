@@ -156,6 +156,29 @@ off-thesis: encoders, multi-output, NDI, VST, replay buffer.
   audio assignment / filter parent) with the fix, honest fallback for un-introspectable refs.
 - Projector management (#9), multiview upgrades (#6), studio mode QoL (#10),
   collection zip export/import (#11)
+- **Collapse main preview + Program/Preview dock as the replacement** (Joey 2026-08-07).
+  OBS's main video canvas is the QMainWindow central widget (not a dock): it has a hard
+  minimum size and every dock can only ring it, so it always claims a fixed block in the
+  middle. Add a toggle that shrinks/hides the central widget so docks reclaim the whole
+  window, and pair it with the existing Source-dock Program/Preview so the video becomes a
+  freely sizeable/placeable dock. Resource-neutral (swaps one obs_display for another;
+  smaller = slightly less GPU; stream/record/sources keep running -- same as OBS's own
+  "Disable Preview"). Caveat that drives the next item: a Program view is view-only, so a
+  collapsed preview loses click-drag scene editing -- first pass keeps an *editable*
+  preview that collapses on demand.
+- **Fully interactive (editable) Preview dock** (Joey 2026-08-07). Rebuild OBS's canvas
+  editing inside a DockX dock: scene-item hit-testing, transform handles, move/resize/
+  rotate, snapping -- the interaction that today lives only in OBS's one main preview
+  widget (dockx-sourcedocks.cpp currently renders view-only + forwards clicks into a
+  source, no scene-item editing). Substantial. Unlocks multiple editable previews at once,
+  a per-scene "edit this scene" dock, and custom on-canvas guides. The real payoff of the
+  collapse-preview work.
+- **Starter layout gallery / one-click presets** (Joey 2026-08-07) -- headline onboarding.
+  Curated one-click layouts (flagship: "Vertical Chat Focus" -- full-height chat + stacked
+  side panels, collapsed preview -> Program dock) so a normal streamer gets the flexible
+  layout without hand-wiring docks. Plus "replace this dock with ours" / "replace the main
+  preview with ours" as single actions. A preset must create the docks it needs before
+  restoreState (which only restores geometry of docks that already exist).
 
 ## Build order (Joey, 2026-08-01)
 1. Multi-monitor dock manager -- DONE v0.19.
