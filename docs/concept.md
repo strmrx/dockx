@@ -192,10 +192,15 @@ off-thesis: encoders, multi-output, NDI, VST, replay buffer.
   wrap the axis-aligned group bbox; each item scales about the shared anchor, snapping to
   canvas/other sources) and **Alt-drag edge crop** (Alt + an edge handle on a single unrotated
   non-bounds item crops that side in source px, opposite edge pinned; falls back to resize when
-  the item can't be cleanly cropped). STILL OPEN (next slices): group rotate, corner (two-side)
-  crop, rotated/bounds crop, studio-mode preview-scene editing. Unlocks multiple editable
-  previews at once, a per-scene "edit this scene" dock, and custom on-canvas guides. The real
-  payoff of the collapse work.
+  the item can't be cleanly cropped). v0.26.0 fills in the finer editor bits: **group rotate**
+  (a rotate stalk on the group bbox spins every selected item about the group center, orbiting
+  each item's position + advancing its own rotation; Ctrl snaps 15 degrees), **corner (two-side)
+  crop** (Alt + a corner handle crops the two adjacent sides at once, opposite corner pinned), and
+  **rotated crop** (crop now runs on the item's own axes, so any-angle sources crop cleanly; the
+  old unrotated-only limit is gone). STILL OPEN: bounds-sized crop (refits non-linearly, left to
+  resize) and studio-mode preview-scene editing. Unlocks multiple editable previews at once, a
+  per-scene "edit this scene" dock, and custom on-canvas guides. The real payoff of the collapse
+  work.
 - **Starter layout templates** (Joey 2026-08-28) -- SHIPPED v0.25.0. One-click dock arrangements
   for new users, in `src/dockx-templates.cpp` (`dockx::templates`). NOT a saved blob (every
   user's docks differ) -- it arranges the docks THIS OBS has via the QMainWindow dock API:

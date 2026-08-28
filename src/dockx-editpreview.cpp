@@ -201,9 +201,10 @@ protected:
 					return;
 				}
 				if (h >= 0) {
-					/* Alt + edge handle = crop that side (falls back to
-					   resize if the item can't be cleanly cropped) */
-					if (alt && (h == 1 || h == 3 || h == 5 || h == 7)) {
+					/* Alt + handle = crop: an edge crops that side, a
+					   corner crops the two adjacent sides. Falls back to
+					   resize if the item can't be cleanly cropped. */
+					if (alt) {
 						beginCrop(one, h);
 						if (mode == Mode::Crop) {
 							obs_sceneitem_release(one);
@@ -223,6 +224,11 @@ protected:
 				int cnt;
 				if (groupAABB(L, T, R, B, cnt) && cnt >= 2) {
 					const int h = hitHandleGroup(L, T, R, B, mdx, mdy);
+					if (h == -2) {
+						beginGroupRotate(L, T, R, B, cx, cy);
+						setFocus();
+						return;
+					}
 					if (h >= 0) {
 						beginGroupResize(h, L, T, R, B);
 						setFocus();
@@ -261,6 +267,9 @@ protected:
 				cropTo(cx, cy);
 			else if (mode == Mode::GroupResize)
 				groupResizeTo(cx, cy);
+			else if (mode == Mode::GroupRotate)
+				groupRotateTo(cx, cy,
+					      (e->modifiers() & Qt::ControlModifier) != 0);
 			else if (mode == Mode::Rotate)
 				rotateTo(cx, cy,
 					 (e->modifiers() & Qt::ControlModifier) != 0);
@@ -283,7 +292,7 @@ private:
 	std::mutex mtx;
 
 	/* interaction state (UI thread only) */
-	enum class Mode { None, Move, Resize, Rotate, GroupResize, Crop };
+	enum class Mode { None, Move, Resize, Rotate, GroupResize, GroupRotate, Crop };
 	Mode mode = Mode::None;
 
 	/* move-drag state */
@@ -316,19 +325,25 @@ private:
 		obs_sceneitem_t *item;
 		uint32_t boundsType;
 		vec2 scale, bounds, pos;
-		float refX, refY; /* the item's box (0,0) corner at start (canvas) */
+		float refX, refY;       /* the item's box (0,0) corner at start (canvas) */
+		float startRot;         /* item rotation at start (group rotate) */
+		float startCX, startCY; /* item box center at start (group rotate) */
 	};
 	std::vector<GItem> groupItems;
 
-	/* crop-drag (Alt + drag an edge handle) on a single unrotated, non-bounds
-	   item. Crop is measured in SOURCE px, so we map canvas movement through the
-	   item's source->canvas scale, and re-anchor the opposite edge. */
-	int cropEdge = -1; /* 1 top, 3 right, 5 bottom, 7 left (edge handle index) */
+	/* crop-drag (Alt + drag an edge or corner handle) on a single non-bounds
+	   item, at any rotation. Crop is measured in SOURCE px along the item's own
+	   axes, so canvas movement is projected onto those axes and mapped through
+	   the source->canvas scale; the opposite edge/corner is re-anchored. Corners
+	   crop the two adjacent sides at once. */
+	bool cropL = false, cropT = false, cropR = false, cropB = false;
 	obs_sceneitem_crop startCrop = {};
 	uint32_t srcW = 0, srcH = 0;
-	float cropScaleX = 0, cropScaleY = 0; /* canvas px per source px */
-	float cropAncX = 0, cropAncY = 0;     /* opposite-edge anchor (canvas) */
-	float cropEdgeStartX = 0, cropEdgeStartY = 0; /* dragged edge start (canvas) */
+	float cropScaleX = 0, cropScaleY = 0; /* canvas px per source px (local axes) */
+	float cropUxX = 0, cropUxY = 0;       /* item unit x-axis (canvas) */
+	float cropUyX = 0, cropUyY = 0;       /* item unit y-axis (canvas) */
+	float cropAncX = 0, cropAncY = 0;     /* opposite edge/corner anchor (canvas) */
+	float cropStartX = 0, cropStartY = 0; /* dragged handle start (canvas) */
 
 	/* snap targets, rebuilt at each interaction start: canvas edges/center plus
 	   every other visible item's bbox edges/center. Written on the UI thread. */
@@ -767,8 +782,8 @@ private:
 		return count > 0;
 	}
 
-	/* handle (0..7) on the axis-aligned group bbox under a device point, else -1
-	   (no rotate handle for groups) */
+	/* handle (0..7) on the axis-aligned group bbox under a device point, the
+	   rotate stalk (-2) above its top-center, else -1 */
 	int hitHandleGroup(float L, float T, float R, float B, float mdx, float mdy)
 	{
 		for (int i = 0; i < 8; i++) {
@@ -778,6 +793,16 @@ private:
 			if (mapCanvasToDevice(hx, hy, dx, dy) &&
 			    fabsf(dx - mdx) <= GRAB_PX && fabsf(dy - mdy) <= GRAB_PX)
 				return i;
+		}
+		float scale, offX, offY;
+		uint32_t cw, ch;
+		if (metrics(scale, offX, offY, cw, ch)) {
+			const float rx = (L + R) * 0.5f;
+			const float ry = T - (ROT_OFFSET_PX / scale);
+			float dx, dy;
+			if (mapCanvasToDevice(rx, ry, dx, dy) &&
+			    fabsf(dx - mdx) <= GRAB_PX && fabsf(dy - mdy) <= GRAB_PX)
+				return -2;
 		}
 		return -1;
 	}
@@ -794,9 +819,11 @@ private:
 			obs_sceneitem_get_scale(item, &gi.scale);
 			obs_sceneitem_get_bounds(item, &gi.bounds);
 			obs_sceneitem_get_pos(item, &gi.pos);
+			gi.startRot = obs_sceneitem_get_rot(item);
 			matrix4 m;
 			obs_sceneitem_get_box_transform(item, &m);
 			xf(m, 0, 0, gi.refX, gi.refY);
+			xf(m, 0.5f, 0.5f, gi.startCX, gi.startCY);
 			v->push_back(gi);
 		}
 		return true;
@@ -891,6 +918,58 @@ private:
 		}
 	}
 
+	/* spin every selected item about the group center: each item's own rotation
+	   advances by the drag angle AND its center orbits the group center */
+	void beginGroupRotate(float L, float T, float R, float B, float cx, float cy)
+	{
+		endInteraction();
+		cenX = (L + R) * 0.5f;
+		cenY = (T + B) * 0.5f;
+		rotGrabAngle = atan2f(cy - cenY, cx - cenX);
+		obs_source_t *sceneSrc = lockScene();
+		if (sceneSrc) {
+			obs_scene_t *scene = obs_scene_from_source(sceneSrc);
+			if (scene)
+				obs_scene_enum_items(scene, gcaptureCb, &groupItems);
+			obs_source_release(sceneSrc);
+		}
+		if (groupItems.empty())
+			return;
+		mode = Mode::GroupRotate;
+	}
+
+	void groupRotateTo(float cx, float cy, bool snap15)
+	{
+		if (groupItems.empty())
+			return;
+		const float ang = atan2f(cy - cenY, cx - cenX);
+		float dDeg = (ang - rotGrabAngle) * (180.0f / PI_F);
+		if (snap15)
+			dDeg = roundf(dDeg / 15.0f) * 15.0f;
+		const float rad = dDeg * (PI_F / 180.0f);
+		const float cs = cosf(rad), sn = sinf(rad);
+		for (GItem &gi : groupItems) {
+			const float ox = gi.startCX - cenX, oy = gi.startCY - cenY;
+			const float nx = cenX + (ox * cs - oy * sn);
+			const float ny = cenY + (ox * sn + oy * cs);
+			float nr = gi.startRot + dDeg;
+			while (nr >= 360.0f)
+				nr -= 360.0f;
+			while (nr < 0.0f)
+				nr += 360.0f;
+			obs_sceneitem_set_rot(gi.item, nr);
+			matrix4 m2;
+			obs_sceneitem_get_box_transform(gi.item, &m2);
+			float c2x, c2y;
+			xf(m2, 0.5f, 0.5f, c2x, c2y);
+			vec2 pos;
+			obs_sceneitem_get_pos(gi.item, &pos);
+			pos.x += (nx - c2x);
+			pos.y += (ny - c2y);
+			obs_sceneitem_set_pos(gi.item, &pos);
+		}
+	}
+
 	/* ---- rotate ---- */
 
 	void beginRotate(obs_sceneitem_t *item, float cx, float cy)
@@ -934,14 +1013,14 @@ private:
 
 	/* ---- crop-drag (Alt + edge handle) ---- */
 
-	/* sets up a crop drag; leaves mode == None (a no-op) if the item is rotated,
-	   bounds-sized, or already fully cropped -- the caller then does a resize */
-	void beginCrop(obs_sceneitem_t *item, int edge)
+	/* sets up a crop drag; leaves mode == None (a no-op) if the item is
+	   bounds-sized or already fully cropped -- the caller then does a resize.
+	   Works at any rotation (crop runs on the item's own axes). h is any of the
+	   8 handles: edges crop one side, corners crop the two adjacent sides. */
+	void beginCrop(obs_sceneitem_t *item, int h)
 	{
 		endInteraction();
-		/* crop maps cleanly only for an axis-aligned, non-bounds item */
-		if (fabsf(obs_sceneitem_get_rot(item)) > 0.5f)
-			return;
+		/* bounds sizing refits the crop non-linearly; leave those to resize */
 		if (obs_sceneitem_get_bounds_type(item) != OBS_BOUNDS_NONE)
 			return;
 		obs_source_t *src = obs_sceneitem_get_source(item); /* borrowed */
@@ -962,19 +1041,36 @@ private:
 		xf(m, 0, 0, ox, oy);
 		xf(m, 1, 0, xx, xy);
 		xf(m, 0, 1, yx, yy);
-		const float boxW = sqrtf((xx - ox) * (xx - ox) + (xy - oy) * (xy - oy));
-		const float boxH = sqrtf((yx - ox) * (yx - ox) + (yy - oy) * (yy - oy));
-		cropScaleX = boxW / (float)visW;
-		cropScaleY = boxH / (float)visH;
+		const float lx = sqrtf((xx - ox) * (xx - ox) + (xy - oy) * (xy - oy));
+		const float ly = sqrtf((yx - ox) * (yx - ox) + (yy - oy) * (yy - oy));
+		if (lx < 1e-3f || ly < 1e-3f)
+			return;
+		cropUxX = (xx - ox) / lx;
+		cropUxY = (xy - oy) / lx;
+		cropUyX = (yx - ox) / ly;
+		cropUyY = (yy - oy) / ly;
+		cropScaleX = lx / (float)visW; /* canvas px per source px, local x */
+		cropScaleY = ly / (float)visH;
 		if (cropScaleX <= 0.0f || cropScaleY <= 0.0f)
 			return;
-		/* anchor = the opposite edge midpoint (kept fixed); dragged edge start */
-		xf(m, kHandles[edge].ax, kHandles[edge].ay, cropAncX, cropAncY);
-		xf(m, kHandles[edge].gx, kHandles[edge].gy, cropEdgeStartX,
-		   cropEdgeStartY);
+		/* which sides this handle crops */
+		cropL = cropT = cropR = cropB = false;
+		switch (h) {
+		case 7: cropL = true; break;
+		case 3: cropR = true; break;
+		case 1: cropT = true; break;
+		case 5: cropB = true; break;
+		case 0: cropL = cropT = true; break;
+		case 2: cropR = cropT = true; break;
+		case 4: cropR = cropB = true; break;
+		case 6: cropL = cropB = true; break;
+		default: return;
+		}
+		activeHandle = h;
+		xf(m, kHandles[h].ax, kHandles[h].ay, cropAncX, cropAncY);
+		xf(m, kHandles[h].gx, kHandles[h].gy, cropStartX, cropStartY);
 		xfItem = item;
 		obs_sceneitem_addref(xfItem);
-		cropEdge = edge;
 		mode = Mode::Crop;
 	}
 
@@ -982,42 +1078,44 @@ private:
 	{
 		if (!xfItem || mode != Mode::Crop)
 			return;
+		const float mvx = cx - cropStartX, mvy = cy - cropStartY;
+		const float alongX = mvx * cropUxX + mvy * cropUxY; /* +x = local right */
+		const float alongY = mvx * cropUyX + mvy * cropUyY; /* +y = local down */
 		obs_sceneitem_crop c = startCrop;
-		if (cropEdge == 3) { /* right: drag left to crop in */
-			const int d = (int)roundf((cropEdgeStartX - cx) / cropScaleX);
-			c.right = startCrop.right + d;
+		if (cropR) { /* right edge inward = -local x */
+			c.right = startCrop.right + (int)roundf(-alongX / cropScaleX);
 			if (c.right < 0)
 				c.right = 0;
 			if (c.right > (int)srcW - startCrop.left - 1)
 				c.right = (int)srcW - startCrop.left - 1;
-		} else if (cropEdge == 7) { /* left */
-			const int d = (int)roundf((cx - cropEdgeStartX) / cropScaleX);
-			c.left = startCrop.left + d;
+		}
+		if (cropL) { /* left edge inward = +local x */
+			c.left = startCrop.left + (int)roundf(alongX / cropScaleX);
 			if (c.left < 0)
 				c.left = 0;
 			if (c.left > (int)srcW - startCrop.right - 1)
 				c.left = (int)srcW - startCrop.right - 1;
-		} else if (cropEdge == 1) { /* top */
-			const int d = (int)roundf((cy - cropEdgeStartY) / cropScaleY);
-			c.top = startCrop.top + d;
-			if (c.top < 0)
-				c.top = 0;
-			if (c.top > (int)srcH - startCrop.bottom - 1)
-				c.top = (int)srcH - startCrop.bottom - 1;
-		} else if (cropEdge == 5) { /* bottom */
-			const int d = (int)roundf((cropEdgeStartY - cy) / cropScaleY);
-			c.bottom = startCrop.bottom + d;
+		}
+		if (cropB) { /* bottom edge inward = -local y */
+			c.bottom = startCrop.bottom + (int)roundf(-alongY / cropScaleY);
 			if (c.bottom < 0)
 				c.bottom = 0;
 			if (c.bottom > (int)srcH - startCrop.top - 1)
 				c.bottom = (int)srcH - startCrop.top - 1;
 		}
+		if (cropT) { /* top edge inward = +local y */
+			c.top = startCrop.top + (int)roundf(alongY / cropScaleY);
+			if (c.top < 0)
+				c.top = 0;
+			if (c.top > (int)srcH - startCrop.bottom - 1)
+				c.top = (int)srcH - startCrop.bottom - 1;
+		}
 		obs_sceneitem_set_crop(xfItem, &c);
-		/* re-anchor: keep the opposite (un-cropped) edge visually fixed */
+		/* re-anchor: keep the opposite (un-cropped) edge/corner visually fixed */
 		matrix4 m2;
 		obs_sceneitem_get_box_transform(xfItem, &m2);
 		float a2x, a2y;
-		xf(m2, kHandles[cropEdge].ax, kHandles[cropEdge].ay, a2x, a2y);
+		xf(m2, kHandles[activeHandle].ax, kHandles[activeHandle].ay, a2x, a2y);
 		vec2 pos;
 		obs_sceneitem_get_pos(xfItem, &pos);
 		pos.x += (cropAncX - a2x);
@@ -1250,7 +1348,7 @@ private:
 		mode = Mode::None;
 		dragging = false;
 		activeHandle = -1;
-		cropEdge = -1;
+		cropL = cropT = cropR = cropB = false;
 		snapX = snapY = false;
 		snapVx.clear();
 		snapVy.clear();
@@ -1364,6 +1462,13 @@ private:
 				drawFilledRect(hx - half, hy - half, hx + half,
 					       hy + half, COLOR_SELECT);
 			}
+			/* rotate stalk above the group's top-center */
+			const float grx = (L + R) * 0.5f;
+			const float gry = T - (ROT_OFFSET_PX / scale);
+			std::vector<vec2> gstalk{mk(grx, T), mk(grx, gry)};
+			drawLineStrip(gstalk, COLOR_SELECT);
+			drawFilledRect(grx - half, gry - half, grx + half, gry + half,
+				       COLOR_SELECT);
 			return;
 		}
 		if (boxes.size() != 1)
