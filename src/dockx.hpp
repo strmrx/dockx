@@ -191,6 +191,7 @@ enum { KIND_SOURCE = 0, KIND_PROGRAM = 1, KIND_PREVIEW = 2 };
 void createFromState(); /* register saved docks; call once at module load */
 void refreshAll();      /* re-resolve sources after scene/collection changes */
 void addDock(int kind, const QString &sourceName);
+bool showVideoDocks(); /* reopen closed Program/Preview docks; false = none exist */
 void removeDock(int id);
 void shutdown(); /* MUST run at EXIT, before graphics dies */
 } // namespace sourcedocks

@@ -627,6 +627,27 @@ void addDock(int kind, const QString &sourceName)
 	}
 }
 
+/* bring every Program/Preview dock back on screen (a closed dock stays closed
+   forever in OBS); returns false when none exist so the caller can offer one */
+bool showVideoDocks()
+{
+	QMainWindow *m = static_cast<QMainWindow *>(obs_frontend_get_main_window());
+	if (!m)
+		return false;
+	bool any = false;
+	for (const SourceDockEntry &e : state().sourceDocks) {
+		if (e.kind != KIND_PROGRAM && e.kind != KIND_PREVIEW)
+			continue;
+		QDockWidget *dock = m->findChild<QDockWidget *>(dockIdFor(e.id));
+		if (dock) {
+			dock->setVisible(true);
+			dock->raise();
+			any = true;
+		}
+	}
+	return any;
+}
+
 void removeDock(int id)
 {
 	for (auto it = g_views.begin(); it != g_views.end(); ++it) {

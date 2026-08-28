@@ -59,6 +59,10 @@ void apply()
 	c->setVisible(!on);
 	if (!on && !obs_frontend_preview_program_mode_active())
 		obs_frontend_set_preview_enabled(true);
+	/* collapsed with no visible video dock = a video-less OBS; surface any
+	   Program/Preview dock (covers boot, where no prompt is possible) */
+	if (on)
+		sourcedocks::showVideoDocks();
 	obs_log(LOG_INFO, "main preview %s", on ? "collapsed" : "expanded");
 }
 
@@ -73,10 +77,11 @@ void setCollapsed(bool on)
 
 void offerVideoDock(QWidget *parent)
 {
-	for (const SourceDockEntry &e : state().sourceDocks)
-		if (e.kind == sourcedocks::KIND_PROGRAM ||
-		    e.kind == sourcedocks::KIND_PREVIEW)
-			return;
+	/* a video dock the user cannot see may as well not exist: if any
+	   Program/Preview dock is registered, surface it (OBS keeps a closed
+	   dock closed forever) instead of leaving a video-less window */
+	if (sourcedocks::showVideoDocks())
+		return;
 	const auto r = QMessageBox::question(
 		parent, "DockX",
 		"The main preview is now collapsed, and you have no video dock "
