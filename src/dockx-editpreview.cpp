@@ -31,11 +31,15 @@ overlay. Sources are held as weak references and resolved on the UI thread.
 #include <graphics/vec4.h>
 
 #include <QDockWidget>
+#include <QHBoxLayout>
 #include <QHideEvent>
+#include <QLabel>
 #include <QMainWindow>
 #include <QMouseEvent>
+#include <QPushButton>
 #include <QResizeEvent>
 #include <QShowEvent>
+#include <QVBoxLayout>
 #include <QWidget>
 
 #include <cmath>
@@ -597,19 +601,75 @@ private:
 	}
 };
 
-static std::vector<EditWidget *> g_widgets;
+/* the dock content: a thin control bar (the ONE always-visible switch back to
+   OBS's built-in preview) above the editable video surface */
+class EditPreviewPanel : public QWidget {
+public:
+	int id;
+	EditWidget *video;
 
-static EditWidget *registerDock(int id)
+	EditPreviewPanel(int id_) : QWidget(nullptr), id(id_)
+	{
+		QVBoxLayout *v = new QVBoxLayout(this);
+		v->setContentsMargins(0, 0, 0, 0);
+		v->setSpacing(0);
+
+		QWidget *bar = new QWidget(this);
+		QHBoxLayout *h = new QHBoxLayout(bar);
+		h->setContentsMargins(8, 4, 8, 4);
+		h->setSpacing(8);
+		QLabel *tag = new QLabel("DockX Preview", bar);
+		h->addWidget(tag);
+		h->addStretch(1);
+		obsBtn = new QPushButton(bar);
+		obsBtn->setToolTip("Show or hide OBS's built-in preview (the fixed "
+				   "one in the middle of the window)");
+		h->addWidget(obsBtn);
+		v->addWidget(bar);
+
+		video = new EditWidget(id_, this);
+		v->addWidget(video, 1);
+
+		/* one control, both directions: this dock IS the movable, editable
+		   preview, so its button just governs whether OBS's fixed built-in
+		   preview is shown or hidden -- the always-there way back */
+		QObject::connect(obsBtn, &QPushButton::clicked, this, []() {
+			preview::setCollapsed(!preview::collapsed());
+		});
+		updateButton();
+	}
+
+	void refresh()
+	{
+		video->refresh();
+		updateButton();
+	}
+
+	void teardown() { video->teardown(); }
+
+	void updateButton()
+	{
+		obsBtn->setText(preview::collapsed() ? "Show OBS preview"
+						     : "Hide OBS preview");
+	}
+
+private:
+	QPushButton *obsBtn;
+};
+
+static std::vector<EditPreviewPanel *> g_panels;
+
+static EditPreviewPanel *registerDock(int id)
 {
-	EditWidget *w = new EditWidget(id, nullptr);
+	EditPreviewPanel *p = new EditPreviewPanel(id);
 	if (!obs_frontend_add_dock_by_id(dockIdFor(id).toUtf8().constData(),
-					 "Editable preview", w)) {
-		obs_log(LOG_WARNING, "could not register edit dock %d", id);
-		delete w;
+					 "DockX Preview", p)) {
+		obs_log(LOG_WARNING, "could not register DockX Preview dock %d", id);
+		delete p;
 		return nullptr;
 	}
-	g_widgets.push_back(w);
-	return w;
+	g_panels.push_back(p);
+	return p;
 }
 
 void createFromState()
@@ -622,8 +682,8 @@ void refreshAll()
 {
 	if (g_shutdown)
 		return;
-	for (EditWidget *w : g_widgets)
-		w->refresh();
+	for (EditPreviewPanel *p : g_panels)
+		p->refresh();
 }
 
 void addDock()
@@ -631,10 +691,10 @@ void addDock()
 	const int id = state().nextEditDockId++;
 	state().editDocks.push_back(id);
 	stateSave();
-	EditWidget *w = registerDock(id);
-	if (!w)
+	EditPreviewPanel *p = registerDock(id);
+	if (!p)
 		return;
-	w->refresh();
+	p->refresh();
 	/* pop it open so the new dock visibly appears */
 	QMainWindow *m = static_cast<QMainWindow *>(obs_frontend_get_main_window());
 	QDockWidget *dock = m ? m->findChild<QDockWidget *>(dockIdFor(id)) : nullptr;
@@ -646,10 +706,10 @@ void addDock()
 
 void removeDock(int id)
 {
-	for (auto it = g_widgets.begin(); it != g_widgets.end(); ++it) {
+	for (auto it = g_panels.begin(); it != g_panels.end(); ++it) {
 		if ((*it)->id == id) {
 			(*it)->teardown();
-			g_widgets.erase(it);
+			g_panels.erase(it);
 			break;
 		}
 	}
@@ -697,9 +757,9 @@ void shutdown()
 	g_shutdown = true;
 	/* displays + refs must die while graphics is still alive; the widgets
 	   themselves are torn down later with their QDockWidget parents */
-	for (EditWidget *w : g_widgets)
-		w->teardown();
-	g_widgets.clear();
+	for (EditPreviewPanel *p : g_panels)
+		p->teardown();
+	g_panels.clear();
 }
 
 } // namespace editpreview

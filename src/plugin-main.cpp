@@ -137,9 +137,9 @@ bool obs_module_load(void)
 					 nullptr);
 	obs_frontend_add_tools_menu_item("DockX: Rescue docks to this screen",
 					 rescue_menu_clicked, nullptr);
-	obs_frontend_add_tools_menu_item("DockX: Collapse or expand preview",
+	obs_frontend_add_tools_menu_item("DockX: Show or hide OBS preview",
 					 collapse_menu_clicked, nullptr);
-	obs_frontend_add_tools_menu_item("DockX: Add editable preview",
+	obs_frontend_add_tools_menu_item("DockX: Add DockX Preview (editable)",
 					 edit_preview_menu_clicked, nullptr);
 	return true;
 }

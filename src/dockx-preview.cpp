@@ -69,6 +69,8 @@ void apply()
 			sourcedocks::showVideoDocks();
 	}
 	obs_log(LOG_INFO, "main preview %s", on ? "collapsed" : "expanded");
+	/* keep every DockX Preview's "Show/Hide OBS preview" button in sync */
+	editpreview::refreshAll();
 }
 
 void setCollapsed(bool on)
@@ -89,11 +91,11 @@ void offerVideoDock(QWidget *parent)
 		return;
 	const auto r = QMessageBox::question(
 		parent, "DockX",
-		"The main preview is now collapsed, and you have no video dock "
-		"yet.\n\nAdd an editable preview so you can still see your scene "
-		"and drag your sources around? It is a normal dock: place it, "
-		"resize it, or close it like any other. Bring the main preview "
-		"back any time from Tools, DockX: Collapse or expand preview.",
+		"OBS's built-in preview is now hidden, and you have no DockX "
+		"Preview yet.\n\nAdd a DockX Preview? It is a movable, editable "
+		"window of your scene: drag your sources right in it, place or "
+		"resize it like any dock, and its \"Show OBS preview\" button "
+		"brings OBS's built-in preview back any time.",
 		QMessageBox::Yes | QMessageBox::No, QMessageBox::Yes);
 	if (r == QMessageBox::Yes)
 		editpreview::addDock();

@@ -1447,7 +1447,7 @@ void showDialog(const QString &initialTab)
 		}
 		for (int id : editpreview::dockIds()) {
 			QListWidgetItem *it =
-				new QListWidgetItem("Editable preview", sdListW);
+				new QListWidgetItem("DockX Preview", sdListW);
 			it->setData(Qt::UserRole, id);
 			it->setData(Qt::UserRole + 1, true); /* editable dock */
 		}
@@ -1530,21 +1530,11 @@ void showDialog(const QString &initialTab)
 	srcRow->addWidget(addSrcBtn);
 	ag->addLayout(srcRow);
 
-	QHBoxLayout *outRow = new QHBoxLayout();
-	QLabel *outLbl = new QLabel("Outputs", addGroup);
-	outLbl->setMinimumWidth(60);
-	QPushButton *progBtn = new QPushButton("Program (main output)", addGroup);
-	QPushButton *prevBtn = new QPushButton("Preview (studio mode)", addGroup);
-	outRow->addWidget(outLbl);
-	outRow->addWidget(progBtn);
-	outRow->addWidget(prevBtn);
-	outRow->addStretch(1);
-	ag->addLayout(outRow);
-
 	QHBoxLayout *editRow = new QHBoxLayout();
-	QLabel *editLbl = new QLabel("Editable", addGroup);
+	QLabel *editLbl = new QLabel("Preview", addGroup);
 	editLbl->setMinimumWidth(60);
-	QPushButton *editBtn = new QPushButton("Editable preview (drag sources)", addGroup);
+	QPushButton *editBtn =
+		new QPushButton("Add DockX Preview (movable, editable)", addGroup);
 	editRow->addWidget(editLbl);
 	editRow->addWidget(editBtn);
 	editRow->addStretch(1);
@@ -1560,26 +1550,19 @@ void showDialog(const QString &initialTab)
 			 [addNamed, srcCombo]() { addNamed(srcCombo); });
 	QObject::connect(srcCombo->lineEdit(), &QLineEdit::returnPressed, sdTab,
 			 [addNamed, srcCombo]() { addNamed(srcCombo); });
-	QObject::connect(progBtn, &QPushButton::clicked, sdTab, [sdReload]() {
-		sourcedocks::addDock(sourcedocks::KIND_PROGRAM, QString());
-		sdReload();
-	});
-	QObject::connect(prevBtn, &QPushButton::clicked, sdTab, [sdReload]() {
-		sourcedocks::addDock(sourcedocks::KIND_PREVIEW, QString());
-		sdReload();
-	});
 	QObject::connect(editBtn, &QPushButton::clicked, sdTab, [sdReload]() {
 		editpreview::addDock();
 		sdReload();
 	});
 
 	QLabel *sdHint = new QLabel(
-		"Each dock shows that source, scene, or output live. Audio sources get "
+		"A scene or source dock shows that one thing live. Audio sources get "
 		"volume and mute controls; browser sources are clickable right in the "
-		"dock. An editable preview shows your current scene and lets you click "
-		"a source and drag it, with snapping, right in the dock, so you can "
-		"edit even with the main preview collapsed. Find them in the Docks "
-		"menu; their position saves with your dock layouts.",
+		"dock. A DockX Preview is the movable, editable window of your current "
+		"scene: click a source and drag it, with snapping, right in the dock, "
+		"and its Show/Hide OBS preview button gives you OBS's built-in preview "
+		"back any time. Find them in the Docks menu; their position saves with "
+		"your dock layouts.",
 		sdTab);
 	sdHint->setWordWrap(true);
 	sdv->addWidget(sdHint);
