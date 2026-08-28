@@ -69,6 +69,32 @@ static vec2 mk(float x, float y)
 	return v;
 }
 
+static const float PI_F = 3.14159265358979323846f;
+
+/* resize handles, in unit-square (UV) coords: gx/gy = the grabbed point, ax/ay =
+   the anchor (opposite point, kept fixed while dragging), sx/sy = which axes this
+   handle scales. Index order (used by the hover-cursor map):
+   0 TL  1 TC  2 TR  3 MR  4 BR  5 BC  6 BL  7 ML */
+struct HandleDef {
+	float gx, gy, ax, ay;
+	bool sx, sy;
+};
+static const HandleDef kHandles[8] = {
+	{0.0f, 0.0f, 1.0f, 1.0f, true, true},   /* TL */
+	{0.5f, 0.0f, 0.5f, 1.0f, false, true},  /* TC */
+	{1.0f, 0.0f, 0.0f, 1.0f, true, true},   /* TR */
+	{1.0f, 0.5f, 0.0f, 0.5f, true, false},  /* MR */
+	{1.0f, 1.0f, 0.0f, 0.0f, true, true},   /* BR */
+	{0.5f, 1.0f, 0.5f, 0.0f, false, true},  /* BC */
+	{0.0f, 1.0f, 1.0f, 0.0f, true, true},   /* BL */
+	{0.0f, 0.5f, 1.0f, 0.5f, true, false},  /* ML */
+};
+/* half-size of a handle square + how far the rotate handle stands off the top
+   edge + the grab radius, all in device px (constant on screen at any zoom) */
+static const float HANDLE_HALF_PX = 5.0f;
+static const float ROT_OFFSET_PX = 24.0f;
+static const float GRAB_PX = 11.0f;
+
 /* the native paint surface: renders the current scene + the editing overlay */
 class EditWidget : public QWidget {
 public:
@@ -94,7 +120,7 @@ public:
 	/* release GPU + libobs handles while graphics is still alive; idempotent */
 	void teardown()
 	{
-		endDrag();
+		endInteraction();
 		destroyDisplay();
 		setScene(nullptr);
 	}
@@ -157,6 +183,30 @@ protected:
 		if (!mapToCanvas(e->position(), cx, cy))
 			return;
 		const bool add = (e->modifiers() & Qt::ControlModifier) != 0;
+		const qreal dpr = devicePixelRatioF();
+		const float mdx = (float)(e->position().x() * dpr);
+		const float mdy = (float)(e->position().y() * dpr);
+		/* a transform handle on a single selected, unlocked item wins first:
+		   the corner/edge squares resize it, the stalk above it rotates it. */
+		if (!add) {
+			obs_sceneitem_t *one = singleSelected(); /* owns a ref, or null */
+			if (one) {
+				const int h = hitHandle(one, mdx, mdy);
+				if (h == -2) {
+					beginRotate(one, cx, cy);
+					obs_sceneitem_release(one);
+					setFocus();
+					return;
+				}
+				if (h >= 0) {
+					beginResize(one, h);
+					obs_sceneitem_release(one);
+					setFocus();
+					return;
+				}
+				obs_sceneitem_release(one);
+			}
+		}
 		/* if the click lands inside something already selected, drag THAT
 		   selection as-is -- so a source picked in the Sources list (or a
 		   lower layer) moves even when another source overlaps the click.
@@ -176,18 +226,27 @@ protected:
 
 	void mouseMoveEvent(QMouseEvent *e) override
 	{
-		if (!dragging || !(e->buttons() & Qt::LeftButton))
-			return;
 		float cx, cy;
-		if (!mapToCanvas(e->position(), cx, cy))
+		const bool ok = mapToCanvas(e->position(), cx, cy);
+		if (e->buttons() & Qt::LeftButton) {
+			if (!ok)
+				return;
+			if (mode == Mode::Resize)
+				resizeTo(cx, cy);
+			else if (mode == Mode::Rotate)
+				rotateTo(cx, cy,
+					 (e->modifiers() & Qt::ControlModifier) != 0);
+			else if (mode == Mode::Move && dragging)
+				dragTo(cx, cy);
 			return;
-		dragTo(cx, cy);
+		}
+		updateHoverCursor(e->position()); /* handle-aware cursor feedback */
 	}
 
 	void mouseReleaseEvent(QMouseEvent *e) override
 	{
 		if (e->button() == Qt::LeftButton)
-			endDrag();
+			endInteraction();
 	}
 
 private:
@@ -195,7 +254,11 @@ private:
 	obs_weak_source_t *sceneWeak = nullptr;
 	std::mutex mtx;
 
-	/* drag state (UI thread only) */
+	/* interaction state (UI thread only) */
+	enum class Mode { None, Move, Resize, Rotate };
+	Mode mode = Mode::None;
+
+	/* move-drag state */
 	bool dragging = false;
 	float grabX = 0, grabY = 0;
 	float selL = 0, selT = 0, selR = 0, selB = 0; /* selection bbox at drag start */
@@ -204,6 +267,24 @@ private:
 		vec2 start;
 	};
 	std::vector<Held> held;
+
+	/* resize / rotate target (a single item; addref'd for the interaction) */
+	obs_sceneitem_t *xfItem = nullptr;
+	int activeHandle = -1;
+	uint32_t xfBoundsType = 0;
+	vec2 startScale, startBounds, startPos;
+	float startRot = 0;
+	float ancX = 0, ancY = 0;     /* fixed anchor point (canvas) for resize */
+	float uxX = 0, uxY = 0;       /* unit box x-axis (canvas) */
+	float uyX = 0, uyY = 0;       /* unit box y-axis (canvas) */
+	float span0X = 0, span0Y = 0; /* signed anchor->grabbed lengths at start */
+	bool axX = false, axY = false;
+	float cenX = 0, cenY = 0;     /* box center (canvas) for rotate */
+	float rotGrabAngle = 0;
+
+	/* snap targets, rebuilt at each interaction start: canvas edges/center plus
+	   every other visible item's bbox edges/center. Written on the UI thread. */
+	std::vector<float> snapVx, snapVy;
 
 	/* snap guides for the overlay (written on the UI thread, read on the
 	   graphics thread; a benign one-frame race at worst, no crash) */
@@ -287,6 +368,344 @@ private:
 		if (!metrics(scale, offX, offY, cw, ch))
 			return 0.0f;
 		return 10.0f / scale;
+	}
+
+	/* canvas px -> device px (the inverse of mapToCanvas); used for handle grab
+	   tests + cursor feedback so handles keep a constant on-screen size/reach */
+	bool mapCanvasToDevice(float cx, float cy, float &dx, float &dy)
+	{
+		float scale, offX, offY;
+		uint32_t cw, ch;
+		if (!metrics(scale, offX, offY, cw, ch))
+			return false;
+		dx = cx * scale + offX;
+		dy = cy * scale + offY;
+		return true;
+	}
+
+	/* transform a UV (unit-square) point through a box matrix -> canvas px */
+	static void xf(const matrix4 &m, float u, float v, float &ox, float &oy)
+	{
+		vec3 p, r;
+		vec3_set(&p, u, v, 0.0f);
+		vec3_transform(&r, &p, &m);
+		ox = r.x;
+		oy = r.y;
+	}
+
+	/* ---- single-selection target (for resize/rotate) ---- */
+
+	static bool selUnlockedCb(obs_scene_t *, obs_sceneitem_t *item, void *param)
+	{
+		if (obs_sceneitem_selected(item) && obs_sceneitem_visible(item) &&
+		    !obs_sceneitem_locked(item)) {
+			obs_sceneitem_addref(item);
+			static_cast<std::vector<obs_sceneitem_t *> *>(param)->push_back(item);
+		}
+		return true;
+	}
+
+	/* the one selected, visible, unlocked item -- or null if zero or many.
+	   Returns a ref the caller must release. */
+	obs_sceneitem_t *singleSelected()
+	{
+		obs_source_t *sceneSrc = lockScene();
+		if (!sceneSrc)
+			return nullptr;
+		obs_scene_t *scene = obs_scene_from_source(sceneSrc);
+		std::vector<obs_sceneitem_t *> v;
+		if (scene)
+			obs_scene_enum_items(scene, selUnlockedCb, &v);
+		obs_source_release(sceneSrc);
+		obs_sceneitem_t *one = nullptr;
+		if (v.size() == 1) {
+			one = v[0];
+			obs_sceneitem_addref(one);
+		}
+		for (obs_sceneitem_t *it : v)
+			obs_sceneitem_release(it);
+		return one;
+	}
+
+	/* which handle (0..7), rotate stalk (-2), or none (-1) sits under a device
+	   point for this item */
+	int hitHandle(obs_sceneitem_t *item, float mdx, float mdy)
+	{
+		float scale, offX, offY;
+		uint32_t cw, ch;
+		if (!metrics(scale, offX, offY, cw, ch))
+			return -1;
+		matrix4 m;
+		obs_sceneitem_get_box_transform(item, &m);
+		for (int i = 0; i < 8; i++) {
+			float hx, hy, dx, dy;
+			xf(m, kHandles[i].gx, kHandles[i].gy, hx, hy);
+			if (mapCanvasToDevice(hx, hy, dx, dy) &&
+			    fabsf(dx - mdx) <= GRAB_PX && fabsf(dy - mdy) <= GRAB_PX)
+				return i;
+		}
+		/* rotate stalk: off the top edge along the box's -y (outward) axis */
+		float tcx, tcy, ox, oy, yx, yy;
+		xf(m, 0.5f, 0.0f, tcx, tcy);
+		xf(m, 0.0f, 0.0f, ox, oy);
+		xf(m, 0.0f, 1.0f, yx, yy);
+		float ax = yx - ox, ay = yy - oy;
+		const float ln = sqrtf(ax * ax + ay * ay);
+		if (ln > 1e-3f) {
+			ax /= ln;
+			ay /= ln;
+		}
+		const float rcx = tcx - ax * (ROT_OFFSET_PX / scale);
+		const float rcy = tcy - ay * (ROT_OFFSET_PX / scale);
+		float dx, dy;
+		if (mapCanvasToDevice(rcx, rcy, dx, dy) && fabsf(dx - mdx) <= GRAB_PX &&
+		    fabsf(dy - mdy) <= GRAB_PX)
+			return -2;
+		return -1;
+	}
+
+	void updateHoverCursor(const QPointF &pos)
+	{
+		const qreal dpr = devicePixelRatioF();
+		const float mdx = (float)(pos.x() * dpr);
+		const float mdy = (float)(pos.y() * dpr);
+		int h = -1;
+		obs_sceneitem_t *one = singleSelected();
+		if (one) {
+			h = hitHandle(one, mdx, mdy);
+			obs_sceneitem_release(one);
+		}
+		if (h == -2)
+			setCursor(Qt::PointingHandCursor);
+		else if (h == 0 || h == 4)
+			setCursor(Qt::SizeFDiagCursor);
+		else if (h == 2 || h == 6)
+			setCursor(Qt::SizeBDiagCursor);
+		else if (h == 1 || h == 5)
+			setCursor(Qt::SizeVerCursor);
+		else if (h == 3 || h == 7)
+			setCursor(Qt::SizeHorCursor);
+		else
+			unsetCursor();
+	}
+
+	/* ---- snap targets (canvas + other sources) ---- */
+
+	struct SnapBuild {
+		std::vector<float> *vx;
+		std::vector<float> *vy;
+	};
+	static bool snapTargCb(obs_scene_t *, obs_sceneitem_t *item, void *param)
+	{
+		/* the moving items are the selected ones; snap to everything else */
+		if (obs_sceneitem_selected(item) || !obs_sceneitem_visible(item))
+			return true;
+		auto *sb = static_cast<SnapBuild *>(param);
+		matrix4 m;
+		obs_sceneitem_get_box_transform(item, &m);
+		float L = 1e30f, T = 1e30f, R = -1e30f, B = -1e30f;
+		const float uv[4][2] = {{0, 0}, {1, 0}, {1, 1}, {0, 1}};
+		for (const auto &u : uv) {
+			float x, y;
+			xf(m, u[0], u[1], x, y);
+			L = qMin(L, x);
+			T = qMin(T, y);
+			R = qMax(R, x);
+			B = qMax(B, y);
+		}
+		sb->vx->push_back(L);
+		sb->vx->push_back((L + R) * 0.5f);
+		sb->vx->push_back(R);
+		sb->vy->push_back(T);
+		sb->vy->push_back((T + B) * 0.5f);
+		sb->vy->push_back(B);
+		return true;
+	}
+
+	void buildSnapTargets()
+	{
+		snapVx.clear();
+		snapVy.clear();
+		float scale, offX, offY;
+		uint32_t cw, ch;
+		if (!metrics(scale, offX, offY, cw, ch))
+			return;
+		const float W = (float)cw, H = (float)ch;
+		snapVx.push_back(0.0f);
+		snapVx.push_back(W * 0.5f);
+		snapVx.push_back(W);
+		snapVy.push_back(0.0f);
+		snapVy.push_back(H * 0.5f);
+		snapVy.push_back(H);
+		obs_source_t *sceneSrc = lockScene();
+		if (!sceneSrc)
+			return;
+		obs_scene_t *scene = obs_scene_from_source(sceneSrc);
+		SnapBuild sb{&snapVx, &snapVy};
+		if (scene)
+			obs_scene_enum_items(scene, snapTargCb, &sb);
+		obs_source_release(sceneSrc);
+	}
+
+	/* nudge a single value onto the nearest snap target within radius */
+	bool snap1D(float value, const std::vector<float> &targets, float &adj,
+		    float &gpos)
+	{
+		const float rad = snapRadius();
+		if (rad <= 0.0f)
+			return false;
+		float best = rad;
+		bool got = false;
+		for (float t : targets) {
+			const float nd = t - value;
+			if (fabsf(nd) < best) {
+				best = fabsf(nd);
+				adj = nd;
+				gpos = t;
+				got = true;
+			}
+		}
+		return got;
+	}
+
+	/* ---- resize ---- */
+
+	void beginResize(obs_sceneitem_t *item, int h)
+	{
+		endInteraction();
+		matrix4 m;
+		obs_sceneitem_get_box_transform(item, &m);
+		float ox, oy, xx, xy, yx, yy;
+		xf(m, 0, 0, ox, oy);
+		xf(m, 1, 0, xx, xy);
+		xf(m, 0, 1, yx, yy);
+		const float Xx = xx - ox, Xy = xy - oy;
+		const float Yx = yx - ox, Yy = yy - oy;
+		const float lx = sqrtf(Xx * Xx + Xy * Xy);
+		const float ly = sqrtf(Yx * Yx + Yy * Yy);
+		if (lx < 1e-3f || ly < 1e-3f)
+			return; /* degenerate box; leave selection as-is */
+		xfItem = item;
+		obs_sceneitem_addref(xfItem);
+		mode = Mode::Resize;
+		activeHandle = h;
+		xfBoundsType = (uint32_t)obs_sceneitem_get_bounds_type(item);
+		obs_sceneitem_get_scale(item, &startScale);
+		obs_sceneitem_get_bounds(item, &startBounds);
+		obs_sceneitem_get_pos(item, &startPos);
+		uxX = Xx / lx;
+		uxY = Xy / lx;
+		uyX = Yx / ly;
+		uyY = Yy / ly;
+		xf(m, kHandles[h].ax, kHandles[h].ay, ancX, ancY);
+		float gx, gy;
+		xf(m, kHandles[h].gx, kHandles[h].gy, gx, gy);
+		span0X = (gx - ancX) * uxX + (gy - ancY) * uxY;
+		span0Y = (gx - ancX) * uyX + (gy - ancY) * uyY;
+		axX = kHandles[h].sx;
+		axY = kHandles[h].sy;
+		buildSnapTargets();
+	}
+
+	void resizeTo(float cx, float cy)
+	{
+		if (!xfItem)
+			return;
+		const float dX = cx - ancX, dY = cy - ancY;
+		float spanX = axX ? (dX * uxX + dY * uxY) : span0X;
+		float spanY = axY ? (dX * uyX + dY * uyY) : span0Y;
+		/* predicted grabbed corner (canvas), then snap its x/y to targets */
+		float gpx = ancX + uxX * spanX + uyX * spanY;
+		float gpy = ancY + uxY * spanX + uyY * spanY;
+		snapX = snapY = false;
+		if (axX) {
+			float adj, gpos;
+			if (snap1D(gpx, snapVx, adj, gpos)) {
+				gpx += adj;
+				snapX = true;
+				snapXpos = gpos;
+			}
+		}
+		if (axY) {
+			float adj, gpos;
+			if (snap1D(gpy, snapVy, adj, gpos)) {
+				gpy += adj;
+				snapY = true;
+				snapYpos = gpos;
+			}
+		}
+		spanX = (gpx - ancX) * uxX + (gpy - ancY) * uxY;
+		spanY = (gpx - ancX) * uyX + (gpy - ancY) * uyY;
+		float rX = axX ? spanX / span0X : 1.0f;
+		float rY = axY ? spanY / span0Y : 1.0f;
+		const float minR = 0.02f; /* never zero/flip the item */
+		if (rX < minR)
+			rX = minR;
+		if (rY < minR)
+			rY = minR;
+		if (xfBoundsType != (uint32_t)OBS_BOUNDS_NONE) {
+			vec2 b;
+			b.x = startBounds.x * rX;
+			b.y = startBounds.y * rY;
+			obs_sceneitem_set_bounds(xfItem, &b);
+		} else {
+			vec2 sc;
+			sc.x = startScale.x * rX;
+			sc.y = startScale.y * rY;
+			obs_sceneitem_set_scale(xfItem, &sc);
+		}
+		/* re-anchor: translate pos so the fixed corner returns to where it was
+		   (a pos shift moves the whole box rigidly, per dockx-align.cpp) */
+		matrix4 m2;
+		obs_sceneitem_get_box_transform(xfItem, &m2);
+		float a2x, a2y;
+		xf(m2, kHandles[activeHandle].ax, kHandles[activeHandle].ay, a2x, a2y);
+		vec2 pos;
+		obs_sceneitem_get_pos(xfItem, &pos);
+		pos.x += (ancX - a2x);
+		pos.y += (ancY - a2y);
+		obs_sceneitem_set_pos(xfItem, &pos);
+	}
+
+	/* ---- rotate ---- */
+
+	void beginRotate(obs_sceneitem_t *item, float cx, float cy)
+	{
+		endInteraction();
+		xfItem = item;
+		obs_sceneitem_addref(xfItem);
+		mode = Mode::Rotate;
+		obs_sceneitem_get_pos(item, &startPos);
+		startRot = obs_sceneitem_get_rot(item);
+		matrix4 m;
+		obs_sceneitem_get_box_transform(item, &m);
+		xf(m, 0.5f, 0.5f, cenX, cenY);
+		rotGrabAngle = atan2f(cy - cenY, cx - cenX);
+	}
+
+	void rotateTo(float cx, float cy, bool snap15)
+	{
+		if (!xfItem)
+			return;
+		const float ang = atan2f(cy - cenY, cx - cenX);
+		float deg = startRot + (ang - rotGrabAngle) * (180.0f / PI_F);
+		if (snap15)
+			deg = roundf(deg / 15.0f) * 15.0f;
+		while (deg >= 360.0f)
+			deg -= 360.0f;
+		while (deg < 0.0f)
+			deg += 360.0f;
+		obs_sceneitem_set_rot(xfItem, deg);
+		/* re-anchor: keep the visual center fixed while spinning */
+		matrix4 m2;
+		obs_sceneitem_get_box_transform(xfItem, &m2);
+		float c2x, c2y;
+		xf(m2, 0.5f, 0.5f, c2x, c2y);
+		vec2 pos;
+		obs_sceneitem_get_pos(xfItem, &pos);
+		pos.x += (cenX - c2x);
+		pos.y += (cenY - c2y);
+		obs_sceneitem_set_pos(xfItem, &pos);
 	}
 
 	/* ---- hit testing ---- */
@@ -402,7 +821,7 @@ private:
 
 	void beginDrag(float cx, float cy)
 	{
-		endDrag();
+		endInteraction();
 		grabX = cx;
 		grabY = cy;
 		obs_source_t *sceneSrc = lockScene();
@@ -413,6 +832,7 @@ private:
 			obs_source_release(sceneSrc);
 		}
 		dragging = !held.empty();
+		mode = dragging ? Mode::Move : Mode::None;
 		selL = selT = 1e30f;
 		selR = selB = -1e30f;
 		const float uv[4][2] = {{0, 0}, {1, 0}, {1, 1}, {0, 1}};
@@ -429,34 +849,33 @@ private:
 				selB = qMax(selB, r.y);
 			}
 		}
+		buildSnapTargets();
 	}
 
-	/* nudge dx/dy so the selection bbox latches onto a canvas edge/center */
+	/* nudge dx/dy so the selection bbox latches onto a snap target (a canvas
+	   edge/center or any other source's edge/center) */
 	void computeSnap(float &dx, float &dy)
 	{
 		snapX = snapY = false;
 		if (held.empty())
 			return;
-		float scale, offX, offY;
-		uint32_t cw, ch;
-		if (!metrics(scale, offX, offY, cw, ch))
+		const float rad = snapRadius();
+		if (rad <= 0.0f)
 			return;
-		const float snap = 10.0f / scale;
-		const float W = (float)cw, H = (float)ch;
 		{
 			const float ex[3] = {selL + dx, selR + dx, (selL + selR) * 0.5f + dx};
-			const float tx[3] = {0.0f, W, W * 0.5f};
-			float best = snap, adj = 0, gpos = 0;
+			float best = rad, adj = 0, gpos = 0;
 			bool got = false;
-			for (int i = 0; i < 3; i++) {
-				const float nd = tx[i] - ex[i];
-				if (fabsf(nd) < best) {
-					best = fabsf(nd);
-					adj = nd;
-					gpos = tx[i];
-					got = true;
+			for (float c : ex)
+				for (float t : snapVx) {
+					const float nd = t - c;
+					if (fabsf(nd) < best) {
+						best = fabsf(nd);
+						adj = nd;
+						gpos = t;
+						got = true;
+					}
 				}
-			}
 			if (got) {
 				dx += adj;
 				snapX = true;
@@ -465,18 +884,18 @@ private:
 		}
 		{
 			const float ey[3] = {selT + dy, selB + dy, (selT + selB) * 0.5f + dy};
-			const float ty[3] = {0.0f, H, H * 0.5f};
-			float best = snap, adj = 0, gpos = 0;
+			float best = rad, adj = 0, gpos = 0;
 			bool got = false;
-			for (int i = 0; i < 3; i++) {
-				const float nd = ty[i] - ey[i];
-				if (fabsf(nd) < best) {
-					best = fabsf(nd);
-					adj = nd;
-					gpos = ty[i];
-					got = true;
+			for (float c : ey)
+				for (float t : snapVy) {
+					const float nd = t - c;
+					if (fabsf(nd) < best) {
+						best = fabsf(nd);
+						adj = nd;
+						gpos = t;
+						got = true;
+					}
 				}
-			}
 			if (got) {
 				dy += adj;
 				snapY = true;
@@ -498,13 +917,22 @@ private:
 		}
 	}
 
-	void endDrag()
+	/* end any interaction (move / resize / rotate); releases all held refs */
+	void endInteraction()
 	{
 		for (Held &h : held)
 			obs_sceneitem_release(h.item);
 		held.clear();
+		if (xfItem) {
+			obs_sceneitem_release(xfItem);
+			xfItem = nullptr;
+		}
+		mode = Mode::None;
 		dragging = false;
+		activeHandle = -1;
 		snapX = snapY = false;
+		snapVx.clear();
+		snapVy.clear();
 	}
 
 	/* ---- rendering (graphics thread) ---- */
@@ -532,6 +960,33 @@ private:
 		gs_technique_end(tech);
 	}
 
+	/* a screen-axis-aligned filled rectangle (canvas coords map straight to the
+	   viewport, so a canvas-aligned quad is screen-aligned) */
+	static void drawFilledRect(float x0, float y0, float x1, float y1, uint32_t rgba)
+	{
+		gs_effect_t *solid = obs_get_base_effect(OBS_EFFECT_SOLID);
+		if (!solid)
+			return;
+		gs_eparam_t *colorParam = gs_effect_get_param_by_name(solid, "color");
+		vec4 col;
+		vec4_from_rgba(&col, rgba);
+		gs_effect_set_vec4(colorParam, &col);
+		gs_technique_t *tech = gs_effect_get_technique(solid, "Solid");
+		const size_t passes = gs_technique_begin(tech);
+		for (size_t p = 0; p < passes; p++) {
+			if (!gs_technique_begin_pass(tech, p))
+				continue;
+			gs_render_start(true);
+			gs_vertex2f(x0, y0);
+			gs_vertex2f(x1, y0);
+			gs_vertex2f(x0, y1);
+			gs_vertex2f(x1, y1);
+			gs_render_stop(GS_TRISTRIP);
+			gs_technique_end_pass(tech);
+		}
+		gs_technique_end(tech);
+	}
+
 	static bool collectSelectedBoxes(obs_scene_t *, obs_sceneitem_t *item, void *param)
 	{
 		if (obs_sceneitem_selected(item) && obs_sceneitem_visible(item)) {
@@ -543,7 +998,56 @@ private:
 		return true;
 	}
 
-	void drawOverlay(obs_source_t *sceneSrc, uint32_t w, uint32_t h)
+	/* boxes of selected + visible + UNLOCKED items -- handles show only when
+	   there is exactly one (single-item resize/rotate) */
+	static bool collectHandleBoxes(obs_scene_t *, obs_sceneitem_t *item, void *param)
+	{
+		if (obs_sceneitem_selected(item) && obs_sceneitem_visible(item) &&
+		    !obs_sceneitem_locked(item)) {
+			auto *v = static_cast<std::vector<matrix4> *>(param);
+			matrix4 m;
+			obs_sceneitem_get_box_transform(item, &m);
+			v->push_back(m);
+		}
+		return true;
+	}
+
+	/* the 8 resize squares + the rotate stalk, at a constant on-screen size */
+	void drawHandles(obs_scene_t *scene, float scale)
+	{
+		if (scale <= 0.0f)
+			return;
+		std::vector<matrix4> boxes;
+		obs_scene_enum_items(scene, collectHandleBoxes, &boxes);
+		if (boxes.size() != 1)
+			return;
+		const matrix4 &m = boxes[0];
+		const float half = HANDLE_HALF_PX / scale;
+		for (int i = 0; i < 8; i++) {
+			float hx, hy;
+			xf(m, kHandles[i].gx, kHandles[i].gy, hx, hy);
+			drawFilledRect(hx - half, hy - half, hx + half, hy + half,
+				       COLOR_SELECT);
+		}
+		/* rotate stalk off the top edge along the box's outward (-y) axis */
+		float tcx, tcy, ox, oy, yx, yy;
+		xf(m, 0.5f, 0.0f, tcx, tcy);
+		xf(m, 0.0f, 0.0f, ox, oy);
+		xf(m, 0.0f, 1.0f, yx, yy);
+		float ax = yx - ox, ay = yy - oy;
+		const float ln = sqrtf(ax * ax + ay * ay);
+		if (ln > 1e-3f) {
+			ax /= ln;
+			ay /= ln;
+		}
+		const float rx = tcx - ax * (ROT_OFFSET_PX / scale);
+		const float ry = tcy - ay * (ROT_OFFSET_PX / scale);
+		std::vector<vec2> stalk{mk(tcx, tcy), mk(rx, ry)};
+		drawLineStrip(stalk, COLOR_SELECT);
+		drawFilledRect(rx - half, ry - half, rx + half, ry + half, COLOR_SELECT);
+	}
+
+	void drawOverlay(obs_source_t *sceneSrc, uint32_t w, uint32_t h, float scale)
 	{
 		obs_scene_t *scene = obs_scene_from_source(sceneSrc);
 		if (scene) {
@@ -570,6 +1074,8 @@ private:
 			std::vector<vec2> p{mk(0.0f, snapYpos), mk((float)w, snapYpos)};
 			drawLineStrip(p, COLOR_SNAP);
 		}
+		if (scene)
+			drawHandles(scene, scale);
 	}
 
 	static void drawCb(void *param, uint32_t cx, uint32_t cy)
@@ -594,7 +1100,7 @@ private:
 		gs_ortho(0.0f, (float)w, 0.0f, (float)h, -100.0f, 100.0f);
 		gs_set_viewport(vx, vy, vw, vh);
 		obs_source_video_render(scene);
-		self->drawOverlay(scene, w, h);
+		self->drawOverlay(scene, w, h, scale);
 		gs_projection_pop();
 		gs_viewport_pop();
 		obs_source_release(scene);

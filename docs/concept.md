@@ -172,19 +172,24 @@ off-thesis: encoders, multi-output, NDI, VST, replay buffer.
   Caveat that drives the next item: a Program view is view-only, so a collapsed preview
   loses click-drag scene editing -- the editable Preview dock below is the real payoff.
 - **Fully interactive (editable) Preview dock** (Joey 2026-08-07) -- FIRST SLICE SHIPPED
-  v0.22.0 (2026-08-28). Rebuild OBS's canvas editing inside a DockX dock: the interaction
-  that today lives only in OBS's one main preview widget. New file dockx-editpreview.cpp
-  renders the current scene through its own obs_display (so it shows video whether or not
-  the main preview is enabled -- a passive Program dock goes black off-stream, which is why
-  collapse now surfaces/offers THIS instead) and rebuilds the editing on top: click to
-  hit-test the topmost source under the cursor and select it (syncs OBS selection),
-  drag to move it (single or multi-select), snap the selection bbox to the canvas edges +
-  center with live snap guide lines. Editable docks persist (state edit_docks), add via
-  Tools "DockX: Add editable preview" or Source docks tab, manage/remove in that tab.
-  STILL OPEN (next slices): transform handles (resize), rotate, per-item snapping to other
-  sources, studio-mode preview-scene editing. Unlocks multiple editable previews at once,
-  a per-scene "edit this scene" dock, and custom on-canvas guides. The real payoff of the
-  collapse-preview work.
+  v0.22.0, SECOND SLICE (resize + rotate + snap-to-sources) SHIPPED v0.23.0 (2026-08-28).
+  Rebuild OBS's canvas editing inside a DockX dock: the interaction that today lives only
+  in OBS's one main preview widget. New file dockx-editpreview.cpp renders the current
+  scene through its own obs_display (so it shows video whether or not the main preview is
+  enabled -- a passive Program dock goes black off-stream, which is why collapse now
+  surfaces/offers THIS instead) and rebuilds the editing on top: click to hit-test the
+  topmost source under the cursor and select it (syncs OBS selection), drag to move it
+  (single or multi-select), snap the selection bbox to the canvas edges + center AND now
+  to every other source's edges/center, with live snap guide lines. v0.23.0 adds full
+  single-item transform: 8 resize handles (corners scale both axes, edges scale one; the
+  opposite corner/edge stays pinned; scale for normal items, bounds for bounds items) and
+  a rotate stalk above the top edge (hold Ctrl to snap to 15 degrees). Handles keep a
+  constant on-screen size at any zoom and show only when exactly one unlocked item is
+  selected; hover shows the matching resize/rotate cursor. Editable docks persist (state
+  edit_docks), add via Tools "DockX: Add DockX Preview (editable)" or Source docks tab,
+  manage/remove in that tab. STILL OPEN (next slices): multi-item group resize, crop-drag,
+  studio-mode preview-scene editing. Unlocks multiple editable previews at once, a per-scene
+  "edit this scene" dock, and custom on-canvas guides. The real payoff of the collapse work.
 - **Starter layout gallery / one-click presets** (Joey 2026-08-07) -- headline onboarding.
   Curated one-click layouts (flagship: "Vertical Chat Focus" -- full-height chat + stacked
   side panels, collapsed preview -> Program dock) so a normal streamer gets the flexible
