@@ -2004,6 +2004,14 @@ void showDialog(const QString &initialTab)
 		 state().alignTools, [](bool v) { state().alignTools = v; });
 	addCheck("Bring stranded docks back when a monitor is unplugged (auto rescue)",
 		 state().autoRescue, [](bool v) { state().autoRescue = v; });
+	addCheck("Collapse the main video preview (docks take the space; your stream "
+		 "keeps running)",
+		 state().previewCollapsed, [settingsTab](bool v) {
+			 state().previewCollapsed = v;
+			 preview::apply();
+			 if (v)
+				 preview::offerVideoDock(settingsTab->window());
+		 });
 	addCheck("Pop the Missing Media cleaner at startup when files are missing",
 		 state().missingAutoPop, [](bool v) { state().missingAutoPop = v; });
 

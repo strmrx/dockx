@@ -39,6 +39,7 @@ static void on_frontend_event(enum obs_frontend_event event, void *)
 		dockx::sourcedocks::refreshAll();
 		dockx::missing::autoPopIfNeeded();
 		dockx::monitors::installWatch();
+		dockx::preview::apply();
 		break;
 	case OBS_FRONTEND_EVENT_SCENE_CHANGED:
 		dockx::panels::autoSceneLayout();
@@ -57,6 +58,8 @@ static void on_frontend_event(enum obs_frontend_event event, void *)
 		dockx::sourcedocks::refreshAll();
 		break;
 	case OBS_FRONTEND_EVENT_STUDIO_MODE_ENABLED:
+		dockx::preview::onStudioModeEnabled();
+		[[fallthrough]];
 	case OBS_FRONTEND_EVENT_STUDIO_MODE_DISABLED:
 		dockx::folders::rebuildSoon();
 		dockx::sourcedocks::refreshAll();
@@ -100,6 +103,12 @@ static void rescue_menu_clicked(void *)
 	dockx::monitors::rescueStrayDocks();
 }
 
+static void collapse_menu_clicked(void *)
+{
+	dockx::preview::toggleWithPrompt(
+		static_cast<QWidget *>(obs_frontend_get_main_window()));
+}
+
 bool obs_module_load(void)
 {
 	obs_log(LOG_INFO, "DockX loaded (version %s)", PLUGIN_VERSION);
@@ -116,6 +125,8 @@ bool obs_module_load(void)
 					 nullptr);
 	obs_frontend_add_tools_menu_item("DockX: Rescue docks to this screen",
 					 rescue_menu_clicked, nullptr);
+	obs_frontend_add_tools_menu_item("DockX: Collapse or expand preview",
+					 collapse_menu_clicked, nullptr);
 	return true;
 }
 

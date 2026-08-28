@@ -39,7 +39,8 @@ target_sources(
   PRIVATE src/plugin-main.cpp src/dockx-core.cpp src/dockx-align.cpp src/dockx-collections.cpp
           src/dockx-dialog.cpp src/dockx-filters.cpp src/dockx-folders.cpp
           src/dockx-hints.cpp src/dockx-loadouts.cpp src/dockx-locks.cpp src/dockx-missing.cpp
-          src/dockx-monitors.cpp src/dockx-search.cpp src/dockx-sourcedocks.cpp
+          src/dockx-monitors.cpp src/dockx-preview.cpp src/dockx-search.cpp
+          src/dockx-sourcedocks.cpp
           src/dockx-thumbs.cpp src/dockx.hpp
 )
 

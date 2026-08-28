@@ -157,15 +157,17 @@ off-thesis: encoders, multi-output, NDI, VST, replay buffer.
 - Projector management (#9), multiview upgrades (#6), studio mode QoL (#10),
   collection zip export/import (#11)
 - **Collapse main preview + Program/Preview dock as the replacement** (Joey 2026-08-07).
-  OBS's main video canvas is the QMainWindow central widget (not a dock): it has a hard
-  minimum size and every dock can only ring it, so it always claims a fixed block in the
-  middle. Add a toggle that shrinks/hides the central widget so docks reclaim the whole
-  window, and pair it with the existing Source-dock Program/Preview so the video becomes a
-  freely sizeable/placeable dock. Resource-neutral (swaps one obs_display for another;
-  smaller = slightly less GPU; stream/record/sources keep running -- same as OBS's own
-  "Disable Preview"). Caveat that drives the next item: a Program view is view-only, so a
-  collapsed preview loses click-drag scene editing -- first pass keeps an *editable*
-  preview that collapses on demand.
+  SHIPPED v0.21.0 (2026-08-27). OBS's main video canvas is the QMainWindow central widget
+  (not a dock): it has a hard minimum size and every dock can only ring it, so it always
+  claims a fixed block in the middle. v0.21 hides the central widget so docks reclaim the
+  whole window: Settings toggle + a "DockX: Collapse or expand preview" Tools item; on
+  collapse, if no Program/Preview source dock exists, DockX offers to add a Program dock
+  as the replacement view. Enabling studio mode auto-expands the preview (studio edits
+  need the canvas). Resource-neutral (a hidden widget stops being exposed so its display
+  stops painting; stream/record/sources keep running -- same as OBS's own "Disable
+  Preview"). New file dockx-preview.cpp; state preview_collapsed persists across restarts.
+  Caveat that drives the next item: a Program view is view-only, so a collapsed preview
+  loses click-drag scene editing -- the editable Preview dock below is the real payoff.
 - **Fully interactive (editable) Preview dock** (Joey 2026-08-07). Rebuild OBS's canvas
   editing inside a DockX dock: scene-item hit-testing, transform handles, move/resize/
   rotate, snapping -- the interaction that today lives only in OBS's one main preview

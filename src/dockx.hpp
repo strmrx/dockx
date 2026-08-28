@@ -91,6 +91,7 @@ struct State {
 	bool sceneThumbs = true;           /* live scene previews in the folder grid */
 	bool alignTools = false;           /* the Align + distribute tab (opt in) */
 	bool autoRescue = true;            /* pull stranded docks home on unplug */
+	bool previewCollapsed = false;     /* main video preview hidden; docks own the window */
 
 	int nextId = 1;
 	std::vector<Layout> layouts;
@@ -318,6 +319,19 @@ bool removeFromScene(const QString &sceneUuid, long long itemId); /* drop just t
 bool deleteSource(const QString &sourceName); /* remove from whole project; true if fully gone */
 QString describeHolders(const QString &sourceName); /* best-effort: what still holds it live */
 } // namespace search
+
+/* collapse the main video preview: OBS's canvas is the QMainWindow central
+   widget (docks can only ring it); hiding it hands the whole window to the
+   docks, with a live Program/Preview source dock as the movable stand in.
+   Stream/record/sources keep running, same as OBS's own "Disable Preview" */
+namespace preview {
+bool collapsed();
+void apply();               /* reassert state().previewCollapsed on the window */
+void setCollapsed(bool on); /* set + apply + save */
+void offerVideoDock(QWidget *parent);   /* offer a Program dock if none exists */
+void toggleWithPrompt(QWidget *parent); /* the Tools menu toggle */
+void onStudioModeEnabled(); /* expand: studio mode edits need the canvas */
+} // namespace preview
 
 /* the dock layout guide: illustrated first-run walkthrough of dock dragging
    (title bar grab, edge drop = split, center drop = tabs, DockX columns) */

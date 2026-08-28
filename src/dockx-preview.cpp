@@ -1,0 +1,100 @@
+/*
+DockX for OBS Studio (by StrmrX) -- collapse the main video preview.
+GPL v2, see plugin-main.cpp for the full notice.
+
+OBS's video canvas is the QMainWindow central widget, not a dock: docks can
+only ring it, so it always claims a fixed block in the middle of the window.
+Hiding it hands the whole window to the docks; a live Program/Preview source
+dock (dockx-sourcedocks.cpp) becomes the movable, resizable stand in.
+Resource safe: a hidden widget stops being exposed so its display stops
+painting, while stream/record/sources keep running, same as OBS's own
+"Disable Preview".
+*/
+
+#include "dockx.hpp"
+
+#include <obs-frontend-api.h>
+#include <plugin-support.h>
+
+#include <QMainWindow>
+#include <QMessageBox>
+#include <QWidget>
+
+namespace dockx {
+namespace preview {
+
+static QMainWindow *mainWindow()
+{
+	return static_cast<QMainWindow *>(obs_frontend_get_main_window());
+}
+
+bool collapsed()
+{
+	return state().previewCollapsed;
+}
+
+void apply()
+{
+	QMainWindow *m = mainWindow();
+	if (!m)
+		return;
+	QWidget *c = m->centralWidget();
+	if (!c) {
+		obs_log(LOG_WARNING,
+			"collapse preview: no central widget found, doing nothing");
+		return;
+	}
+	if (c->isHidden() == state().previewCollapsed)
+		return;
+	c->setVisible(!state().previewCollapsed);
+	obs_log(LOG_INFO, "main preview %s",
+		state().previewCollapsed ? "collapsed" : "expanded");
+}
+
+void setCollapsed(bool on)
+{
+	if (state().previewCollapsed == on)
+		return;
+	state().previewCollapsed = on;
+	apply();
+	stateSave();
+}
+
+void offerVideoDock(QWidget *parent)
+{
+	for (const SourceDockEntry &e : state().sourceDocks)
+		if (e.kind == sourcedocks::KIND_PROGRAM ||
+		    e.kind == sourcedocks::KIND_PREVIEW)
+			return;
+	const auto r = QMessageBox::question(
+		parent, "DockX",
+		"The main preview is now collapsed, and you have no video dock "
+		"yet.\n\nAdd a Program dock so you can still see what your "
+		"viewers see? It is a normal dock: place it, resize it, or "
+		"close it like any other.",
+		QMessageBox::Yes | QMessageBox::No, QMessageBox::Yes);
+	if (r == QMessageBox::Yes)
+		sourcedocks::addDock(sourcedocks::KIND_PROGRAM, QString());
+}
+
+void toggleWithPrompt(QWidget *parent)
+{
+	const bool on = !state().previewCollapsed;
+	setCollapsed(on);
+	if (on)
+		offerVideoDock(parent);
+}
+
+void onStudioModeEnabled()
+{
+	/* studio mode edits happen on the main canvas; never leave someone in
+	   studio mode staring at a hidden editor */
+	if (state().previewCollapsed) {
+		obs_log(LOG_INFO,
+			"studio mode enabled: expanding the collapsed preview");
+		setCollapsed(false);
+	}
+}
+
+} // namespace preview
+} // namespace dockx
