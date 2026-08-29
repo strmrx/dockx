@@ -331,12 +331,15 @@ private:
 	};
 	std::vector<GItem> groupItems;
 
-	/* crop-drag (Alt + drag an edge or corner handle) on a single non-bounds
-	   item, at any rotation. Crop is measured in SOURCE px along the item's own
-	   axes, so canvas movement is projected onto those axes and mapped through
-	   the source->canvas scale; the opposite edge/corner is re-anchored. Corners
-	   crop the two adjacent sides at once. */
+	/* crop-drag (Alt + drag an edge or corner handle) on a single item, at any
+	   rotation. Crop is measured in SOURCE px along the item's own axes, so
+	   canvas movement is projected onto those axes and mapped through the
+	   source->canvas scale; the opposite edge/corner is re-anchored. Corners
+	   crop the two adjacent sides at once. Bounds-fitted items crop too, but
+	   their box is pinned by the bounds so we skip the re-anchor for them
+	   (OBS does the same) -- the content just refits inside the fixed box. */
 	bool cropL = false, cropT = false, cropR = false, cropB = false;
+	bool cropIsBounds = false; /* bounds-fit item: crop but don't reposition */
 	obs_sceneitem_crop startCrop = {};
 	uint32_t srcW = 0, srcH = 0;
 	float cropScaleX = 0, cropScaleY = 0; /* canvas px per source px (local axes) */
@@ -1013,16 +1016,19 @@ private:
 
 	/* ---- crop-drag (Alt + edge handle) ---- */
 
-	/* sets up a crop drag; leaves mode == None (a no-op) if the item is
-	   bounds-sized or already fully cropped -- the caller then does a resize.
-	   Works at any rotation (crop runs on the item's own axes). h is any of the
-	   8 handles: edges crop one side, corners crop the two adjacent sides. */
+	/* sets up a crop drag; leaves mode == None (a no-op) if the item is already
+	   fully cropped or degenerate -- the caller then does a resize. Works at any
+	   rotation (crop runs on the item's own axes) and for bounds-fitted items
+	   (their box is pinned, so we crop without repositioning -- see cropTo). h
+	   is any of the 8 handles: edges crop one side, corners crop two. */
 	void beginCrop(obs_sceneitem_t *item, int h)
 	{
 		endInteraction();
-		/* bounds sizing refits the crop non-linearly; leave those to resize */
-		if (obs_sceneitem_get_bounds_type(item) != OBS_BOUNDS_NONE)
-			return;
+		/* bounds-fit items crop too, but the crop refits the content inside a
+		   pinned box, so we must NOT re-anchor the position afterward (OBS
+		   guards its set_pos on OBS_BOUNDS_NONE the same way). */
+		const bool boundsFit =
+			obs_sceneitem_get_bounds_type(item) != OBS_BOUNDS_NONE;
 		obs_source_t *src = obs_sceneitem_get_source(item); /* borrowed */
 		if (!src)
 			return;
@@ -1071,6 +1077,7 @@ private:
 		xf(m, kHandles[h].gx, kHandles[h].gy, cropStartX, cropStartY);
 		xfItem = item;
 		obs_sceneitem_addref(xfItem);
+		cropIsBounds = boundsFit;
 		mode = Mode::Crop;
 	}
 
@@ -1111,7 +1118,12 @@ private:
 				c.top = (int)srcH - startCrop.bottom - 1;
 		}
 		obs_sceneitem_set_crop(xfItem, &c);
-		/* re-anchor: keep the opposite (un-cropped) edge/corner visually fixed */
+		/* re-anchor: keep the opposite (un-cropped) edge/corner visually fixed.
+		   Skipped for bounds-fit items: their box is pinned by the bounds, so
+		   the far edge never moves and a pos shift would drag the whole box
+		   (OBS likewise only repositions when OBS_BOUNDS_NONE). */
+		if (cropIsBounds)
+			return;
 		matrix4 m2;
 		obs_sceneitem_get_box_transform(xfItem, &m2);
 		float a2x, a2y;
@@ -1349,6 +1361,7 @@ private:
 		dragging = false;
 		activeHandle = -1;
 		cropL = cropT = cropR = cropB = false;
+		cropIsBounds = false;
 		snapX = snapY = false;
 		snapVx.clear();
 		snapVy.clear();

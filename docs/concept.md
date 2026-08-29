@@ -197,8 +197,11 @@ off-thesis: encoders, multi-output, NDI, VST, replay buffer.
   each item's position + advancing its own rotation; Ctrl snaps 15 degrees), **corner (two-side)
   crop** (Alt + a corner handle crops the two adjacent sides at once, opposite corner pinned), and
   **rotated crop** (crop now runs on the item's own axes, so any-angle sources crop cleanly; the
-  old unrotated-only limit is gone). STILL OPEN: bounds-sized crop (refits non-linearly, left to
-  resize) and studio-mode preview-scene editing. Unlocks multiple editable previews at once, a
+  old unrotated-only limit is gone). v0.27.0 adds **bounds-fitted crop** (Alt + drag now crops
+  bounds-sized sources too: the crop applies with the same frozen start-frame mapping but the box
+  is NOT repositioned, so the content refits inside the pinned bounds box -- matching OBS's own
+  `CropItem`, which only repositions when OBS_BOUNDS_NONE). STILL OPEN: studio-mode preview-scene
+  editing. Unlocks multiple editable previews at once, a
   per-scene "edit this scene" dock, and custom on-canvas guides. The real payoff of the collapse
   work.
 - **Starter layout templates** (Joey 2026-08-28) -- SHIPPED v0.25.0. One-click dock arrangements
