@@ -125,10 +125,16 @@ public:
 		setScene(nullptr);
 	}
 
-	/* UI thread: point the dock at the current program scene */
+	/* UI thread: point the dock at the scene the user is editing. In studio
+	   mode that is the PREVIEW (staging) scene -- edits land there and only go
+	   live on transition, matching OBS's studio workflow -- otherwise it is the
+	   current program scene. Re-resolved on every scene / preview-scene /
+	   studio-mode event via refreshAll(). */
 	void refresh()
 	{
-		obs_source_t *scene = obs_frontend_get_current_scene();
+		obs_source_t *scene = obs_frontend_preview_program_mode_active()
+					      ? obs_frontend_get_current_preview_scene()
+					      : obs_frontend_get_current_scene();
 		setScene(scene ? obs_source_get_weak_source(scene) : nullptr);
 		if (scene)
 			obs_source_release(scene);
@@ -941,6 +947,16 @@ private:
 		mode = Mode::GroupRotate;
 	}
 
+	/* soft angular assist for FREE (non-Ctrl) rotation: if the angle lands
+	   within `thr` deg of a multiple of `step`, click it there. Lets a drag
+	   settle on clean angles without forcing a grid the way Ctrl's hard 15-deg
+	   snap does. Mirrors OBS's own no-modifier rotate snapping. */
+	static float softSnapAngle(float a, float step, float thr)
+	{
+		const float n = roundf(a / step) * step;
+		return (fabsf(a - n) <= thr) ? n : a;
+	}
+
 	void groupRotateTo(float cx, float cy, bool snap15)
 	{
 		if (groupItems.empty())
@@ -949,6 +965,8 @@ private:
 		float dDeg = (ang - rotGrabAngle) * (180.0f / PI_F);
 		if (snap15)
 			dDeg = roundf(dDeg / 15.0f) * 15.0f;
+		else
+			dDeg = softSnapAngle(dDeg, 15.0f, 5.0f);
 		const float rad = dDeg * (PI_F / 180.0f);
 		const float cs = cosf(rad), sn = sinf(rad);
 		for (GItem &gi : groupItems) {
@@ -997,6 +1015,13 @@ private:
 		float deg = startRot + (ang - rotGrabAngle) * (180.0f / PI_F);
 		if (snap15)
 			deg = roundf(deg / 15.0f) * 15.0f;
+		else {
+			/* free rotate still softly clicks to clean angles and back
+			   to the item's original rotation (a "reset tilt" magnet) */
+			deg = softSnapAngle(deg, 15.0f, 5.0f);
+			if (fabsf(deg - startRot) <= 5.0f)
+				deg = startRot;
+		}
 		while (deg >= 360.0f)
 			deg -= 360.0f;
 		while (deg < 0.0f)

@@ -200,10 +200,14 @@ off-thesis: encoders, multi-output, NDI, VST, replay buffer.
   old unrotated-only limit is gone). v0.27.0 adds **bounds-fitted crop** (Alt + drag now crops
   bounds-sized sources too: the crop applies with the same frozen start-frame mapping but the box
   is NOT repositioned, so the content refits inside the pinned bounds box -- matching OBS's own
-  `CropItem`, which only repositions when OBS_BOUNDS_NONE). STILL OPEN: studio-mode preview-scene
-  editing. Unlocks multiple editable previews at once, a
-  per-scene "edit this scene" dock, and custom on-canvas guides. The real payoff of the collapse
-  work.
+  `CropItem`, which only repositions when OBS_BOUNDS_NONE). v0.28.0 closes the editor: **studio-mode
+  staging-scene editing** (in studio mode the DockX Preview edits the PREVIEW/staging scene, so
+  edits go live only on transition; OBS's built-in split view is kept -- Joey's call, the DockX
+  Preview is NOT the sole studio surface) and **soft angular snapping on rotate** (free rotation
+  gently clicks to 15-deg multiples + back-to-original within 5 deg, on both single and group
+  rotate; Ctrl still hard-snaps to 15 -- mirrors OBS's own no-modifier RotateItem snapping). The
+  DockX Preview editor is now feature-complete; only far-future polish (on-canvas angle readout,
+  per-scene "edit this scene" dock, custom guides) remains. The real payoff of the collapse work.
 - **Starter layout templates** (Joey 2026-08-28) -- SHIPPED v0.25.0. One-click dock arrangements
   for new users, in `src/dockx-templates.cpp` (`dockx::templates`). NOT a saved blob (every
   user's docks differ) -- it arranges the docks THIS OBS has via the QMainWindow dock API:
