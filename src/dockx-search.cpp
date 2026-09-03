@@ -35,7 +35,7 @@ struct ScanCtx {
 	QList<Hit> *hits;
 	QString sceneUuid;
 	QString sceneName;
-	QString groupName;  /* set while descending into a group */
+	QString groupName;   /* set while descending into a group */
 	QSet<QString> *used; /* source names that appear in >= 1 scene */
 };
 
@@ -48,8 +48,7 @@ static bool itemEnum(obs_scene_t *, obs_sceneitem_t *item, void *param)
 		Hit h;
 		h.sourceName = QString::fromUtf8(name);
 		h.isGroup = obs_sceneitem_is_group(item);
-		h.sourceType = h.isGroup ? QStringLiteral("Group")
-					 : sourceTypeName(src);
+		h.sourceType = h.isGroup ? QStringLiteral("Group") : sourceTypeName(src);
 		h.sceneUuid = ctx->sceneUuid;
 		h.sceneName = ctx->sceneName;
 		h.groupName = ctx->groupName;
@@ -153,8 +152,7 @@ bool reveal(const QString &sceneUuid, long long itemId)
 {
 	if (sceneUuid.isEmpty())
 		return false;
-	obs_source_t *sceneSrc =
-		obs_get_source_by_uuid(sceneUuid.toUtf8().constData());
+	obs_source_t *sceneSrc = obs_get_source_by_uuid(sceneUuid.toUtf8().constData());
 	if (!sceneSrc)
 		return false;
 	obs_scene_t *scene = obs_scene_from_source(sceneSrc);
@@ -181,8 +179,7 @@ bool reveal(const QString &sceneUuid, long long itemId)
 
 void openProperties(const QString &sourceName)
 {
-	obs_source_t *src =
-		obs_get_source_by_name(sourceName.toUtf8().constData());
+	obs_source_t *src = obs_get_source_by_name(sourceName.toUtf8().constData());
 	if (!src)
 		return;
 	obs_frontend_open_source_properties(src);
@@ -193,8 +190,7 @@ bool removeFromScene(const QString &sceneUuid, long long itemId)
 {
 	if (sceneUuid.isEmpty())
 		return false;
-	obs_source_t *sceneSrc =
-		obs_get_source_by_uuid(sceneUuid.toUtf8().constData());
+	obs_source_t *sceneSrc = obs_get_source_by_uuid(sceneUuid.toUtf8().constData());
 	if (!sceneSrc)
 		return false;
 	obs_scene_t *scene = obs_scene_from_source(sceneSrc);
@@ -215,8 +211,7 @@ bool removeFromScene(const QString &sceneUuid, long long itemId)
 
 bool deleteSource(const QString &sourceName)
 {
-	obs_source_t *src =
-		obs_get_source_by_name(sourceName.toUtf8().constData());
+	obs_source_t *src = obs_get_source_by_name(sourceName.toUtf8().constData());
 	if (!src)
 		return true; /* already gone */
 	obs_source_remove(src);
@@ -224,8 +219,7 @@ bool deleteSource(const QString &sourceName)
 	/* obs_source_destroy synchronously unlinks a source from the public list
 	   the instant its last ref drops, so a name lookup now tells us for sure
 	   whether it truly went away or something else still holds it */
-	obs_source_t *check =
-		obs_get_source_by_name(sourceName.toUtf8().constData());
+	obs_source_t *check = obs_get_source_by_name(sourceName.toUtf8().constData());
 	if (check) {
 		obs_source_release(check);
 		return false;
@@ -241,8 +235,7 @@ struct FilterParentCtx {
 static bool findFilterParent(void *param, obs_source_t *src)
 {
 	auto *ctx = static_cast<FilterParentCtx *>(param);
-	obs_source_t *f =
-		obs_source_get_filter_by_name(src, ctx->name.toUtf8().constData());
+	obs_source_t *f = obs_source_get_filter_by_name(src, ctx->name.toUtf8().constData());
 	if (f) {
 		ctx->parent = QString::fromUtf8(obs_source_get_name(src));
 		obs_source_release(f);
@@ -258,8 +251,7 @@ QString describeHolders(const QString &sourceName)
 
 	/* our own live source docks (the one holder DockX itself can create) */
 	for (const SourceDockEntry &e : state().sourceDocks)
-		if (e.kind == sourcedocks::KIND_SOURCE &&
-		    e.sourceName == sourceName) {
+		if (e.kind == sourcedocks::KIND_SOURCE && e.sourceName == sourceName) {
 			reasons << "a DockX live dock is showing it (Tools > DockX > "
 				   "Source docks, remove that dock)";
 			break;

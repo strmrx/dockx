@@ -56,9 +56,8 @@ QDockWidget *findChat(QMainWindow *m)
 	for (QDockWidget *d : docks) {
 		if (d->objectName() == "dockx_chat_slot")
 			continue;
-		const bool isChat =
-			d->objectName().contains("chat", Qt::CaseInsensitive) ||
-			d->windowTitle().contains("chat", Qt::CaseInsensitive);
+		const bool isChat = d->objectName().contains("chat", Qt::CaseInsensitive) ||
+				    d->windowTitle().contains("chat", Qt::CaseInsensitive);
 		if (!isChat)
 			continue;
 		if (d->isVisible())
@@ -73,8 +72,7 @@ QDockWidget *findChat(QMainWindow *m)
 QList<QDockWidget *> findPanels(QMainWindow *m)
 {
 	QList<QDockWidget *> out;
-	const char *names[] = {"scenesDock", "sourcesDock", "mixerDock",
-			       "transitionsDock", "controlsDock"};
+	const char *names[] = {"scenesDock", "sourcesDock", "mixerDock", "transitionsDock", "controlsDock"};
 	for (const char *n : names) {
 		QDockWidget *d = byName(m, n);
 		if (d)
@@ -105,11 +103,10 @@ QDockWidget *ensurePlaceholder(QMainWindow *m)
 		return d;
 	d = new QDockWidget("Add your chat here", m);
 	d->setObjectName("dockx_chat_slot");
-	QLabel *lbl = new QLabel(
-		"Your chat goes in this column.\n\nAdd your chat as a browser dock "
-		"(your Twitch, YouTube or Kick chat, or OBS's Docks menu), then apply "
-		"this template again to slot it in.",
-		d);
+	QLabel *lbl = new QLabel("Your chat goes in this column.\n\nAdd your chat as a browser dock "
+				 "(your Twitch, YouTube or Kick chat, or OBS's Docks menu), then apply "
+				 "this template again to slot it in.",
+				 d);
 	lbl->setWordWrap(true);
 	lbl->setAlignment(Qt::AlignCenter);
 	lbl->setMargin(16);
@@ -138,8 +135,7 @@ void placed(QDockWidget *d)
 
 /* tall chat column on the left; editable preview top-right; core panels tiled
    in a row beneath it */
-void verticalChatFocus(QMainWindow *m, QDockWidget *preview, QDockWidget *chat,
-		       const QList<QDockWidget *> &panels)
+void verticalChatFocus(QMainWindow *m, QDockWidget *preview, QDockWidget *chat, const QList<QDockWidget *> &panels)
 {
 	const int W = m->width() > 0 ? m->width() : 1280;
 	const int H = m->height() > 0 ? m->height() : 720;
@@ -160,16 +156,13 @@ void verticalChatFocus(QMainWindow *m, QDockWidget *preview, QDockWidget *chat,
 	m->addDockWidget(Qt::LeftDockWidgetArea, chat);
 	placed(chat);
 
-	m->resizeDocks({chat, preview}, {(int)(W * 0.24), (int)(W * 0.76)},
-		       Qt::Horizontal);
+	m->resizeDocks({chat, preview}, {(int)(W * 0.24), (int)(W * 0.76)}, Qt::Horizontal);
 	if (rowAnchor)
-		m->resizeDocks({preview, rowAnchor}, {(int)(H * 0.60), (int)(H * 0.40)},
-			       Qt::Vertical);
+		m->resizeDocks({preview, rowAnchor}, {(int)(H * 0.60), (int)(H * 0.40)}, Qt::Vertical);
 }
 
 /* big editable preview across the top; chat + panels tiled along the bottom */
-void widePreview(QMainWindow *m, QDockWidget *preview, QDockWidget *chat,
-		 const QList<QDockWidget *> &panels)
+void widePreview(QMainWindow *m, QDockWidget *preview, QDockWidget *chat, const QList<QDockWidget *> &panels)
 {
 	const int H = m->height() > 0 ? m->height() : 720;
 
@@ -190,14 +183,12 @@ void widePreview(QMainWindow *m, QDockWidget *preview, QDockWidget *chat,
 		placed(d);
 	}
 	if (anchor)
-		m->resizeDocks({preview, anchor}, {(int)(H * 0.62), (int)(H * 0.38)},
-			       Qt::Vertical);
+		m->resizeDocks({preview, anchor}, {(int)(H * 0.62), (int)(H * 0.38)}, Qt::Vertical);
 }
 
 /* everything tight for a small screen: preview on the left, chat + panels tabbed
    into one stack on the right */
-void compact(QMainWindow *m, QDockWidget *preview, QDockWidget *chat,
-	     const QList<QDockWidget *> &panels)
+void compact(QMainWindow *m, QDockWidget *preview, QDockWidget *chat, const QList<QDockWidget *> &panels)
 {
 	const int W = m->width() > 0 ? m->width() : 1280;
 
@@ -218,8 +209,7 @@ void compact(QMainWindow *m, QDockWidget *preview, QDockWidget *chat,
 		placed(d);
 	}
 	if (first)
-		m->resizeDocks({preview, first}, {(int)(W * 0.58), (int)(W * 0.42)},
-			       Qt::Horizontal);
+		m->resizeDocks({preview, first}, {(int)(W * 0.58), (int)(W * 0.42)}, Qt::Horizontal);
 }
 
 } // namespace
@@ -227,17 +217,14 @@ void compact(QMainWindow *m, QDockWidget *preview, QDockWidget *chat,
 QList<Info> list()
 {
 	QList<Info> out;
-	out.push_back({"vertical_chat",
-		       "Vertical Chat Focus",
+	out.push_back({"vertical_chat", "Vertical Chat Focus",
 		       "A tall chat column on the left, your editable DockX Preview "
 		       "top right, and the Scenes, Sources and Mixer panels tiled "
 		       "beneath it."});
-	out.push_back({"wide_preview",
-		       "Wide Preview",
+	out.push_back({"wide_preview", "Wide Preview",
 		       "A big editable DockX Preview across the top, with chat and "
 		       "your panels tiled along the bottom."});
-	out.push_back({"compact",
-		       "Compact",
+	out.push_back({"compact", "Compact",
 		       "Everything tight for a small screen: the preview on the left, "
 		       "chat and panels tabbed together on the right."});
 	return out;
@@ -260,8 +247,7 @@ bool apply(const QString &id, QWidget *)
 
 	QDockWidget *prev = ensurePreview(m);
 	if (!prev) {
-		obs_log(LOG_WARNING, "template %s: no DockX Preview to place",
-			id.toUtf8().constData());
+		obs_log(LOG_WARNING, "template %s: no DockX Preview to place", id.toUtf8().constData());
 		return false;
 	}
 

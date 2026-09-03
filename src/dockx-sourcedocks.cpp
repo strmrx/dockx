@@ -212,8 +212,7 @@ protected:
 		QWidget::resizeEvent(e);
 		if (display) {
 			const qreal dpr = devicePixelRatioF();
-			obs_display_resize(display, (uint32_t)(width() * dpr),
-					   (uint32_t)(height() * dpr));
+			obs_display_resize(display, (uint32_t)(width() * dpr), (uint32_t)(height() * dpr));
 		}
 	}
 
@@ -258,8 +257,7 @@ protected:
 			obs_mouse_event me = {};
 			me.modifiers = toObsModifiers(e->modifiers(), e->buttons());
 			mapToSource(e->position(), me.x, me.y);
-			obs_source_send_mouse_wheel(src, &me, e->angleDelta().x(),
-						    e->angleDelta().y());
+			obs_source_send_mouse_wheel(src, &me, e->angleDelta().x(), e->angleDelta().y());
 			obs_source_release(src);
 			e->accept();
 		}
@@ -297,8 +295,8 @@ private:
 		info.format = GS_BGRA;
 		info.zsformat = GS_ZS_NONE;
 		if (!wireDisplayWindow(info, (quintptr)winId())) {
-			obs_log(LOG_WARNING, "source dock %d: display unsupported on this platform (Wayland needs Qt 6.9+)",
-				id);
+			obs_log(LOG_WARNING,
+				"source dock %d: display unsupported on this platform (Wayland needs Qt 6.9+)", id);
 			return;
 		}
 		display = obs_display_create(&info, 0x151515);
@@ -548,8 +546,7 @@ private:
 
 	void updateMuteIcon(bool muted)
 	{
-		muteBtn->setIcon(style()->standardIcon(
-			muted ? QStyle::SP_MediaVolumeMuted : QStyle::SP_MediaVolume));
+		muteBtn->setIcon(style()->standardIcon(muted ? QStyle::SP_MediaVolumeMuted : QStyle::SP_MediaVolume));
 	}
 
 	void syncControls()
@@ -582,8 +579,7 @@ static QString titleFor(const SourceDockEntry &e)
 static SourceDockPanel *registerView(const SourceDockEntry &e)
 {
 	SourceDockPanel *v = new SourceDockPanel(e.id, e.kind, e.sourceName);
-	if (!obs_frontend_add_dock_by_id(dockIdFor(e.id).toUtf8().constData(),
-					 titleFor(e).toUtf8().constData(), v)) {
+	if (!obs_frontend_add_dock_by_id(dockIdFor(e.id).toUtf8().constData(), titleFor(e).toUtf8().constData(), v)) {
 		obs_log(LOG_WARNING, "could not register source dock %d", e.id);
 		delete v;
 		return nullptr;

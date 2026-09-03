@@ -35,10 +35,8 @@ if the UI does not look the way we expect, do NOTHING. Never crash OBS.
 
 namespace dockx {
 
-const char *PRESET_COLORS[8] = {"#e5534b", "#f0883e", "#e3b341", "#57ab5a",
-				"#39c5cf", "#539bf5", "#986ee2", "#e275ad"};
-const char *PRESET_COLOR_NAMES[8] = {"Red", "Orange", "Yellow", "Green",
-				     "Teal", "Blue", "Purple", "Pink"};
+const char *PRESET_COLORS[8] = {"#e5534b", "#f0883e", "#e3b341", "#57ab5a", "#39c5cf", "#539bf5", "#986ee2", "#e275ad"};
+const char *PRESET_COLOR_NAMES[8] = {"Red", "Orange", "Yellow", "Green", "Teal", "Blue", "Purple", "Pink"};
 
 QIcon colorDot(const QColor &c)
 {
@@ -76,16 +74,14 @@ static void hotkeyCb(void *data, obs_hotkey_id, obs_hotkey_t *, bool pressed)
 	if (!m)
 		return;
 	/* hotkeys can fire off the UI thread; layout changes must not */
-	QMetaObject::invokeMethod(
-		m, [id]() { panels::applyLayout(id); }, Qt::QueuedConnection);
+	QMetaObject::invokeMethod(m, [id]() { panels::applyLayout(id); }, Qt::QueuedConnection);
 }
 
 static void registerHotkey(Layout &l)
 {
 	QByteArray name = QString("dockx_layout_%1").arg(l.id).toUtf8();
 	QByteArray desc = QString("DockX: apply layout \"%1\"").arg(l.name).toUtf8();
-	l.hotkey = obs_hotkey_register_frontend(name.constData(), desc.constData(), hotkeyCb,
-						(void *)(intptr_t)l.id);
+	l.hotkey = obs_hotkey_register_frontend(name.constData(), desc.constData(), hotkeyCb, (void *)(intptr_t)l.id);
 }
 
 static char *configFilePath()
@@ -161,8 +157,7 @@ void stateLoad()
 	}
 	g_state.sepSize = (int)obs_data_get_int(d, "sep_size");
 	g_state.sepColor = QString::fromUtf8(obs_data_get_string(d, "sep_color"));
-	g_state.mixerOrder = QString::fromUtf8(obs_data_get_string(d, "mixer_order"))
-				     .split('\n', Qt::SkipEmptyParts);
+	g_state.mixerOrder = QString::fromUtf8(obs_data_get_string(d, "mixer_order")).split('\n', Qt::SkipEmptyParts);
 	g_state.nextId = (int)obs_data_get_int(d, "next_id");
 	g_state.nextSourceDockId = (int)obs_data_get_int(d, "next_source_dock_id");
 	g_state.nextEditDockId = (int)obs_data_get_int(d, "next_edit_dock_id");
@@ -198,8 +193,7 @@ void stateLoad()
 
 	obs_data_t *colors = obs_data_get_obj(d, "colors");
 	if (colors) {
-		for (obs_data_item_t *item = obs_data_first(colors); item;
-		     obs_data_item_next(&item)) {
+		for (obs_data_item_t *item = obs_data_first(colors); item; obs_data_item_next(&item)) {
 			const char *scene = obs_data_item_get_name(item);
 			const char *hex = obs_data_item_get_string(item);
 			if (scene && hex && *hex)
@@ -210,8 +204,7 @@ void stateLoad()
 
 	obs_data_t *dockColors = obs_data_get_obj(d, "dock_color_map");
 	if (dockColors) {
-		for (obs_data_item_t *item = obs_data_first(dockColors); item;
-		     obs_data_item_next(&item)) {
+		for (obs_data_item_t *item = obs_data_first(dockColors); item; obs_data_item_next(&item)) {
 			const char *key = obs_data_item_get_name(item);
 			const char *hex = obs_data_item_get_string(item);
 			if (key && hex && *hex)
@@ -222,8 +215,7 @@ void stateLoad()
 
 	obs_data_t *autoRules = obs_data_get_obj(d, "scene_layouts");
 	if (autoRules) {
-		for (obs_data_item_t *item = obs_data_first(autoRules); item;
-		     obs_data_item_next(&item)) {
+		for (obs_data_item_t *item = obs_data_first(autoRules); item; obs_data_item_next(&item)) {
 			const char *scene = obs_data_item_get_name(item);
 			long long id = obs_data_item_get_int(item);
 			if (scene && id > 0)
@@ -234,8 +226,7 @@ void stateLoad()
 
 	obs_data_t *folders = obs_data_get_obj(d, "folders");
 	if (folders) {
-		for (obs_data_item_t *item = obs_data_first(folders); item;
-		     obs_data_item_next(&item)) {
+		for (obs_data_item_t *item = obs_data_first(folders); item; obs_data_item_next(&item)) {
 			const char *coll = obs_data_item_get_name(item);
 			obs_data_t *fo = obs_data_item_get_obj(item);
 			if (!coll || !fo) {
@@ -244,33 +235,27 @@ void stateLoad()
 				continue;
 			}
 			FolderData fd;
-			fd.order = QString::fromUtf8(obs_data_get_string(fo, "order"))
-					   .split('\n', Qt::SkipEmptyParts);
+			fd.order = QString::fromUtf8(obs_data_get_string(fo, "order")).split('\n', Qt::SkipEmptyParts);
 			const QStringList col =
-				QString::fromUtf8(obs_data_get_string(fo, "collapsed"))
-					.split('\n', Qt::SkipEmptyParts);
+				QString::fromUtf8(obs_data_get_string(fo, "collapsed")).split('\n', Qt::SkipEmptyParts);
 			fd.collapsed = QSet<QString>(col.begin(), col.end());
 			obs_data_t *as = obs_data_get_obj(fo, "assign");
 			if (as) {
-				for (obs_data_item_t *a = obs_data_first(as); a;
-				     obs_data_item_next(&a)) {
+				for (obs_data_item_t *a = obs_data_first(as); a; obs_data_item_next(&a)) {
 					const char *uuid = obs_data_item_get_name(a);
 					const char *folder = obs_data_item_get_string(a);
 					if (uuid && folder && *folder)
-						fd.assign[QString::fromUtf8(uuid)] =
-							QString::fromUtf8(folder);
+						fd.assign[QString::fromUtf8(uuid)] = QString::fromUtf8(folder);
 				}
 				obs_data_release(as);
 			}
 			obs_data_t *fc = obs_data_get_obj(fo, "colors");
 			if (fc) {
-				for (obs_data_item_t *a = obs_data_first(fc); a;
-				     obs_data_item_next(&a)) {
+				for (obs_data_item_t *a = obs_data_first(fc); a; obs_data_item_next(&a)) {
 					const char *fname = obs_data_item_get_name(a);
 					const char *hex = obs_data_item_get_string(a);
 					if (fname && hex && *hex)
-						fd.colors[QString::fromUtf8(fname)] =
-							QString::fromUtf8(hex);
+						fd.colors[QString::fromUtf8(fname)] = QString::fromUtf8(hex);
 				}
 				obs_data_release(fc);
 			}
@@ -351,8 +336,7 @@ void stateSave()
 	}
 	obs_data_set_int(d, "sep_size", g_state.sepSize);
 	obs_data_set_string(d, "sep_color", g_state.sepColor.toUtf8().constData());
-	obs_data_set_string(d, "mixer_order",
-			    g_state.mixerOrder.join(QChar('\n')).toUtf8().constData());
+	obs_data_set_string(d, "mixer_order", g_state.mixerOrder.join(QChar('\n')).toUtf8().constData());
 	obs_data_set_int(d, "next_id", g_state.nextId);
 	obs_data_set_int(d, "next_source_dock_id", g_state.nextSourceDockId);
 	obs_data_set_int(d, "next_edit_dock_id", g_state.nextEditDockId);
@@ -381,22 +365,18 @@ void stateSave()
 
 	obs_data_t *colors = obs_data_create();
 	for (auto it = g_state.colors.constBegin(); it != g_state.colors.constEnd(); ++it)
-		obs_data_set_string(colors, it.key().toUtf8().constData(),
-				    it.value().toUtf8().constData());
+		obs_data_set_string(colors, it.key().toUtf8().constData(), it.value().toUtf8().constData());
 	obs_data_set_obj(d, "colors", colors);
 	obs_data_release(colors);
 
 	obs_data_t *dockColors = obs_data_create();
-	for (auto it = g_state.dockColorMap.constBegin(); it != g_state.dockColorMap.constEnd();
-	     ++it)
-		obs_data_set_string(dockColors, it.key().toUtf8().constData(),
-				    it.value().toUtf8().constData());
+	for (auto it = g_state.dockColorMap.constBegin(); it != g_state.dockColorMap.constEnd(); ++it)
+		obs_data_set_string(dockColors, it.key().toUtf8().constData(), it.value().toUtf8().constData());
 	obs_data_set_obj(d, "dock_color_map", dockColors);
 	obs_data_release(dockColors);
 
 	obs_data_t *autoRules = obs_data_create();
-	for (auto it = g_state.sceneLayouts.constBegin(); it != g_state.sceneLayouts.constEnd();
-	     ++it)
+	for (auto it = g_state.sceneLayouts.constBegin(); it != g_state.sceneLayouts.constEnd(); ++it)
 		obs_data_set_int(autoRules, it.key().toUtf8().constData(), it.value());
 	obs_data_set_obj(d, "scene_layouts", autoRules);
 	obs_data_release(autoRules);
@@ -407,23 +387,18 @@ void stateSave()
 		if (fd.assign.isEmpty() && fd.order.isEmpty())
 			continue;
 		obs_data_t *fo = obs_data_create();
-		obs_data_set_string(fo, "order",
-				    fd.order.join(QChar('\n')).toUtf8().constData());
-		obs_data_set_string(fo, "collapsed",
-				    QStringList(fd.collapsed.begin(), fd.collapsed.end())
-					    .join(QChar('\n'))
-					    .toUtf8()
-					    .constData());
+		obs_data_set_string(fo, "order", fd.order.join(QChar('\n')).toUtf8().constData());
+		obs_data_set_string(
+			fo, "collapsed",
+			QStringList(fd.collapsed.begin(), fd.collapsed.end()).join(QChar('\n')).toUtf8().constData());
 		obs_data_t *as = obs_data_create();
 		for (auto a = fd.assign.constBegin(); a != fd.assign.constEnd(); ++a)
-			obs_data_set_string(as, a.key().toUtf8().constData(),
-					    a.value().toUtf8().constData());
+			obs_data_set_string(as, a.key().toUtf8().constData(), a.value().toUtf8().constData());
 		obs_data_set_obj(fo, "assign", as);
 		obs_data_release(as);
 		obs_data_t *fc = obs_data_create();
 		for (auto a = fd.colors.constBegin(); a != fd.colors.constEnd(); ++a)
-			obs_data_set_string(fc, a.key().toUtf8().constData(),
-					    a.value().toUtf8().constData());
+			obs_data_set_string(fc, a.key().toUtf8().constData(), a.value().toUtf8().constData());
 		obs_data_set_obj(fo, "colors", fc);
 		obs_data_release(fc);
 		obs_data_set_obj(folders, it.key().toUtf8().constData(), fo);
@@ -651,8 +626,7 @@ static void applyDockColorsNow()
 		return;
 	const QList<QDockWidget *> docks = m->findChildren<QDockWidget *>();
 	for (QDockWidget *d : docks) {
-		const QString hex =
-			state().dockColors ? state().dockColorMap.value(dockKey(d)) : QString();
+		const QString hex = state().dockColors ? state().dockColorMap.value(dockKey(d)) : QString();
 		const QString current = d->styleSheet();
 		if (hex.isEmpty()) {
 			/* only remove styles we put there ourselves */
@@ -744,15 +718,13 @@ static void applySceneColorsNow()
 	const bool grid = list->viewMode() == QListView::IconMode;
 	for (int i = 0; i < list->count(); i++) {
 		QListWidgetItem *it = list->item(i);
-		const QString hex = state().sceneColors ? state().colors.value(it->text())
-						       : QString();
+		const QString hex = state().sceneColors ? state().colors.value(it->text()) : QString();
 		if (!hex.isEmpty()) {
 			const QColor c(hex);
 			if (grid) {
 				it->setIcon(QIcon());
 				it->setBackground(QBrush(c));
-				it->setForeground(QBrush(
-					c.lightness() > 140 ? Qt::black : Qt::white));
+				it->setForeground(QBrush(c.lightness() > 140 ? Qt::black : Qt::white));
 			} else {
 				it->setData(Qt::BackgroundRole, QVariant());
 				it->setForeground(QBrush(c));
@@ -778,8 +750,7 @@ protected:
 	bool eventFilter(QObject *obj, QEvent *ev) override
 	{
 		const QEvent::Type t = ev->type();
-		if (t == QEvent::LayoutRequest || t == QEvent::Resize ||
-		    t == QEvent::Show) {
+		if (t == QEvent::LayoutRequest || t == QEvent::Resize || t == QEvent::Show) {
 			QListWidget *list = qobject_cast<QListWidget *>(obj);
 			if (list && (int)list->viewMode() != lastMode) {
 				lastMode = (int)list->viewMode();
@@ -805,13 +776,11 @@ static void watchModels()
 		watchedScenesModel = scenes->model();
 		QObject::connect(watchedScenesModel, &QAbstractItemModel::rowsInserted, scenes,
 				 []() { refreshSoon(); });
-		QObject::connect(watchedScenesModel, &QAbstractItemModel::modelReset, scenes,
-				 []() { refreshSoon(); });
-		QObject::connect(watchedScenesModel, &QAbstractItemModel::dataChanged, scenes,
-				 []() {
-					 if (!applying)
-						 refreshSoon();
-				 });
+		QObject::connect(watchedScenesModel, &QAbstractItemModel::modelReset, scenes, []() { refreshSoon(); });
+		QObject::connect(watchedScenesModel, &QAbstractItemModel::dataChanged, scenes, []() {
+			if (!applying)
+				refreshSoon();
+		});
 	}
 	QListView *sources = sourceView();
 	if (sources && sources->model() && sources->model() != watchedSourcesModel) {
@@ -1038,8 +1007,7 @@ void autoSceneLayout()
 	if (!m)
 		return;
 	/* never rebuild docks from inside the frontend event callback */
-	QMetaObject::invokeMethod(
-		m, [id]() { applyLayout(id); }, Qt::QueuedConnection);
+	QMetaObject::invokeMethod(m, [id]() { applyLayout(id); }, Qt::QueuedConnection);
 }
 
 bool applyLayout(int id)
@@ -1050,7 +1018,7 @@ bool applyLayout(int id)
 		return false;
 	state().undoState = m->saveState();
 	bool ok = m->restoreState(l->state);
-	locks::applyHardLock(); /* restoreState can re-show docks; reassert the freeze */
+	locks::applyHardLock();      /* restoreState can re-show docks; reassert the freeze */
 	monitors::validateVisible(); /* a layout saved for more screens can't strand a dock */
 	obs_log(LOG_INFO, "applied layout \"%s\" (%s)", l->name.toUtf8().constData(),
 		ok ? "ok" : "restore reported failure");

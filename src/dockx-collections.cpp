@@ -225,12 +225,10 @@ CopyReport copySceneToCollection(const QString &sceneUuid, const QString &target
 		return r;
 	}
 
-	const bool ok = obs_data_save_json_safe(tdata, path.toUtf8().constData(), "tmp",
-						"bak");
+	const bool ok = obs_data_save_json_safe(tdata, path.toUtf8().constData(), "tmp", "bak");
 	obs_data_release(tdata);
 	if (!ok) {
-		r.error = "Writing the target collection failed. Its backup is at " +
-			  backup;
+		r.error = "Writing the target collection failed. Its backup is at " + backup;
 		return r;
 	}
 
@@ -238,8 +236,7 @@ CopyReport copySceneToCollection(const QString &sceneUuid, const QString &target
 	r.finalSceneName = finalName;
 	r.backupPath = backup;
 	obs_log(LOG_INFO, "copied scene \"%s\" into collection \"%s\" (%d sources, %d skipped)",
-		finalName.toUtf8().constData(), target.toUtf8().constData(), r.sourcesCopied,
-		r.sourcesSkipped);
+		finalName.toUtf8().constData(), target.toUtf8().constData(), r.sourcesCopied, r.sourcesSkipped);
 	return r;
 }
 

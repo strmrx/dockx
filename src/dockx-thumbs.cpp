@@ -71,8 +71,7 @@ static QImage grabScene(obs_source_t *scene)
 			if (gs_stagesurface_map(stage, &data, &linesize)) {
 				img = QImage(THUMB_W, THUMB_H, QImage::Format_RGBA8888);
 				for (int y = 0; y < THUMB_H; y++)
-					memcpy(img.scanLine(y), data + (size_t)y * linesize,
-					       (size_t)THUMB_W * 4);
+					memcpy(img.scanLine(y), data + (size_t)y * linesize, (size_t)THUMB_W * 4);
 				gs_stagesurface_unmap(stage);
 			}
 		}

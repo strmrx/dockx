@@ -80,14 +80,14 @@ struct HandleDef {
 	bool sx, sy;
 };
 static const HandleDef kHandles[8] = {
-	{0.0f, 0.0f, 1.0f, 1.0f, true, true},   /* TL */
-	{0.5f, 0.0f, 0.5f, 1.0f, false, true},  /* TC */
-	{1.0f, 0.0f, 0.0f, 1.0f, true, true},   /* TR */
-	{1.0f, 0.5f, 0.0f, 0.5f, true, false},  /* MR */
-	{1.0f, 1.0f, 0.0f, 0.0f, true, true},   /* BR */
-	{0.5f, 1.0f, 0.5f, 0.0f, false, true},  /* BC */
-	{0.0f, 1.0f, 1.0f, 0.0f, true, true},   /* BL */
-	{0.0f, 0.5f, 1.0f, 0.5f, true, false},  /* ML */
+	{0.0f, 0.0f, 1.0f, 1.0f, true, true},  /* TL */
+	{0.5f, 0.0f, 0.5f, 1.0f, false, true}, /* TC */
+	{1.0f, 0.0f, 0.0f, 1.0f, true, true},  /* TR */
+	{1.0f, 0.5f, 0.0f, 0.5f, true, false}, /* MR */
+	{1.0f, 1.0f, 0.0f, 0.0f, true, true},  /* BR */
+	{0.5f, 1.0f, 0.5f, 0.0f, false, true}, /* BC */
+	{0.0f, 1.0f, 1.0f, 0.0f, true, true},  /* BL */
+	{0.0f, 0.5f, 1.0f, 0.5f, true, false}, /* ML */
 };
 /* half-size of a handle square + how far the rotate handle stands off the top
    edge + the grab radius, all in device px (constant on screen at any zoom) */
@@ -176,8 +176,7 @@ protected:
 		QWidget::resizeEvent(e);
 		if (display) {
 			const qreal dpr = devicePixelRatioF();
-			obs_display_resize(display, (uint32_t)(width() * dpr),
-					   (uint32_t)(height() * dpr));
+			obs_display_resize(display, (uint32_t)(width() * dpr), (uint32_t)(height() * dpr));
 		}
 	}
 
@@ -274,11 +273,9 @@ protected:
 			else if (mode == Mode::GroupResize)
 				groupResizeTo(cx, cy);
 			else if (mode == Mode::GroupRotate)
-				groupRotateTo(cx, cy,
-					      (e->modifiers() & Qt::ControlModifier) != 0);
+				groupRotateTo(cx, cy, (e->modifiers() & Qt::ControlModifier) != 0);
 			else if (mode == Mode::Rotate)
-				rotateTo(cx, cy,
-					 (e->modifiers() & Qt::ControlModifier) != 0);
+				rotateTo(cx, cy, (e->modifiers() & Qt::ControlModifier) != 0);
 			else if (mode == Mode::Move && dragging)
 				dragTo(cx, cy);
 			return;
@@ -322,7 +319,7 @@ private:
 	float uyX = 0, uyY = 0;       /* unit box y-axis (canvas) */
 	float span0X = 0, span0Y = 0; /* signed anchor->grabbed lengths at start */
 	bool axX = false, axY = false;
-	float cenX = 0, cenY = 0;     /* box center (canvas) for rotate */
+	float cenX = 0, cenY = 0; /* box center (canvas) for rotate */
 	float rotGrabAngle = 0;
 
 	/* group resize (2+ items): the handles wrap the axis-aligned group bbox;
@@ -376,8 +373,8 @@ private:
 		info.format = GS_BGRA;
 		info.zsformat = GS_ZS_NONE;
 		if (!wireDisplayWindow(info, (quintptr)winId())) {
-			obs_log(LOG_WARNING, "edit dock %d: display unsupported on this platform (Wayland needs Qt 6.9+)",
-				id);
+			obs_log(LOG_WARNING,
+				"edit dock %d: display unsupported on this platform (Wayland needs Qt 6.9+)", id);
 			return;
 		}
 		display = obs_display_create(&info, 0x151515);
@@ -469,8 +466,7 @@ private:
 
 	static bool selUnlockedCb(obs_scene_t *, obs_sceneitem_t *item, void *param)
 	{
-		if (obs_sceneitem_selected(item) && obs_sceneitem_visible(item) &&
-		    !obs_sceneitem_locked(item)) {
+		if (obs_sceneitem_selected(item) && obs_sceneitem_visible(item) && !obs_sceneitem_locked(item)) {
 			obs_sceneitem_addref(item);
 			static_cast<std::vector<obs_sceneitem_t *> *>(param)->push_back(item);
 		}
@@ -512,8 +508,8 @@ private:
 		for (int i = 0; i < 8; i++) {
 			float hx, hy, dx, dy;
 			xf(m, kHandles[i].gx, kHandles[i].gy, hx, hy);
-			if (mapCanvasToDevice(hx, hy, dx, dy) &&
-			    fabsf(dx - mdx) <= GRAB_PX && fabsf(dy - mdy) <= GRAB_PX)
+			if (mapCanvasToDevice(hx, hy, dx, dy) && fabsf(dx - mdx) <= GRAB_PX &&
+			    fabsf(dy - mdy) <= GRAB_PX)
 				return i;
 		}
 		/* rotate stalk: off the top edge along the box's -y (outward) axis */
@@ -530,8 +526,7 @@ private:
 		const float rcx = tcx - ax * (ROT_OFFSET_PX / scale);
 		const float rcy = tcy - ay * (ROT_OFFSET_PX / scale);
 		float dx, dy;
-		if (mapCanvasToDevice(rcx, rcy, dx, dy) && fabsf(dx - mdx) <= GRAB_PX &&
-		    fabsf(dy - mdy) <= GRAB_PX)
+		if (mapCanvasToDevice(rcx, rcy, dx, dy) && fabsf(dx - mdx) <= GRAB_PX && fabsf(dy - mdy) <= GRAB_PX)
 			return -2;
 		return -1;
 	}
@@ -625,8 +620,7 @@ private:
 	}
 
 	/* nudge a single value onto the nearest snap target within radius */
-	bool snap1D(float value, const std::vector<float> &targets, float &adj,
-		    float &gpos)
+	bool snap1D(float value, const std::vector<float> &targets, float &adj, float &gpos)
 	{
 		const float rad = snapRadius();
 		if (rad <= 0.0f)
@@ -753,8 +747,7 @@ private:
 	};
 	static bool gaabbCb(obs_scene_t *, obs_sceneitem_t *item, void *param)
 	{
-		if (obs_sceneitem_selected(item) && obs_sceneitem_visible(item) &&
-		    !obs_sceneitem_locked(item)) {
+		if (obs_sceneitem_selected(item) && obs_sceneitem_visible(item) && !obs_sceneitem_locked(item)) {
 			auto *g = static_cast<GAABB *>(param);
 			matrix4 m;
 			obs_sceneitem_get_box_transform(item, &m);
@@ -799,8 +792,8 @@ private:
 			const float hx = L + (R - L) * kHandles[i].gx;
 			const float hy = T + (B - T) * kHandles[i].gy;
 			float dx, dy;
-			if (mapCanvasToDevice(hx, hy, dx, dy) &&
-			    fabsf(dx - mdx) <= GRAB_PX && fabsf(dy - mdy) <= GRAB_PX)
+			if (mapCanvasToDevice(hx, hy, dx, dy) && fabsf(dx - mdx) <= GRAB_PX &&
+			    fabsf(dy - mdy) <= GRAB_PX)
 				return i;
 		}
 		float scale, offX, offY;
@@ -809,8 +802,8 @@ private:
 			const float rx = (L + R) * 0.5f;
 			const float ry = T - (ROT_OFFSET_PX / scale);
 			float dx, dy;
-			if (mapCanvasToDevice(rx, ry, dx, dy) &&
-			    fabsf(dx - mdx) <= GRAB_PX && fabsf(dy - mdy) <= GRAB_PX)
+			if (mapCanvasToDevice(rx, ry, dx, dy) && fabsf(dx - mdx) <= GRAB_PX &&
+			    fabsf(dy - mdy) <= GRAB_PX)
 				return -2;
 		}
 		return -1;
@@ -818,8 +811,7 @@ private:
 
 	static bool gcaptureCb(obs_scene_t *, obs_sceneitem_t *item, void *param)
 	{
-		if (obs_sceneitem_selected(item) && obs_sceneitem_visible(item) &&
-		    !obs_sceneitem_locked(item)) {
+		if (obs_sceneitem_selected(item) && obs_sceneitem_visible(item) && !obs_sceneitem_locked(item)) {
 			auto *v = static_cast<std::vector<GItem> *>(param);
 			obs_sceneitem_addref(item);
 			GItem gi;
@@ -1052,8 +1044,7 @@ private:
 		/* bounds-fit items crop too, but the crop refits the content inside a
 		   pinned box, so we must NOT re-anchor the position afterward (OBS
 		   guards its set_pos on OBS_BOUNDS_NONE the same way). */
-		const bool boundsFit =
-			obs_sceneitem_get_bounds_type(item) != OBS_BOUNDS_NONE;
+		const bool boundsFit = obs_sceneitem_get_bounds_type(item) != OBS_BOUNDS_NONE;
 		obs_source_t *src = obs_sceneitem_get_source(item); /* borrowed */
 		if (!src)
 			return;
@@ -1087,15 +1078,32 @@ private:
 		/* which sides this handle crops */
 		cropL = cropT = cropR = cropB = false;
 		switch (h) {
-		case 7: cropL = true; break;
-		case 3: cropR = true; break;
-		case 1: cropT = true; break;
-		case 5: cropB = true; break;
-		case 0: cropL = cropT = true; break;
-		case 2: cropR = cropT = true; break;
-		case 4: cropR = cropB = true; break;
-		case 6: cropL = cropB = true; break;
-		default: return;
+		case 7:
+			cropL = true;
+			break;
+		case 3:
+			cropR = true;
+			break;
+		case 1:
+			cropT = true;
+			break;
+		case 5:
+			cropB = true;
+			break;
+		case 0:
+			cropL = cropT = true;
+			break;
+		case 2:
+			cropR = cropT = true;
+			break;
+		case 4:
+			cropR = cropB = true;
+			break;
+		case 6:
+			cropL = cropB = true;
+			break;
+		default:
+			return;
 		}
 		activeHandle = h;
 		xf(m, kHandles[h].ax, kHandles[h].ay, cropAncX, cropAncY);
@@ -1190,9 +1198,8 @@ private:
 	static bool selHitCb(obs_scene_t *, obs_sceneitem_t *item, void *param)
 	{
 		auto *s = static_cast<SelHit *>(param);
-		if (!s->hit && obs_sceneitem_selected(item) &&
-		    obs_sceneitem_visible(item) && !obs_sceneitem_locked(item) &&
-		    pointInItem(item, s->cx, s->cy))
+		if (!s->hit && obs_sceneitem_selected(item) && obs_sceneitem_visible(item) &&
+		    !obs_sceneitem_locked(item) && pointInItem(item, s->cx, s->cy))
 			s->hit = true;
 		return true;
 	}
@@ -1223,8 +1230,8 @@ private:
 		/* enum walks bottom to top; reverse so the topmost wins */
 		for (auto it = items.rbegin(); it != items.rend(); ++it) {
 			obs_sceneitem_t *item = *it;
-			if (!found && !obs_sceneitem_locked(item) &&
-			    obs_sceneitem_visible(item) && pointInItem(item, cx, cy))
+			if (!found && !obs_sceneitem_locked(item) && obs_sceneitem_visible(item) &&
+			    pointInItem(item, cx, cy))
 				found = item; /* keep this ref for the caller */
 			else
 				obs_sceneitem_release(item);
@@ -1459,8 +1466,7 @@ private:
 	   there is exactly one (single-item resize/rotate) */
 	static bool collectHandleBoxes(obs_scene_t *, obs_sceneitem_t *item, void *param)
 	{
-		if (obs_sceneitem_selected(item) && obs_sceneitem_visible(item) &&
-		    !obs_sceneitem_locked(item)) {
+		if (obs_sceneitem_selected(item) && obs_sceneitem_visible(item) && !obs_sceneitem_locked(item)) {
 			auto *v = static_cast<std::vector<matrix4> *>(param);
 			matrix4 m;
 			obs_sceneitem_get_box_transform(item, &m);
@@ -1491,22 +1497,19 @@ private:
 					R = qMax(R, x);
 					B = qMax(B, y);
 				}
-			std::vector<vec2> outline{mk(L, T), mk(R, T), mk(R, B),
-						  mk(L, B), mk(L, T)};
+			std::vector<vec2> outline{mk(L, T), mk(R, T), mk(R, B), mk(L, B), mk(L, T)};
 			drawLineStrip(outline, COLOR_SELECT);
 			for (int i = 0; i < 8; i++) {
 				const float hx = L + (R - L) * kHandles[i].gx;
 				const float hy = T + (B - T) * kHandles[i].gy;
-				drawFilledRect(hx - half, hy - half, hx + half,
-					       hy + half, COLOR_SELECT);
+				drawFilledRect(hx - half, hy - half, hx + half, hy + half, COLOR_SELECT);
 			}
 			/* rotate stalk above the group's top-center */
 			const float grx = (L + R) * 0.5f;
 			const float gry = T - (ROT_OFFSET_PX / scale);
 			std::vector<vec2> gstalk{mk(grx, T), mk(grx, gry)};
 			drawLineStrip(gstalk, COLOR_SELECT);
-			drawFilledRect(grx - half, gry - half, grx + half, gry + half,
-				       COLOR_SELECT);
+			drawFilledRect(grx - half, gry - half, grx + half, gry + half, COLOR_SELECT);
 			return;
 		}
 		if (boxes.size() != 1)
@@ -1515,8 +1518,7 @@ private:
 		for (int i = 0; i < 8; i++) {
 			float hx, hy;
 			xf(m, kHandles[i].gx, kHandles[i].gy, hx, hy);
-			drawFilledRect(hx - half, hy - half, hx + half, hy + half,
-				       COLOR_SELECT);
+			drawFilledRect(hx - half, hy - half, hx + half, hy + half, COLOR_SELECT);
 		}
 		/* rotate stalk off the top edge along the box's outward (-y) axis */
 		float tcx, tcy, ox, oy, yx, yy;
@@ -1628,9 +1630,8 @@ public:
 		/* one control, both directions: this dock IS the movable, editable
 		   preview, so its button just governs whether OBS's fixed built-in
 		   preview is shown or hidden -- the always-there way back */
-		QObject::connect(obsBtn, &QPushButton::clicked, this, []() {
-			preview::setCollapsed(!preview::collapsed());
-		});
+		QObject::connect(obsBtn, &QPushButton::clicked, this,
+				 []() { preview::setCollapsed(!preview::collapsed()); });
 		updateButton();
 	}
 
@@ -1642,11 +1643,7 @@ public:
 
 	void teardown() { video->teardown(); }
 
-	void updateButton()
-	{
-		obsBtn->setText(preview::collapsed() ? "Show OBS preview"
-						     : "Hide OBS preview");
-	}
+	void updateButton() { obsBtn->setText(preview::collapsed() ? "Show OBS preview" : "Hide OBS preview"); }
 
 private:
 	QPushButton *obsBtn;
@@ -1657,8 +1654,7 @@ static std::vector<EditPreviewPanel *> g_panels;
 static EditPreviewPanel *registerDock(int id)
 {
 	EditPreviewPanel *p = new EditPreviewPanel(id);
-	if (!obs_frontend_add_dock_by_id(dockIdFor(id).toUtf8().constData(),
-					 "DockX Preview", p)) {
+	if (!obs_frontend_add_dock_by_id(dockIdFor(id).toUtf8().constData(), "DockX Preview", p)) {
 		obs_log(LOG_WARNING, "could not register DockX Preview dock %d", id);
 		delete p;
 		return nullptr;

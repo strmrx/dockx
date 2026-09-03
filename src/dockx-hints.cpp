@@ -36,10 +36,7 @@ class HintArt : public QWidget {
 public:
 	enum Kind { Move, Edge, Center, Columns };
 
-	HintArt(Kind k, QWidget *parent) : QWidget(parent), kind(k)
-	{
-		setFixedSize(150, 96);
-	}
+	HintArt(Kind k, QWidget *parent) : QWidget(parent), kind(k) { setFixedSize(150, 96); }
 
 protected:
 	void paintEvent(QPaintEvent *) override
@@ -144,8 +141,7 @@ private:
 	Kind kind;
 };
 
-static void addHint(QVBoxLayout *v, QWidget *parent, HintArt::Kind kind, const QString &heading,
-		    const QString &body)
+static void addHint(QVBoxLayout *v, QWidget *parent, HintArt::Kind kind, const QString &heading, const QString &body)
 {
 	QHBoxLayout *row = new QHBoxLayout();
 	row->setSpacing(12);
@@ -174,10 +170,9 @@ void showGuide(QWidget *parent)
 	QVBoxLayout *v = new QVBoxLayout(dlg);
 	v->setSpacing(14);
 
-	QLabel *intro = new QLabel(
-		"Every panel in OBS is a dock you can move. DockX unlocks the layouts "
-		"OBS normally refuses. The whole trick:",
-		dlg);
+	QLabel *intro = new QLabel("Every panel in OBS is a dock you can move. DockX unlocks the layouts "
+				   "OBS normally refuses. The whole trick:",
+				   dlg);
 	intro->setWordWrap(true);
 	v->addWidget(intro);
 
@@ -196,18 +191,16 @@ void showGuide(QWidget *parent)
 		"height chat next to a column of tools finally works. Happy with a "
 		"layout? Save it in Tools &gt; DockX and give it a hotkey.");
 
-	QLabel *optional = new QLabel(
-		"Prefer to keep things simple? DockX stays out of your way. Optional "
-		"extras, like Align &amp; distribute tools for lining sources up on the "
-		"canvas, start switched off. Turn on anything you want any time in "
-		"Tools &gt; DockX &gt; Settings.",
-		dlg);
+	QLabel *optional = new QLabel("Prefer to keep things simple? DockX stays out of your way. Optional "
+				      "extras, like Align &amp; distribute tools for lining sources up on the "
+				      "canvas, start switched off. Turn on anything you want any time in "
+				      "Tools &gt; DockX &gt; Settings.",
+				      dlg);
 	optional->setWordWrap(true);
 	v->addWidget(optional);
 
-	QLabel *more = new QLabel(
-		QString("More help and guides: <a href=\"%1\">strmrx.com/dockx</a>").arg(HELP_URL),
-		dlg);
+	QLabel *more =
+		new QLabel(QString("More help and guides: <a href=\"%1\">strmrx.com/dockx</a>").arg(HELP_URL), dlg);
 	more->setOpenExternalLinks(true);
 	v->addWidget(more);
 

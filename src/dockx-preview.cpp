@@ -42,8 +42,7 @@ void apply()
 		return;
 	QWidget *c = m->centralWidget();
 	if (!c) {
-		obs_log(LOG_WARNING,
-			"collapse preview: no central widget found, doing nothing");
+		obs_log(LOG_WARNING, "collapse preview: no central widget found, doing nothing");
 		return;
 	}
 	const bool on = state().previewCollapsed;
@@ -89,14 +88,13 @@ void offerVideoDock(QWidget *parent)
 	   closed dock closed forever) instead of leaving a video-less window */
 	if (editpreview::showDocks() || sourcedocks::showVideoDocks())
 		return;
-	const auto r = QMessageBox::question(
-		parent, "DockX",
-		"OBS's built-in preview is now hidden, and you have no DockX "
-		"Preview yet.\n\nAdd a DockX Preview? It is a movable, editable "
-		"window of your scene: drag your sources right in it, place or "
-		"resize it like any dock, and its \"Show OBS preview\" button "
-		"brings OBS's built-in preview back any time.",
-		QMessageBox::Yes | QMessageBox::No, QMessageBox::Yes);
+	const auto r = QMessageBox::question(parent, "DockX",
+					     "OBS's built-in preview is now hidden, and you have no DockX "
+					     "Preview yet.\n\nAdd a DockX Preview? It is a movable, editable "
+					     "window of your scene: drag your sources right in it, place or "
+					     "resize it like any dock, and its \"Show OBS preview\" button "
+					     "brings OBS's built-in preview back any time.",
+					     QMessageBox::Yes | QMessageBox::No, QMessageBox::Yes);
 	if (r == QMessageBox::Yes)
 		editpreview::addDock();
 }
@@ -114,8 +112,7 @@ void onStudioModeEnabled()
 	/* studio mode edits happen on the main canvas; never leave someone in
 	   studio mode staring at a hidden editor */
 	if (state().previewCollapsed) {
-		obs_log(LOG_INFO,
-			"studio mode enabled: expanding the collapsed preview");
+		obs_log(LOG_INFO, "studio mode enabled: expanding the collapsed preview");
 		setCollapsed(false);
 	}
 }

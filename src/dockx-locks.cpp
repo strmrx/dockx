@@ -51,11 +51,9 @@ void applyHardLock()
 			continue;
 		QDockWidget::DockWidgetFeatures f = d->features();
 		if (lock)
-			f &= ~(QDockWidget::DockWidgetMovable |
-			       QDockWidget::DockWidgetFloatable);
+			f &= ~(QDockWidget::DockWidgetMovable | QDockWidget::DockWidgetFloatable);
 		else
-			f |= (QDockWidget::DockWidgetMovable |
-			      QDockWidget::DockWidgetFloatable);
+			f |= (QDockWidget::DockWidgetMovable | QDockWidget::DockWidgetFloatable);
 		d->setFeatures(f);
 	}
 	obs_log(LOG_INFO, "dock hard lock %s", lock ? "on" : "off");
@@ -92,8 +90,7 @@ bool revertToLockPoint()
 	state().undoState = m->saveState();
 	bool ok = m->restoreState(state().lockPoint);
 	applyHardLock(); /* restoreState may re-show docks; reassert the freeze */
-	obs_log(LOG_INFO, "reverted docks to lock point (%s)",
-		ok ? "ok" : "restore reported failure");
+	obs_log(LOG_INFO, "reverted docks to lock point (%s)", ok ? "ok" : "restore reported failure");
 	return ok;
 }
 
@@ -160,22 +157,17 @@ void registerHotkeys()
 {
 	State &s = state();
 	if (s.hkRevert == OBS_INVALID_HOTKEY_ID)
-		s.hkRevert = obs_hotkey_register_frontend(
-			"dockx_revert_layout", "DockX: Revert docks to lock point",
-			revertCb, nullptr);
+		s.hkRevert = obs_hotkey_register_frontend("dockx_revert_layout", "DockX: Revert docks to lock point",
+							  revertCb, nullptr);
 	if (s.hkLockScene == OBS_INVALID_HOTKEY_ID)
 		s.hkLockScene = obs_hotkey_register_frontend(
-			"dockx_lock_scene", "DockX: Lock all sources in current scene",
-			lockSceneCb, nullptr);
+			"dockx_lock_scene", "DockX: Lock all sources in current scene", lockSceneCb, nullptr);
 	if (s.hkUnlockScene == OBS_INVALID_HOTKEY_ID)
 		s.hkUnlockScene = obs_hotkey_register_frontend(
-			"dockx_unlock_scene",
-			"DockX: Unlock all sources in current scene", unlockSceneCb,
-			nullptr);
+			"dockx_unlock_scene", "DockX: Unlock all sources in current scene", unlockSceneCb, nullptr);
 	if (s.hkHardLock == OBS_INVALID_HOTKEY_ID)
-		s.hkHardLock = obs_hotkey_register_frontend(
-			"dockx_hard_lock", "DockX: Lock docks in place (toggle)",
-			hardLockCb, nullptr);
+		s.hkHardLock = obs_hotkey_register_frontend("dockx_hard_lock", "DockX: Lock docks in place (toggle)",
+							    hardLockCb, nullptr);
 }
 
 void unregisterHotkeys()
@@ -185,8 +177,7 @@ void unregisterHotkeys()
 	for (obs_hotkey_id id : ids)
 		if (id != OBS_INVALID_HOTKEY_ID)
 			obs_hotkey_unregister(id);
-	s.hkRevert = s.hkLockScene = s.hkUnlockScene = s.hkHardLock =
-		OBS_INVALID_HOTKEY_ID;
+	s.hkRevert = s.hkLockScene = s.hkUnlockScene = s.hkHardLock = OBS_INVALID_HOTKEY_ID;
 }
 
 static void loadOne(obs_data_t *d, const char *key, obs_hotkey_id id)

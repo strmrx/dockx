@@ -65,10 +65,7 @@ QList<ScreenInfo> listScreens()
 	for (int i = 0; i < screens.size(); i++) {
 		QScreen *s = screens[i];
 		const QRect g = s->geometry();
-		QString label = QString("Monitor %1 \xC2\xB7 %2\xC3\x97%3")
-					.arg(i + 1)
-					.arg(g.width())
-					.arg(g.height());
+		QString label = QString("Monitor %1 \xC2\xB7 %2\xC3\x97%3").arg(i + 1).arg(g.width()).arg(g.height());
 		if (s == primary)
 			label += " (main)";
 		out.append({i, label, g});

@@ -106,8 +106,7 @@ static void enumFilter(obs_source_t *parent, obs_source_t *filter, void *param)
 	r.sourceName = QString::fromUtf8(sname);
 	r.filterName = QString::fromUtf8(fname);
 	r.ctx = ctx;
-	r.id = obs_hotkey_register_source(parent, hname.constData(), hdesc.constData(), toggleCb,
-					  ctx);
+	r.id = obs_hotkey_register_source(parent, hname.constData(), hdesc.constData(), toggleCb, ctx);
 	g_regs.insert(key, r);
 }
 

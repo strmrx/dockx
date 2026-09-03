@@ -71,8 +71,8 @@ static bool g_applying = false;
 static bool g_shutdown = false;
 static QString g_gridPath; /* folder the grid is inside ("" = root); per session */
 
-static QPointer<QTimer> g_thumbTimer;   /* renders pending scene thumbnails, one per tick */
-static QStringList g_thumbPending;      /* scene uuids waiting for a first render */
+static QPointer<QTimer> g_thumbTimer; /* renders pending scene thumbnails, one per tick */
+static QStringList g_thumbPending;    /* scene uuids waiting for a first render */
 
 static const char *ROLE_TYPE_FOLDER = "f";
 static const char *ROLE_TYPE_SCENE = "s";
@@ -237,8 +237,7 @@ template<typename Fn> static bool withRowItem(const QTreeWidgetItem *row, Fn fn)
 {
 	if (!isSourceRow(row))
 		return false;
-	obs_source_t *sceneSrc = obs_get_source_by_uuid(
-		row->data(0, Qt::UserRole + 1).toString().toUtf8().constData());
+	obs_source_t *sceneSrc = obs_get_source_by_uuid(row->data(0, Qt::UserRole + 1).toString().toUtf8().constData());
 	if (!sceneSrc)
 		return false;
 	obs_scene_t *scene = obs_scene_from_source(sceneSrc);
@@ -258,8 +257,7 @@ static bool collectItemsEnum(obs_scene_t *, obs_sceneitem_t *item, void *param)
 	return true;
 }
 
-static void addSourceRow(QTreeWidgetItem *parent, const QString &sceneUuid,
-			 obs_sceneitem_t *item)
+static void addSourceRow(QTreeWidgetItem *parent, const QString &sceneUuid, obs_sceneitem_t *item)
 {
 	obs_source_t *src = obs_sceneitem_get_source(item);
 	if (!src)
@@ -286,8 +284,7 @@ static void addSourceRow(QTreeWidgetItem *parent, const QString &sceneUuid,
 
 static void addSourceRows(QTreeWidgetItem *sceneItem, const QString &sceneUuid)
 {
-	obs_source_t *sceneSrc =
-		obs_get_source_by_uuid(sceneUuid.toUtf8().constData());
+	obs_source_t *sceneSrc = obs_get_source_by_uuid(sceneUuid.toUtf8().constData());
 	if (!sceneSrc)
 		return;
 	obs_scene_t *scene = obs_scene_from_source(sceneSrc);
@@ -325,9 +322,8 @@ static std::vector<SceneRow> sceneRows()
 
 static QString currentSceneUuid()
 {
-	obs_source_t *cur = obs_frontend_preview_program_mode_active()
-				    ? obs_frontend_get_current_preview_scene()
-				    : obs_frontend_get_current_scene();
+	obs_source_t *cur = obs_frontend_preview_program_mode_active() ? obs_frontend_get_current_preview_scene()
+								       : obs_frontend_get_current_scene();
 	QString out;
 	if (cur) {
 		const char *u = obs_source_get_uuid(cur);
@@ -359,8 +355,7 @@ static bool applySearchSource(QTreeWidgetItem *it, const QString &q, bool showAl
 static bool applySearchItem(QTreeWidgetItem *it, const QString &q)
 {
 	if (isScene(it)) {
-		const bool nameHit =
-			q.isEmpty() || it->text(0).contains(q, Qt::CaseInsensitive);
+		const bool nameHit = q.isEmpty() || it->text(0).contains(q, Qt::CaseInsensitive);
 		bool anyKid = false;
 		for (int j = 0; j < it->childCount(); j++)
 			if (applySearchSource(it->child(j), q, nameHit))
@@ -376,8 +371,7 @@ static bool applySearchItem(QTreeWidgetItem *it, const QString &q)
 	for (int j = 0; j < it->childCount(); j++)
 		if (applySearchItem(it->child(j), q))
 			anyVisible = true;
-	const bool nameHit =
-		!q.isEmpty() && pathName(itemKey(it)).contains(q, Qt::CaseInsensitive);
+	const bool nameHit = !q.isEmpty() && pathName(itemKey(it)).contains(q, Qt::CaseInsensitive);
 	it->setHidden(!q.isEmpty() && !anyVisible && !nameHit);
 	if (!q.isEmpty() && anyVisible)
 		it->setExpanded(true); /* searching peeks into folders */
@@ -417,9 +411,7 @@ static QTreeWidgetItem *findByKey(const QString &key)
 
 /* ---- tree rebuild ---- */
 
-static QTreeWidgetItem *ensureFolderItem(const QString &path,
-					 QHash<QString, QTreeWidgetItem *> &items,
-					 FolderData &fd)
+static QTreeWidgetItem *ensureFolderItem(const QString &path, QHash<QString, QTreeWidgetItem *> &items, FolderData &fd)
 {
 	if (path.isEmpty())
 		return nullptr;
@@ -427,12 +419,10 @@ static QTreeWidgetItem *ensureFolderItem(const QString &path,
 	if (found != items.end())
 		return found.value();
 	QTreeWidgetItem *parent = ensureFolderItem(pathParent(path), items, fd);
-	QTreeWidgetItem *fi = parent ? new QTreeWidgetItem(parent)
-				     : new QTreeWidgetItem(g_tree);
+	QTreeWidgetItem *fi = parent ? new QTreeWidgetItem(parent) : new QTreeWidgetItem(g_tree);
 	fi->setData(0, Qt::UserRole, ROLE_TYPE_FOLDER);
 	fi->setData(0, Qt::UserRole + 1, path);
-	fi->setFlags(Qt::ItemIsEnabled | Qt::ItemIsSelectable | Qt::ItemIsDragEnabled |
-		     Qt::ItemIsDropEnabled);
+	fi->setFlags(Qt::ItemIsEnabled | Qt::ItemIsSelectable | Qt::ItemIsDragEnabled | Qt::ItemIsDropEnabled);
 	const QString fhex = fd.colors.value(path);
 	fi->setData(0, Qt::UserRole + 2, fhex);
 	fi->setIcon(0, folderGlyph(fhex.isEmpty() ? NEUTRAL_FOLDER : QColor(fhex)));
@@ -483,17 +473,13 @@ static void rebuildNow()
 
 	QTreeWidgetItem *curItem = nullptr;
 	for (const SceneRow &s : scenes) {
-		QTreeWidgetItem *parent =
-			folderItems.value(fd.assign.value(s.uuid), nullptr);
-		QTreeWidgetItem *si = parent ? new QTreeWidgetItem(parent)
-					     : new QTreeWidgetItem(g_tree);
+		QTreeWidgetItem *parent = folderItems.value(fd.assign.value(s.uuid), nullptr);
+		QTreeWidgetItem *si = parent ? new QTreeWidgetItem(parent) : new QTreeWidgetItem(g_tree);
 		si->setText(0, s.name);
 		si->setData(0, Qt::UserRole, ROLE_TYPE_SCENE);
 		si->setData(0, Qt::UserRole + 1, s.uuid);
-		si->setFlags(Qt::ItemIsEnabled | Qt::ItemIsSelectable |
-			     Qt::ItemIsDragEnabled);
-		const QString hex = state().sceneColors ? state().colors.value(s.name)
-						       : QString();
+		si->setFlags(Qt::ItemIsEnabled | Qt::ItemIsSelectable | Qt::ItemIsDragEnabled);
+		const QString hex = state().sceneColors ? state().colors.value(s.name) : QString();
 		if (!hex.isEmpty()) {
 			si->setForeground(0, QBrush(QColor(hex)));
 			si->setIcon(0, colorDot(QColor(hex)));
@@ -519,9 +505,7 @@ static void rebuildNow()
 		for (int j = 0; j < fi->childCount(); j++)
 			if (isScene(fi->child(j)))
 				sceneCount++;
-		fi->setText(0, QString("%1  (%2)")
-				       .arg(pathName(it.key()))
-				       .arg(sceneCount));
+		fi->setText(0, QString("%1  (%2)").arg(pathName(it.key())).arg(sceneCount));
 		fi->setExpanded(!fd.collapsed.contains(it.key()));
 	}
 
@@ -648,8 +632,7 @@ static void reorderNativeTo(const QStringList &names)
 
 /* walk the tree collecting scene names in display order; a container matching
    sortPath (or every container when sortAll) emits its direct scenes A to Z */
-static void collectOrdered(QTreeWidgetItem *folder, QStringList &out, bool sortAll,
-			   const QString &sortPath)
+static void collectOrdered(QTreeWidgetItem *folder, QStringList &out, bool sortAll, const QString &sortPath)
 {
 	if (!g_tree)
 		return;
@@ -657,8 +640,7 @@ static void collectOrdered(QTreeWidgetItem *folder, QStringList &out, bool sortA
 	auto childAt = [folder](int i) {
 		return folder ? folder->child(i) : g_tree->topLevelItem(i);
 	};
-	const bool sortHere =
-		sortAll || (folder && !sortPath.isEmpty() && itemKey(folder) == sortPath);
+	const bool sortHere = sortAll || (folder && !sortPath.isEmpty() && itemKey(folder) == sortPath);
 	QStringList sorted;
 	if (sortHere) {
 		for (int i = 0; i < n; i++) {
@@ -667,9 +649,7 @@ static void collectOrdered(QTreeWidgetItem *folder, QStringList &out, bool sortA
 				sorted << c->text(0);
 		}
 		std::sort(sorted.begin(), sorted.end(),
-			  [](const QString &a, const QString &b) {
-				  return a.compare(b, Qt::CaseInsensitive) < 0;
-			  });
+			  [](const QString &a, const QString &b) { return a.compare(b, Qt::CaseInsensitive) < 0; });
 	}
 	int next = 0;
 	for (int i = 0; i < n; i++) {
@@ -723,18 +703,15 @@ protected:
 
 	/* arrows only in the branch column; none of the dotted connector lines.
 	   The gutter is painted opaque first so no theme decoration survives. */
-	void drawBranches(QPainter *painter, const QRect &rect,
-			  const QModelIndex &index) const override
+	void drawBranches(QPainter *painter, const QRect &rect, const QModelIndex &index) const override
 	{
-		painter->fillRect(rect,
-				  viewport()->palette().color(viewport()->backgroundRole()));
+		painter->fillRect(rect, viewport()->palette().color(viewport()->backgroundRole()));
 		if (!model()->hasChildren(index))
 			return;
 		QStyleOption opt;
 		opt.initFrom(this);
 		const int s = 14;
-		QRect r(rect.right() - indentation() + (indentation() - s) / 2,
-			rect.center().y() - s / 2, s, s);
+		QRect r(rect.right() - indentation() + (indentation() - s) / 2, rect.center().y() - s / 2, s, s);
 		opt.rect = r;
 		style()->drawPrimitive(isExpanded(index) ? QStyle::PE_IndicatorArrowDown
 							 : QStyle::PE_IndicatorArrowRight,
@@ -748,17 +725,15 @@ static void newFolderPrompt(QWidget *parent, const QString &assignSceneUuid = QS
 			    const QString &parentPath = QString())
 {
 	bool ok = false;
-	QString name = QInputDialog::getText(parent, "New folder", "Folder name:",
-					     QLineEdit::Normal, QString(), &ok)
-			       .trimmed();
+	QString name =
+		QInputDialog::getText(parent, "New folder", "Folder name:", QLineEdit::Normal, QString(), &ok).trimmed();
 	name.remove(SEP);
 	if (!ok || name.isEmpty())
 		return;
 	FolderData &fd = data();
 	const QString path = pathJoin(parentPath, name);
 	if (fd.order.contains(path)) {
-		QMessageBox::information(parent, "DockX",
-					 "A folder with that name already exists here.");
+		QMessageBox::information(parent, "DockX", "A folder with that name already exists here.");
 		return;
 	}
 	fd.order.append(path);
@@ -771,24 +746,20 @@ static void newFolderPrompt(QWidget *parent, const QString &assignSceneUuid = QS
 static void renameFolderPrompt(QWidget *parent, const QString &oldPath)
 {
 	bool ok = false;
-	QString name = QInputDialog::getText(parent, "Rename folder", "New name:",
-					     QLineEdit::Normal, pathName(oldPath), &ok)
-			       .trimmed();
+	QString name =
+		QInputDialog::getText(parent, "Rename folder", "New name:", QLineEdit::Normal, pathName(oldPath), &ok)
+			.trimmed();
 	name.remove(SEP);
 	if (!ok || name.isEmpty() || name == pathName(oldPath))
 		return;
 	FolderData &fd = data();
 	const QString newPath = pathJoin(pathParent(oldPath), name);
 	if (fd.order.contains(newPath)) {
-		QMessageBox::information(parent, "DockX",
-					 "A folder with that name already exists here.");
+		QMessageBox::information(parent, "DockX", "A folder with that name already exists here.");
 		return;
 	}
 	auto remap = [&](const QString &p) {
-		return p == oldPath ? newPath
-		       : p.startsWith(oldPath + SEP)
-			       ? newPath + p.mid(oldPath.length())
-			       : p;
+		return p == oldPath ? newPath : p.startsWith(oldPath + SEP) ? newPath + p.mid(oldPath.length()) : p;
 	};
 	for (int i = 0; i < fd.order.size(); i++)
 		fd.order[i] = remap(fd.order[i]);
@@ -819,11 +790,10 @@ static void setFolderColor(const QString &path, const QString &hex)
 
 static void deleteFolderPrompt(QWidget *parent, const QString &path)
 {
-	auto answer = QMessageBox::question(
-		parent, "Delete folder",
-		QString("Delete \"%1\"? Subfolders are deleted too and the scenes "
-			"inside go back to the main list. No scene is deleted.")
-			.arg(pathName(path)));
+	auto answer = QMessageBox::question(parent, "Delete folder",
+					    QString("Delete \"%1\"? Subfolders are deleted too and the scenes "
+						    "inside go back to the main list. No scene is deleted.")
+						    .arg(pathName(path)));
 	if (answer != QMessageBox::Yes)
 		return;
 	FolderData &fd = data();
@@ -905,15 +875,13 @@ static void setSceneColor(const QString &name, const QString &hex)
 static void renameScenePrompt(const QString &uuid, const QString &name)
 {
 	bool ok = false;
-	QString newName = QInputDialog::getText(g_tree, "Rename scene", "New name:",
-						QLineEdit::Normal, name, &ok)
-				  .trimmed();
+	QString newName =
+		QInputDialog::getText(g_tree, "Rename scene", "New name:", QLineEdit::Normal, name, &ok).trimmed();
 	if (!ok || newName.isEmpty() || newName == name)
 		return;
 	if (obs_source_t *clash = obs_get_source_by_name(newName.toUtf8().constData())) {
 		obs_source_release(clash);
-		QMessageBox::information(g_tree, "DockX",
-					 "A scene or source with that name already exists.");
+		QMessageBox::information(g_tree, "DockX", "A scene or source with that name already exists.");
 		return;
 	}
 	obs_source_t *src = sceneByUuid(uuid);
@@ -933,15 +901,12 @@ static void renameScenePrompt(const QString &uuid, const QString &name)
 static QString promptSceneName(const QString &title, const QString &suggested)
 {
 	bool ok = false;
-	QString name = QInputDialog::getText(g_tree, title, "Scene name:", QLineEdit::Normal,
-					     suggested, &ok)
-			       .trimmed();
+	QString name = QInputDialog::getText(g_tree, title, "Scene name:", QLineEdit::Normal, suggested, &ok).trimmed();
 	if (!ok || name.isEmpty())
 		return QString();
 	if (obs_source_t *clash = obs_get_source_by_name(name.toUtf8().constData())) {
 		obs_source_release(clash);
-		QMessageBox::information(g_tree, "DockX",
-					 "A scene or source with that name already exists.");
+		QMessageBox::information(g_tree, "DockX", "A scene or source with that name already exists.");
 		return QString();
 	}
 	return name;
@@ -976,8 +941,7 @@ static void addScenePrompt(const QString &folder)
 
 static void duplicateScenePrompt(const QString &uuid, const QString &name)
 {
-	const QString dupName =
-		promptSceneName("Duplicate scene", uniqueSceneName(name + " Copy"));
+	const QString dupName = promptSceneName("Duplicate scene", uniqueSceneName(name + " Copy"));
 	if (dupName.isEmpty())
 		return;
 	obs_source_t *src = sceneByUuid(uuid);
@@ -985,8 +949,7 @@ static void duplicateScenePrompt(const QString &uuid, const QString &name)
 		return;
 	obs_scene_t *scene = obs_scene_from_source(src);
 	if (scene) {
-		obs_scene_t *dup = obs_scene_duplicate(scene, dupName.toUtf8().constData(),
-						       OBS_SCENE_DUP_REFS);
+		obs_scene_t *dup = obs_scene_duplicate(scene, dupName.toUtf8().constData(), OBS_SCENE_DUP_REFS);
 		if (dup) {
 			/* the copy lands in the same folder, with the same color */
 			obs_source_t *dupSrc = obs_scene_get_source(dup);
@@ -1026,10 +989,7 @@ static void moveSceneRow(const QString &name, int mode)
 	}
 	if (row < 0)
 		return;
-	const int dst = mode == 0 ? row - 1
-		      : mode == 1 ? row + 1
-		      : mode == 2 ? 0
-				  : list->count() - 1;
+	const int dst = mode == 0 ? row - 1 : mode == 1 ? row + 1 : mode == 2 ? 0 : list->count() - 1;
 	if (dst < 0 || dst >= list->count() || dst == row)
 		return;
 	{
@@ -1069,8 +1029,8 @@ static void removeScenePrompt(const QString &uuid, const QString &name)
 		return;
 	}
 	if (QMessageBox::question(g_tree, "Remove scene",
-				  QString("Remove \"%1\" from OBS? This deletes the scene.")
-					  .arg(name)) != QMessageBox::Yes)
+				  QString("Remove \"%1\" from OBS? This deletes the scene.").arg(name)) !=
+	    QMessageBox::Yes)
 		return;
 	if (obs_source_t *src = sceneByUuid(uuid)) {
 		obs_source_remove(src);
@@ -1080,17 +1040,16 @@ static void removeScenePrompt(const QString &uuid, const QString &name)
 
 /* ---- context menus (shared by tree and grid) ---- */
 
-static void copyToCollectionPrompt(const QString &uuid, const QString &name,
-				   const QString &target)
+static void copyToCollectionPrompt(const QString &uuid, const QString &name, const QString &target)
 {
 	QWidget *parent = g_tree ? static_cast<QWidget *>(g_tree) : nullptr;
-	const auto answer = QMessageBox::question(
-		parent, "Copy scene to collection",
-		QString("Copy \"%1\" into the \"%2\" scene collection?\n\nIt is ADDED to "
-			"that collection (nothing there is overwritten), and a backup of "
-			"the collection is saved first. You'll see the scene when you "
-			"switch to \"%2\".")
-			.arg(name, target));
+	const auto answer =
+		QMessageBox::question(parent, "Copy scene to collection",
+				      QString("Copy \"%1\" into the \"%2\" scene collection?\n\nIt is ADDED to "
+					      "that collection (nothing there is overwritten), and a backup of "
+					      "the collection is saved first. You'll see the scene when you "
+					      "switch to \"%2\".")
+					      .arg(name, target));
 	if (answer != QMessageBox::Yes)
 		return;
 	const collections::CopyReport r = collections::copySceneToCollection(uuid, target);
@@ -1100,12 +1059,10 @@ static void copyToCollectionPrompt(const QString &uuid, const QString &name,
 	}
 	QString msg = QString("Copied \"%1\" into \"%2\".").arg(r.finalSceneName, target);
 	if (r.finalSceneName != name)
-		msg += QString("\n\nRenamed to \"%1\" (that name was already used there).")
-			       .arg(r.finalSceneName);
+		msg += QString("\n\nRenamed to \"%1\" (that name was already used there).").arg(r.finalSceneName);
 	msg += QString("\n\n%1 source(s) copied").arg(r.sourcesCopied);
 	if (r.sourcesSkipped > 0)
-		msg += QString(", %1 already existed and were left as is")
-			       .arg(r.sourcesSkipped);
+		msg += QString(", %1 already existed and were left as is").arg(r.sourcesSkipped);
 	msg += ".";
 	QMessageBox::information(parent, "DockX", msg);
 }
@@ -1128,10 +1085,8 @@ static void buildSceneMenu(QMenu &menu, const QString &uuid, const QString &name
 		obs_source_release(src);
 	}
 
-	menu.addAction("Add Scene...",
-		       [uuid]() { addScenePrompt(data().assign.value(uuid)); });
-	menu.addAction("Duplicate...",
-		       [uuid, name]() { duplicateScenePrompt(uuid, name); });
+	menu.addAction("Add Scene...", [uuid]() { addScenePrompt(data().assign.value(uuid)); });
+	menu.addAction("Duplicate...", [uuid, name]() { duplicateScenePrompt(uuid, name); });
 	QMenu *copyToMenu = menu.addMenu("Copy to Collection");
 	const QStringList others = collections::otherCollections();
 	if (others.isEmpty()) {
@@ -1139,12 +1094,10 @@ static void buildSceneMenu(QMenu &menu, const QString &uuid, const QString &name
 		none->setEnabled(false);
 	} else {
 		for (const QString &target : others)
-			copyToMenu->addAction(target, [uuid, name, target]() {
-				copyToCollectionPrompt(uuid, name, target);
-			});
+			copyToMenu->addAction(target,
+					      [uuid, name, target]() { copyToCollectionPrompt(uuid, name, target); });
 	}
-	QAction *copyF =
-		menu.addAction("Copy Filters", [uuid]() { g_copyFiltersUuid = uuid; });
+	QAction *copyF = menu.addAction("Copy Filters", [uuid]() { g_copyFiltersUuid = uuid; });
 	copyF->setEnabled(hasFilters);
 	bool canPaste = false;
 	if (!g_copyFiltersUuid.isEmpty() && g_copyFiltersUuid != uuid) {
@@ -1166,13 +1119,11 @@ static void buildSceneMenu(QMenu &menu, const QString &uuid, const QString &name
 	pasteF->setEnabled(canPaste);
 
 	menu.addSeparator();
-	QAction *renA = menu.addAction("Rename...",
-				       [uuid, name]() { renameScenePrompt(uuid, name); });
+	QAction *renA = menu.addAction("Rename...", [uuid, name]() { renameScenePrompt(uuid, name); });
 	renA->setShortcut(QKeySequence(Qt::Key_F2));
 	renA->setShortcutContext(Qt::WidgetShortcut);
 	renA->setShortcutVisibleInContextMenu(true);
-	QAction *remA = menu.addAction("Remove",
-				       [uuid, name]() { removeScenePrompt(uuid, name); });
+	QAction *remA = menu.addAction("Remove", [uuid, name]() { removeScenePrompt(uuid, name); });
 	remA->setShortcut(QKeySequence(Qt::Key_Delete));
 	remA->setShortcutContext(Qt::WidgetShortcut);
 	remA->setShortcutVisibleInContextMenu(true);
@@ -1219,9 +1170,7 @@ static void buildSceneMenu(QMenu &menu, const QString &uuid, const QString &name
 			setSceneColor(name, c.name());
 	});
 	colorMenu->addAction("No color", [name]() { setSceneColor(name, QString()); });
-	menu.addAction("Add Source Dock", [name]() {
-		sourcedocks::addDock(sourcedocks::KIND_SOURCE, name);
-	});
+	menu.addAction("Add Source Dock", [name]() { sourcedocks::addDock(sourcedocks::KIND_SOURCE, name); });
 
 	menu.addSeparator();
 	QMenu *projMenu = menu.addMenu("Open Scene Projector");
@@ -1229,16 +1178,12 @@ static void buildSceneMenu(QMenu &menu, const QString &uuid, const QString &name
 	const QList<QScreen *> screens = QGuiApplication::screens();
 	for (int i = 0; i < screens.size(); i++) {
 		const QRect g = screens[i]->geometry();
-		fsMenu->addAction(
-			QString("Display %1 (%2x%3)").arg(i + 1).arg(g.width()).arg(g.height()),
-			[i, name]() {
-				obs_frontend_open_projector("Scene", i, nullptr,
-							    name.toUtf8().constData());
-			});
+		fsMenu->addAction(QString("Display %1 (%2x%3)").arg(i + 1).arg(g.width()).arg(g.height()), [i, name]() {
+			obs_frontend_open_projector("Scene", i, nullptr, name.toUtf8().constData());
+		});
 	}
-	projMenu->addAction("Windowed", [name]() {
-		obs_frontend_open_projector("Scene", -1, nullptr, name.toUtf8().constData());
-	});
+	projMenu->addAction("Windowed",
+			    [name]() { obs_frontend_open_projector("Scene", -1, nullptr, name.toUtf8().constData()); });
 	menu.addAction("Save Scene Screenshot", [uuid]() {
 		if (obs_source_t *src = sceneByUuid(uuid)) {
 			obs_frontend_take_source_screenshot(src);
@@ -1254,8 +1199,7 @@ static void buildSceneMenu(QMenu &menu, const QString &uuid, const QString &name
 		}
 	});
 	QMenu *trMenu = menu.addMenu("Transition Override");
-	QAction *noneT =
-		trMenu->addAction("None", [uuid]() { setTransitionOverride(uuid, QString()); });
+	QAction *noneT = trMenu->addAction("None", [uuid]() { setTransitionOverride(uuid, QString()); });
 	noneT->setCheckable(true);
 	noneT->setChecked(curOverride.isEmpty());
 	obs_frontend_source_list tl = {};
@@ -1265,8 +1209,7 @@ static void buildSceneMenu(QMenu &menu, const QString &uuid, const QString &name
 		if (!tn)
 			continue;
 		const QString tname = QString::fromUtf8(tn);
-		QAction *a = trMenu->addAction(
-			tname, [uuid, tname]() { setTransitionOverride(uuid, tname); });
+		QAction *a = trMenu->addAction(tname, [uuid, tname]() { setTransitionOverride(uuid, tname); });
 		a->setCheckable(true);
 		a->setChecked(tname == curOverride);
 	}
@@ -1274,9 +1217,8 @@ static void buildSceneMenu(QMenu &menu, const QString &uuid, const QString &name
 	trMenu->addSeparator();
 	trMenu->addAction(QString("Duration (%1 ms)...").arg(curDur), [uuid, curDur]() {
 		bool ok = false;
-		const int ms = QInputDialog::getInt(g_tree, "Transition duration",
-						    "Milliseconds:", curDur, 50, 20000, 50,
-						    &ok);
+		const int ms = QInputDialog::getInt(g_tree, "Transition duration", "Milliseconds:", curDur, 50, 20000,
+						    50, &ok);
 		if (!ok)
 			return;
 		obs_source_t *s = sceneByUuid(uuid);
@@ -1323,8 +1265,7 @@ static void buildSourceMenu(QMenu &menu, QTreeWidgetItem *row)
 	const QString sceneUuid = row->data(0, Qt::UserRole + 1).toString();
 	const qlonglong itemId = row->data(0, Qt::UserRole + 2).toLongLong();
 	auto withItem = [sceneUuid, itemId](std::function<void(obs_sceneitem_t *)> fn) {
-		obs_source_t *sceneSrc =
-			obs_get_source_by_uuid(sceneUuid.toUtf8().constData());
+		obs_source_t *sceneSrc = obs_get_source_by_uuid(sceneUuid.toUtf8().constData());
 		if (!sceneSrc)
 			return;
 		obs_scene_t *scene = obs_scene_from_source(sceneSrc);
@@ -1338,15 +1279,11 @@ static void buildSourceMenu(QMenu &menu, QTreeWidgetItem *row)
 	};
 
 	menu.addAction(visible ? "Hide" : "Show", [withItem, visible]() {
-		withItem([visible](obs_sceneitem_t *item) {
-			obs_sceneitem_set_visible(item, !visible);
-		});
+		withItem([visible](obs_sceneitem_t *item) { obs_sceneitem_set_visible(item, !visible); });
 		rebuildSoon();
 	});
 	menu.addAction(locked ? "Unlock" : "Lock", [withItem, locked]() {
-		withItem([locked](obs_sceneitem_t *item) {
-			obs_sceneitem_set_locked(item, !locked);
-		});
+		withItem([locked](obs_sceneitem_t *item) { obs_sceneitem_set_locked(item, !locked); });
 		rebuildSoon();
 	});
 	menu.addSeparator();
@@ -1357,8 +1294,7 @@ static void buildSourceMenu(QMenu &menu, QTreeWidgetItem *row)
 	});
 	menu.addAction("Properties", [withItem]() {
 		withItem([](obs_sceneitem_t *item) {
-			obs_frontend_open_source_properties(
-				obs_sceneitem_get_source(item));
+			obs_frontend_open_source_properties(obs_sceneitem_get_source(item));
 		});
 	});
 	menu.addAction("Rename...", [withItem]() {
@@ -1367,12 +1303,11 @@ static void buildSourceMenu(QMenu &menu, QTreeWidgetItem *row)
 			if (!src)
 				return;
 			bool ok = false;
-			const QString name = QInputDialog::getText(
-				g_tree, "Rename source", "New name:", QLineEdit::Normal,
-				QString::fromUtf8(obs_source_get_name(src)), &ok);
+			const QString name = QInputDialog::getText(g_tree, "Rename source",
+								   "New name:", QLineEdit::Normal,
+								   QString::fromUtf8(obs_source_get_name(src)), &ok);
 			if (ok && !name.trimmed().isEmpty())
-				obs_source_set_name(src,
-						    name.trimmed().toUtf8().constData());
+				obs_source_set_name(src, name.trimmed().toUtf8().constData());
 		});
 		rebuildSoon();
 	});
@@ -1383,9 +1318,7 @@ static void buildFolderMenu(QMenu &menu, const QString &path)
 	menu.addAction("Add Scene...", [path]() { addScenePrompt(path); });
 	menu.addAction("New folder", []() { newFolderPrompt(g_tree); });
 	if (state().folderNesting)
-		menu.addAction("New subfolder", [path]() {
-			newFolderPrompt(g_tree, QString(), path);
-		});
+		menu.addAction("New subfolder", [path]() { newFolderPrompt(g_tree, QString(), path); });
 	menu.addAction("Sort scenes A to Z", [path]() { sortScenesAtoZ(false, path); });
 	menu.addAction("Rename", [path]() { renameFolderPrompt(g_tree, path); });
 	menu.addAction("Delete", [path]() { deleteFolderPrompt(g_tree, path); });
@@ -1422,8 +1355,7 @@ static void showContextMenu(const QPoint &pos)
 	} else {
 		menu.addAction("Add Scene...", []() { addScenePrompt(QString()); });
 		menu.addAction("New folder", []() { newFolderPrompt(g_tree); });
-		menu.addAction("Sort all scenes A to Z",
-			       []() { sortScenesAtoZ(true, QString()); });
+		menu.addAction("Sort all scenes A to Z", []() { sortScenesAtoZ(true, QString()); });
 		menu.addSeparator();
 		menu.addAction("Lock every source (all scenes)", []() {
 			loadouts::lockAll(true);
@@ -1517,8 +1449,7 @@ static void rebuildGrid()
 		return;
 	const bool thumbsOn = state().sceneThumbs;
 	g_grid->setIconSize(thumbsOn ? thumbs::size() : QSize(20, 20));
-	g_grid->setGridSize(thumbsOn ? QSize(thumbs::size().width() + 16,
-					     thumbs::size().height() + 34)
+	g_grid->setGridSize(thumbsOn ? QSize(thumbs::size().width() + 16, thumbs::size().height() + 34)
 				     : QSize(112, 66));
 	g_thumbPending.clear();
 	const bool wasApplying = g_applying;
@@ -1537,8 +1468,8 @@ static void rebuildGrid()
 	auto contrastText = [](const QColor &bg) {
 		return bg.lightness() > 140 ? QColor(Qt::black) : QColor(Qt::white);
 	};
-	auto addTile = [&](const char *type, const QString &key, const QString &text,
-			   const QColor &bg, const QIcon &icon) {
+	auto addTile = [&](const char *type, const QString &key, const QString &text, const QColor &bg,
+			   const QIcon &icon) {
 		QListWidgetItem *it = new QListWidgetItem(text, g_grid);
 		it->setData(Qt::UserRole, QLatin1String(type));
 		it->setData(Qt::UserRole + 1, key);
@@ -1567,12 +1498,9 @@ static void rebuildGrid()
 		for (const SceneRow &s : sceneRows()) {
 			if (!s.name.contains(q, Qt::CaseInsensitive))
 				continue;
-			const QString hex = state().sceneColors
-						    ? state().colors.value(s.name)
-						    : QString();
+			const QString hex = state().sceneColors ? state().colors.value(s.name) : QString();
 			const QColor bg = hex.isEmpty() ? GRID_TILE_BG : QColor(hex);
-			QListWidgetItem *it =
-				addTile(ROLE_TYPE_SCENE, s.uuid, s.name, bg, sceneIcon(s.uuid, bg));
+			QListWidgetItem *it = addTile(ROLE_TYPE_SCENE, s.uuid, s.name, bg, sceneIcon(s.uuid, bg));
 			if (s.uuid == curUuid)
 				it->setSelected(true);
 		}
@@ -1596,8 +1524,7 @@ static void rebuildGrid()
 				count++;
 		const QString fhex = fd.colors.value(fpath);
 		const QColor iconColor = fhex.isEmpty() ? NEUTRAL_FOLDER : QColor(fhex);
-		addTile(ROLE_TYPE_FOLDER, fpath,
-			QString("%1 (%2)").arg(pathName(fpath)).arg(count), GRID_TILE_BG,
+		addTile(ROLE_TYPE_FOLDER, fpath, QString("%1 (%2)").arg(pathName(fpath)).arg(count), GRID_TILE_BG,
 			folderGlyph(iconColor));
 	}
 
@@ -1607,8 +1534,7 @@ static void rebuildGrid()
 			continue;
 		if (g_gridPath.isEmpty() && fd.assign.contains(s.uuid))
 			continue;
-		const QString hex = state().sceneColors ? state().colors.value(s.name)
-						       : QString();
+		const QString hex = state().sceneColors ? state().colors.value(s.name) : QString();
 		const QColor bg = hex.isEmpty() ? GRID_TILE_BG : QColor(hex);
 		QListWidgetItem *it = addTile(ROLE_TYPE_SCENE, s.uuid, s.name, bg, sceneIcon(s.uuid, bg));
 		if (s.uuid == curUuid) {
@@ -1661,11 +1587,8 @@ static void showGridMenu(const QPoint &pos)
 		buildFolderMenu(menu, path);
 	} else {
 		menu.addAction("Add Scene...", []() { addScenePrompt(g_gridPath); });
-		menu.addAction("New folder here", []() {
-			newFolderPrompt(g_grid, QString(), g_gridPath);
-		});
-		menu.addAction("Sort all scenes A to Z",
-			       []() { sortScenesAtoZ(true, QString()); });
+		menu.addAction("New folder here", []() { newFolderPrompt(g_grid, QString(), g_gridPath); });
+		menu.addAction("Sort all scenes A to Z", []() { sortScenesAtoZ(true, QString()); });
 		if (state().sceneThumbs)
 			menu.addAction("Refresh thumbnails", []() {
 				thumbs::invalidateAll();
@@ -1707,8 +1630,7 @@ void createDock()
 	g_search = new QLineEdit(panel);
 	g_search->setPlaceholderText("Search scenes");
 	g_search->setClearButtonEnabled(true);
-	QObject::connect(g_search, &QLineEdit::textChanged, panel,
-			 [](const QString &) { applySearch(); });
+	QObject::connect(g_search, &QLineEdit::textChanged, panel, [](const QString &) { applySearch(); });
 	topRow->addWidget(g_search, 1);
 	g_viewBtn = new QToolButton(panel);
 	g_viewBtn->setAutoRaise(true);
@@ -1728,16 +1650,14 @@ void createDock()
 	g_newBtn->setToolTip("New folder");
 	g_newBtn->setVisible(state().folderNewButton);
 	QObject::connect(g_newBtn, &QToolButton::clicked, panel, [panel]() {
-		newFolderPrompt(panel, QString(),
-				state().folderGridMode ? g_gridPath : QString());
+		newFolderPrompt(panel, QString(), state().folderGridMode ? g_gridPath : QString());
 	});
 	topRow->addWidget(g_newBtn);
 	QToolButton *helpBtn = new QToolButton(panel);
 	helpBtn->setAutoRaise(true);
 	helpBtn->setText("?");
 	helpBtn->setToolTip("DockX help (strmrx.com)");
-	QObject::connect(helpBtn, &QToolButton::clicked, panel,
-			 []() { QDesktopServices::openUrl(QUrl(HELP_URL)); });
+	QObject::connect(helpBtn, &QToolButton::clicked, panel, []() { QDesktopServices::openUrl(QUrl(HELP_URL)); });
 	topRow->addWidget(helpBtn);
 	v->addLayout(topRow);
 
@@ -1758,10 +1678,9 @@ void createDock()
 	g_tree->setFont(treeFont);
 	g_tree->setIconSize(QSize(18, 18));
 	g_tree->setUniformRowHeights(true);
-	g_tree->setStyleSheet(
-		"QTreeWidget::item { min-height: 30px; padding-left: 2px; }"
-		"QTreeWidget::branch { background: transparent; border: none;"
-		" border-image: none; image: none; }");
+	g_tree->setStyleSheet("QTreeWidget::item { min-height: 30px; padding-left: 2px; }"
+			      "QTreeWidget::branch { background: transparent; border: none;"
+			      " border-image: none; image: none; }");
 	g_tree->setContextMenuPolicy(Qt::CustomContextMenu);
 	QObject::connect(g_tree, &QTreeWidget::customContextMenuRequested, g_tree,
 			 [](const QPoint &pos) { showContextMenu(pos); });
@@ -1787,21 +1706,19 @@ void createDock()
 	});
 	v->addWidget(g_tree, 1);
 
-	QObject::connect(g_tree, &QTreeWidget::itemClicked, g_tree,
-			 [](QTreeWidgetItem *it, int) {
-				 if (isFolder(it)) {
-					 it->setExpanded(!it->isExpanded());
-					 return;
-				 }
-				 if (!isScene(it))
-					 return;
-				 obs_source_t *src = obs_get_source_by_uuid(
-					 itemKey(it).toUtf8().constData());
-				 if (!src)
-					 return;
-				 switchToScene(src);
-				 obs_source_release(src);
-			 });
+	QObject::connect(g_tree, &QTreeWidget::itemClicked, g_tree, [](QTreeWidgetItem *it, int) {
+		if (isFolder(it)) {
+			it->setExpanded(!it->isExpanded());
+			return;
+		}
+		if (!isScene(it))
+			return;
+		obs_source_t *src = obs_get_source_by_uuid(itemKey(it).toUtf8().constData());
+		if (!src)
+			return;
+		switchToScene(src);
+		obs_source_release(src);
+	});
 	QObject::connect(g_tree, &QTreeWidget::itemExpanded, g_tree, [](QTreeWidgetItem *it) {
 		if (g_applying)
 			return;
@@ -1826,17 +1743,15 @@ void createDock()
 		data().collapsed.insert(itemKey(it));
 		stateSave();
 	});
-	QObject::connect(g_tree, &QTreeWidget::itemDoubleClicked, g_tree,
-			 [](QTreeWidgetItem *it, int) {
-				 /* double click a source row = show/hide, like the eye */
-				 if (!isSourceRow(it))
-					 return;
-				 withRowItem(it, [](obs_sceneitem_t *item) {
-					 obs_sceneitem_set_visible(
-						 item, !obs_sceneitem_visible(item));
-				 });
-				 rebuildSoon();
-			 });
+	QObject::connect(g_tree, &QTreeWidget::itemDoubleClicked, g_tree, [](QTreeWidgetItem *it, int) {
+		/* double click a source row = show/hide, like the eye */
+		if (!isSourceRow(it))
+			return;
+		withRowItem(it, [](obs_sceneitem_t *item) {
+			obs_sceneitem_set_visible(item, !obs_sceneitem_visible(item));
+		});
+		rebuildSoon();
+	});
 
 	g_grid = new QListWidget(panel);
 	g_grid->setViewMode(QListView::IconMode);
@@ -1855,8 +1770,7 @@ void createDock()
 	g_grid->setContextMenuPolicy(Qt::CustomContextMenu);
 	QObject::connect(g_grid, &QListWidget::customContextMenuRequested, g_grid,
 			 [](const QPoint &pos) { showGridMenu(pos); });
-	QObject::connect(g_grid, &QListWidget::itemClicked, g_grid,
-			 [](QListWidgetItem *it) { gridClicked(it); });
+	QObject::connect(g_grid, &QListWidget::itemClicked, g_grid, [](QListWidgetItem *it) { gridClicked(it); });
 	g_grid->setVisible(false);
 	v->addWidget(g_grid, 1);
 

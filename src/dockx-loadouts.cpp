@@ -25,8 +25,8 @@ namespace loadouts {
 
 /* ---- capture ---- */
 
-static LoadoutItem captureItem(obs_sceneitem_t *item, const QString &sceneUuid,
-			       const QString &sceneName, obs_sceneitem_t *group)
+static LoadoutItem captureItem(obs_sceneitem_t *item, const QString &sceneUuid, const QString &sceneName,
+			       obs_sceneitem_t *group)
 {
 	LoadoutItem li;
 	li.sceneUuid = sceneUuid;
@@ -76,8 +76,7 @@ struct CaptureCtx {
 static bool captureEnum(obs_scene_t *, obs_sceneitem_t *item, void *param)
 {
 	CaptureCtx *ctx = static_cast<CaptureCtx *>(param);
-	ctx->out->items.push_back(
-		captureItem(item, ctx->sceneUuid, ctx->sceneName, ctx->group));
+	ctx->out->items.push_back(captureItem(item, ctx->sceneUuid, ctx->sceneName, ctx->group));
 	if (obs_sceneitem_is_group(item)) {
 		CaptureCtx sub = *ctx;
 		sub.group = item;
@@ -126,11 +125,9 @@ static obs_sceneitem_t *resolveItem(obs_scene_t *scene, const LoadoutItem &li)
 {
 	obs_scene_t *host = scene;
 	if (li.groupItemId != 0 || !li.groupName.isEmpty()) {
-		obs_sceneitem_t *group =
-			obs_scene_find_sceneitem_by_id(scene, li.groupItemId);
+		obs_sceneitem_t *group = obs_scene_find_sceneitem_by_id(scene, li.groupItemId);
 		if (!group || !obs_sceneitem_is_group(group))
-			group = obs_scene_get_group(scene,
-						    li.groupName.toUtf8().constData());
+			group = obs_scene_get_group(scene, li.groupName.toUtf8().constData());
 		if (!group)
 			return nullptr;
 		host = obs_sceneitem_group_get_scene(group);
@@ -145,8 +142,7 @@ static obs_sceneitem_t *resolveItem(obs_scene_t *scene, const LoadoutItem &li)
 
 static bool applyItem(const LoadoutItem &li)
 {
-	obs_source_t *sceneSrc =
-		obs_get_source_by_uuid(li.sceneUuid.toUtf8().constData());
+	obs_source_t *sceneSrc = obs_get_source_by_uuid(li.sceneUuid.toUtf8().constData());
 	if (!sceneSrc)
 		return false;
 	obs_scene_t *scene = obs_scene_from_source(sceneSrc);
@@ -191,8 +187,7 @@ static RestoreReport applyAll(const SourceLoadout &l)
 		if (applyItem(li))
 			report.restored++;
 		else
-			report.missing << QString("%1: %2").arg(li.sceneName,
-								li.sourceName);
+			report.missing << QString("%1: %2").arg(li.sceneName, li.sourceName);
 	}
 	return report;
 }
@@ -212,8 +207,7 @@ bool undoRestore(RestoreReport &report)
 	if (!state().hasLoadoutUndo)
 		return false;
 	/* capture now, apply the old snapshot, keep the capture: undo = redo */
-	SourceLoadout cur = capture(state().loadoutUndo.sceneUuid,
-				    state().loadoutUndo.sceneName);
+	SourceLoadout cur = capture(state().loadoutUndo.sceneUuid, state().loadoutUndo.sceneName);
 	report = applyAll(state().loadoutUndo);
 	state().loadoutUndo = cur;
 	stateSave();
@@ -361,8 +355,7 @@ bool exportFile(const QString &path)
 	}
 	obs_data_set_array(root, "loadouts", arr);
 	obs_data_array_release(arr);
-	bool ok = obs_data_save_json_pretty_safe(root, path.toUtf8().constData(), "tmp",
-						 "bak");
+	bool ok = obs_data_save_json_pretty_safe(root, path.toUtf8().constData(), "tmp", "bak");
 	obs_data_release(root);
 	return ok;
 }

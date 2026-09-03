@@ -169,9 +169,9 @@ void initAfterLoad();   /* one time UI wiring once OBS finished loading */
 void applyNesting();    /* honor state().nesting on the main window */
 void applySearchBars(); /* create/show/hide the injected search boxes */
 void refreshSoon();     /* debounced: reapply colors + active filters */
-void applyDockColors();  /* colored border + title bar per tagged dock */
-void applySeparators();  /* thickness/tint of the lines between docks */
-void autoSceneLayout();  /* apply the layout mapped to the current scene, if any */
+void applyDockColors(); /* colored border + title bar per tagged dock */
+void applySeparators(); /* thickness/tint of the lines between docks */
+void autoSceneLayout(); /* apply the layout mapped to the current scene, if any */
 bool applyLayout(int id);
 bool undoLayout();
 void shutdown();
@@ -192,9 +192,9 @@ void showDialog(const QString &initialTab = QString());
 /* the Missing Media cleaner: find sources whose file is gone and get rid of
    them (or relink), the delete button OBS's own missing files dialog lacks */
 namespace missing {
-int count();                     /* how many sources have a missing file */
+int count();                      /* how many sources have a missing file */
 void showDialog(QWidget *parent); /* the cleaner window; parent may be null */
-void autoPopIfNeeded();          /* startup: pop it if opted in and any missing */
+void autoPopIfNeeded();           /* startup: pop it if opted in and any missing */
 } // namespace missing
 
 /* toggle hotkeys for every filter on every source; bindings are registered on
@@ -205,19 +205,19 @@ struct Entry {
 	QString filterName;
 	obs_hotkey_id hotkey;
 };
-void init();               /* signal wiring; call once at module load */
-void rescanSoon();         /* debounced reconcile of hotkey registrations */
-void applyEnabled();       /* honor state().filterHotkeys */
-QList<Entry> entries();    /* current registrations, for the dialog */
+void init();            /* signal wiring; call once at module load */
+void rescanSoon();      /* debounced reconcile of hotkey registrations */
+void applyEnabled();    /* honor state().filterHotkeys */
+QList<Entry> entries(); /* current registrations, for the dialog */
 void shutdown();
 } // namespace filters
 
 /* the Scene Folders dock: collapsible folder tree over the scene list */
 namespace folders {
-void createDock();   /* register the dock; call once at module load */
-void rebuildSoon();  /* debounced tree rebuild from OBS scene list + state */
+void createDock();    /* register the dock; call once at module load */
+void rebuildSoon();   /* debounced tree rebuild from OBS scene list + state */
 void applySettings(); /* honor state().folderNewButton */
-void showFirstRun(); /* pop the dock open once so people discover it */
+void showFirstRun();  /* pop the dock open once so people discover it */
 void shutdown();
 } // namespace folders
 
@@ -243,9 +243,9 @@ void createFromState(); /* register saved editable docks; call once at load */
 void refreshAll();      /* re-point at the current scene after scene changes */
 void addDock();         /* add + open a new editable Preview dock */
 void removeDock(int id);
-bool showDocks();       /* reopen closed editable docks; false = none exist */
-QList<int> dockIds();   /* editable dock ids, for the management list */
-void shutdown();        /* MUST run at EXIT, before graphics dies */
+bool showDocks();     /* reopen closed editable docks; false = none exist */
+QList<int> dockIds(); /* editable dock ids, for the management list */
+void shutdown();      /* MUST run at EXIT, before graphics dies */
 } // namespace editpreview
 
 /* source loadouts + lock tools (LoadoutX's last features, done natively) */
@@ -255,8 +255,8 @@ struct RestoreReport {
 	QStringList missing; /* "Scene: Source" rows that no longer exist */
 };
 SourceLoadout capture(const QString &sceneUuid, const QString &sceneName);
-RestoreReport restore(const SourceLoadout &l); /* snapshots an undo first */
-bool undoRestore(RestoreReport &report);       /* undo twice = redo */
+RestoreReport restore(const SourceLoadout &l);         /* snapshots an undo first */
+bool undoRestore(RestoreReport &report);               /* undo twice = redo */
 void lockScene(const QString &sceneUuid, bool locked); /* incl. group children */
 void lockAll(bool locked);
 obs_data_t *toData(const SourceLoadout &l); /* caller releases */
@@ -269,18 +269,18 @@ int importFile(const QString &path);  /* append loadouts from JSON; -1 = bad fil
    to snap a moved layout back, and lock every source in a scene (or all
    scenes) at once so nothing on the canvas can be nudged */
 namespace locks {
-void registerHotkeys();          /* register the frontend hotkeys; idempotent */
+void registerHotkeys(); /* register the frontend hotkeys; idempotent */
 void unregisterHotkeys();
-void loadHotkeys(obs_data_t *d);  /* restore saved key bindings */
+void loadHotkeys(obs_data_t *d); /* restore saved key bindings */
 void saveHotkeys(obs_data_t *d);
 
 /* dock layout */
 bool hasLockPoint();
-void setLockPoint();      /* capture the current dock arrangement */
-bool revertToLockPoint(); /* snap docks back to the saved point */
+void setLockPoint();       /* capture the current dock arrangement */
+bool revertToLockPoint();  /* snap docks back to the saved point */
 void setHardLock(bool on); /* freeze/unfreeze dock dragging + floating */
 bool hardLock();
-void applyHardLock();      /* reassert state().hardLock onto the docks */
+void applyHardLock(); /* reassert state().hardLock onto the docks */
 
 /* scene source locks (wrap loadouts::lockScene/lockAll) */
 void lockCurrentScene(bool locked);
@@ -309,8 +309,8 @@ CopyReport copySceneToCollection(const QString &sceneUuid, const QString &target
    destroy inside one graphics lock), so nothing persists to clean up at exit */
 namespace thumbs {
 QSize size();                        /* the thumbnail pixel size */
-QPixmap cached(const QString &uuid);  /* cache lookup; null if not rendered yet */
-QPixmap render(const QString &uuid);  /* render now on the graphics thread + cache */
+QPixmap cached(const QString &uuid); /* cache lookup; null if not rendered yet */
+QPixmap render(const QString &uuid); /* render now on the graphics thread + cache */
 void invalidateAll();                /* drop the cache (scene collection change) */
 void shutdown();                     /* clear the cache; no GPU handles to free */
 } // namespace thumbs
@@ -329,8 +329,8 @@ enum Op {
 	DIST_H,
 	DIST_V,
 };
-int selectedCount(); /* selected, unlocked top-level items in the current scene */
-void run(Op op);     /* align needs >= 2 items; distribute needs >= 3 */
+int selectedCount();                         /* selected, unlocked top-level items in the current scene */
+void run(Op op);                             /* align needs >= 2 items; distribute needs >= 3 */
 void center(bool horizontal, bool vertical); /* center the selection on the canvas */
 } // namespace align
 
@@ -345,9 +345,9 @@ struct ScreenInfo {
 };
 QList<ScreenInfo> listScreens();
 int sendDocksToScreen(const QStringList &dockKeys, int screenIndex); /* returns moved */
-int rescueStrayDocks();  /* reflow every off screen dock home; returns moved */
-void validateVisible();  /* call after restoreState so no dock lands off screen */
-void installWatch();     /* listen for monitor unplug; call once after load */
+int rescueStrayDocks(); /* reflow every off screen dock home; returns moved */
+void validateVisible(); /* call after restoreState so no dock lands off screen */
+void installWatch();    /* listen for monitor unplug; call once after load */
 } // namespace monitors
 
 /* project-wide source search: one index of every source across every scene in
@@ -358,19 +358,19 @@ struct Hit {
 	QString sourceName;
 	QString sourceType; /* friendly type: "Browser", "Image", "Scene", "Group" */
 	bool isGroup = false;
-	QString sceneUuid;  /* empty = source is in no scene (unused) */
+	QString sceneUuid; /* empty = source is in no scene (unused) */
 	QString sceneName;
-	QString groupName;  /* containing group, if nested; else empty */
+	QString groupName;    /* containing group, if nested; else empty */
 	long long itemId = 0; /* obs_sceneitem_get_id, for reveal */
 	bool visible = true;
 	bool locked = false;
 };
-QList<Hit> findAll(); /* every source occurrence across all scenes + unused inputs */
-bool reveal(const QString &sceneUuid, long long itemId);       /* switch scene + select */
-void openProperties(const QString &sourceName);                /* open its OBS Properties */
+QList<Hit> findAll();                                    /* every source occurrence across all scenes + unused inputs */
+bool reveal(const QString &sceneUuid, long long itemId); /* switch scene + select */
+void openProperties(const QString &sourceName);          /* open its OBS Properties */
 bool removeFromScene(const QString &sceneUuid, long long itemId); /* drop just this scene item */
-bool deleteSource(const QString &sourceName); /* remove from whole project; true if fully gone */
-QString describeHolders(const QString &sourceName); /* best-effort: what still holds it live */
+bool deleteSource(const QString &sourceName);                     /* remove from whole project; true if fully gone */
+QString describeHolders(const QString &sourceName);               /* best-effort: what still holds it live */
 } // namespace search
 
 /* collapse the main video preview: OBS's canvas is the QMainWindow central
@@ -379,11 +379,11 @@ QString describeHolders(const QString &sourceName); /* best-effort: what still h
    Stream/record/sources keep running, same as OBS's own "Disable Preview" */
 namespace preview {
 bool collapsed();
-void apply();               /* reassert state().previewCollapsed on the window */
-void setCollapsed(bool on); /* set + apply + save */
+void apply();                           /* reassert state().previewCollapsed on the window */
+void setCollapsed(bool on);             /* set + apply + save */
 void offerVideoDock(QWidget *parent);   /* offer a Program dock if none exists */
 void toggleWithPrompt(QWidget *parent); /* the Tools menu toggle */
-void onStudioModeEnabled(); /* expand: studio mode edits need the canvas */
+void onStudioModeEnabled();             /* expand: studio mode edits need the canvas */
 } // namespace preview
 
 /* starter layout templates: one-click dock arrangements for new users (tall
@@ -398,14 +398,14 @@ struct Info {
 	QString name;
 	QString desc;
 };
-QList<Info> list();                              /* the built-in starter templates */
-bool apply(const QString &id, QWidget *parent);  /* build it; snapshots undo first */
+QList<Info> list();                             /* the built-in starter templates */
+bool apply(const QString &id, QWidget *parent); /* build it; snapshots undo first */
 } // namespace templates
 
 /* the dock layout guide: illustrated first-run walkthrough of dock dragging
    (title bar grab, edge drop = split, center drop = tabs, DockX columns) */
 namespace hints {
-void showFirstRun();            /* opens the guide once after install */
+void showFirstRun();             /* opens the guide once after install */
 void showGuide(QWidget *parent); /* opens it on demand (Settings tab) */
 } // namespace hints
 

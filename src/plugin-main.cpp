@@ -111,8 +111,7 @@ static void rescue_menu_clicked(void *)
 
 static void collapse_menu_clicked(void *)
 {
-	dockx::preview::toggleWithPrompt(
-		static_cast<QWidget *>(obs_frontend_get_main_window()));
+	dockx::preview::toggleWithPrompt(static_cast<QWidget *>(obs_frontend_get_main_window()));
 }
 
 static void edit_preview_menu_clicked(void *)
@@ -136,18 +135,12 @@ bool obs_module_load(void)
 	obs_frontend_add_event_callback(on_frontend_event, nullptr);
 	obs_frontend_add_tools_menu_item("DockX", tools_menu_clicked, nullptr);
 	obs_frontend_add_tools_menu_item("DockX: Find source", find_menu_clicked, nullptr);
-	obs_frontend_add_tools_menu_item("DockX: Missing media", missing_menu_clicked,
-					 nullptr);
-	obs_frontend_add_tools_menu_item("DockX: Revert dock layout", revert_menu_clicked,
-					 nullptr);
-	obs_frontend_add_tools_menu_item("DockX: Rescue docks to this screen",
-					 rescue_menu_clicked, nullptr);
-	obs_frontend_add_tools_menu_item("DockX: Show or hide OBS preview",
-					 collapse_menu_clicked, nullptr);
-	obs_frontend_add_tools_menu_item("DockX: Add DockX Preview (editable)",
-					 edit_preview_menu_clicked, nullptr);
-	obs_frontend_add_tools_menu_item("DockX: Layout templates",
-					 templates_menu_clicked, nullptr);
+	obs_frontend_add_tools_menu_item("DockX: Missing media", missing_menu_clicked, nullptr);
+	obs_frontend_add_tools_menu_item("DockX: Revert dock layout", revert_menu_clicked, nullptr);
+	obs_frontend_add_tools_menu_item("DockX: Rescue docks to this screen", rescue_menu_clicked, nullptr);
+	obs_frontend_add_tools_menu_item("DockX: Show or hide OBS preview", collapse_menu_clicked, nullptr);
+	obs_frontend_add_tools_menu_item("DockX: Add DockX Preview (editable)", edit_preview_menu_clicked, nullptr);
+	obs_frontend_add_tools_menu_item("DockX: Layout templates", templates_menu_clicked, nullptr);
 	return true;
 }
 

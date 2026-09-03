@@ -121,15 +121,13 @@ static QStringList audioInputNames()
 }
 
 /* one row of preset swatches + Custom + No color, calling apply(hex) */
-static void addPaletteRow(QWidget *tab, QVBoxLayout *v, QDialog *dlg,
-			  std::function<void(const QString &)> apply)
+static void addPaletteRow(QWidget *tab, QVBoxLayout *v, QDialog *dlg, std::function<void(const QString &)> apply)
 {
 	QHBoxLayout *row = new QHBoxLayout();
 	for (const char *hex : PRESET_COLORS) {
 		QPushButton *b = new QPushButton(tab);
 		b->setFixedSize(26, 26);
-		b->setStyleSheet(QString("background:%1; border-radius:5px; border:none;")
-					 .arg(hex));
+		b->setStyleSheet(QString("background:%1; border-radius:5px; border:none;").arg(hex));
 		b->setToolTip("Use this color");
 		QString h = QString::fromUtf8(hex);
 		QObject::connect(b, &QPushButton::clicked, tab, [apply, h]() { apply(h); });
@@ -220,8 +218,7 @@ static bool applyHotkeyBinding(obs_hotkey_id id, const QKeySequence &seq)
 	if (!seq.isEmpty()) {
 		const QKeyCombination combo = seq[0];
 		const QString name = qtKeyToObsName(combo.key());
-		if (name.isEmpty() ||
-		    obs_key_from_name(name.toUtf8().constData()) == OBS_KEY_NONE) {
+		if (name.isEmpty() || obs_key_from_name(name.toUtf8().constData()) == OBS_KEY_NONE) {
 			obs_data_array_release(arr);
 			return false;
 		}
@@ -327,8 +324,7 @@ void showDialog(const QString &initialTab)
 	QVBoxLayout *findV = new QVBoxLayout(findTab);
 
 	QLineEdit *findBox = new QLineEdit(findTab);
-	findBox->setPlaceholderText(
-		"Search every source in your project by name, type, or scene");
+	findBox->setPlaceholderText("Search every source in your project by name, type, or scene");
 	findBox->setClearButtonEnabled(true);
 	findV->addWidget(findBox);
 
@@ -363,14 +359,9 @@ void showDialog(const QString &initialTab)
 			const QString loc =
 				h.sceneUuid.isEmpty()
 					? QStringLiteral("(unused)")
-					: (h.groupName.isEmpty()
-						   ? h.sceneName
-						   : h.sceneName + "  ›  " +
-							     h.groupName);
-			if (!q.isEmpty() &&
-			    !h.sourceName.contains(q, Qt::CaseInsensitive) &&
-			    !h.sourceType.contains(q, Qt::CaseInsensitive) &&
-			    !loc.contains(q, Qt::CaseInsensitive))
+					: (h.groupName.isEmpty() ? h.sceneName : h.sceneName + "  ›  " + h.groupName);
+			if (!q.isEmpty() && !h.sourceName.contains(q, Qt::CaseInsensitive) &&
+			    !h.sourceType.contains(q, Qt::CaseInsensitive) && !loc.contains(q, Qt::CaseInsensitive))
 				continue;
 			QTreeWidgetItem *it = new QTreeWidgetItem(findTree);
 			it->setText(0, h.sourceName);
@@ -390,10 +381,8 @@ void showDialog(const QString &initialTab)
 		findTree->setSortingEnabled(true);
 		for (int c = 0; c < 3; c++)
 			findTree->resizeColumnToContents(c);
-		findStatus->setText(QString("%1 shown · %2 unused source%3")
-					    .arg(shown)
-					    .arg(unused)
-					    .arg(unused == 1 ? "" : "s"));
+		findStatus->setText(
+			QString("%1 shown · %2 unused source%3").arg(shown).arg(unused).arg(unused == 1 ? "" : "s"));
 	};
 
 	auto rescan = [scan, repopulate, findBox]() {
@@ -402,8 +391,7 @@ void showDialog(const QString &initialTab)
 	};
 	rescan();
 
-	QObject::connect(findBox, &QLineEdit::textChanged, findTab,
-			 [repopulate](const QString &t) { repopulate(t); });
+	QObject::connect(findBox, &QLineEdit::textChanged, findTab, [repopulate](const QString &t) { repopulate(t); });
 
 	auto doProps = [findTree]() {
 		QTreeWidgetItem *it = findTree->currentItem();
@@ -432,17 +420,14 @@ void showDialog(const QString &initialTab)
 		const QString uuid = it->data(0, Qt::UserRole).toString();
 		if (uuid.isEmpty())
 			return; /* not placed in any scene */
-		if (QMessageBox::question(
-			    findTree, "DockX",
-			    QString("Remove \"%1\" from the scene \"%2\"? The source "
-				    "stays in your project and in any other scenes it "
-				    "is in.")
-				    .arg(it->text(0), it->text(2)),
-			    QMessageBox::Yes | QMessageBox::No,
-			    QMessageBox::No) != QMessageBox::Yes)
+		if (QMessageBox::question(findTree, "DockX",
+					  QString("Remove \"%1\" from the scene \"%2\"? The source "
+						  "stays in your project and in any other scenes it "
+						  "is in.")
+						  .arg(it->text(0), it->text(2)),
+					  QMessageBox::Yes | QMessageBox::No, QMessageBox::No) != QMessageBox::Yes)
 			return;
-		search::removeFromScene(uuid,
-					it->data(0, Qt::UserRole + 1).toLongLong());
+		search::removeFromScene(uuid, it->data(0, Qt::UserRole + 1).toLongLong());
 		rescan();
 	};
 
@@ -456,21 +441,18 @@ void showDialog(const QString &initialTab)
 			if (h.sourceName == name && !h.sceneUuid.isEmpty())
 				sceneSet.insert(h.sceneUuid);
 		const int scenes = sceneSet.size();
-		const QString msg =
-			scenes == 0
-				? QString("\"%1\" is not used in any scene. Delete it "
-					  "from your project permanently? This cannot "
-					  "be undone.")
-					  .arg(name)
-				: QString("\"%1\" is used in %2 scene%3. Deleting it "
-					  "removes it from all of them permanently. "
-					  "This cannot be undone.\n\nDelete it?")
-					  .arg(name)
-					  .arg(scenes)
-					  .arg(scenes == 1 ? "" : "s");
-		if (QMessageBox::warning(findTree, "DockX", msg,
-					 QMessageBox::Yes | QMessageBox::No,
-					 QMessageBox::No) != QMessageBox::Yes)
+		const QString msg = scenes == 0 ? QString("\"%1\" is not used in any scene. Delete it "
+							  "from your project permanently? This cannot "
+							  "be undone.")
+							  .arg(name)
+						: QString("\"%1\" is used in %2 scene%3. Deleting it "
+							  "removes it from all of them permanently. "
+							  "This cannot be undone.\n\nDelete it?")
+							  .arg(name)
+							  .arg(scenes)
+							  .arg(scenes == 1 ? "" : "s");
+		if (QMessageBox::warning(findTree, "DockX", msg, QMessageBox::Yes | QMessageBox::No, QMessageBox::No) !=
+		    QMessageBox::Yes)
 			return;
 		const bool freed = search::deleteSource(name);
 		/* removed from the project either way (OBS won't save it), so drop it
@@ -478,10 +460,9 @@ void showDialog(const QString &initialTab)
 		removed->insert(name);
 		if (!freed) {
 			const QString who = search::describeHolders(name);
-			QString info =
-				QString("\"%1\" has been removed from your project and "
-					"will not come back after you restart OBS. ")
-					.arg(name);
+			QString info = QString("\"%1\" has been removed from your project and "
+					       "will not come back after you restart OBS. ")
+					       .arg(name);
 			if (!who.isEmpty())
 				info += "It is still open this session because " + who +
 					". Fix that and it clears right away, or just "
@@ -501,39 +482,31 @@ void showDialog(const QString &initialTab)
 
 	/* right-click a result for the full action set */
 	findTree->setContextMenuPolicy(Qt::CustomContextMenu);
-	QObject::connect(
-		findTree, &QTreeWidget::customContextMenuRequested, findTab,
-		[findTree, goToOrInspect, doProps, doRemoveFromScene,
-		 doDelete](const QPoint &pos) {
-			QTreeWidgetItem *it = findTree->itemAt(pos);
-			if (!it)
-				return;
-			findTree->setCurrentItem(it);
-			const bool placed =
-				!it->data(0, Qt::UserRole).toString().isEmpty();
-			QMenu menu(findTree);
-			if (placed) {
-				QObject::connect(menu.addAction("Go to source"),
+	QObject::connect(findTree, &QTreeWidget::customContextMenuRequested, findTab,
+			 [findTree, goToOrInspect, doProps, doRemoveFromScene, doDelete](const QPoint &pos) {
+				 QTreeWidgetItem *it = findTree->itemAt(pos);
+				 if (!it)
+					 return;
+				 findTree->setCurrentItem(it);
+				 const bool placed = !it->data(0, Qt::UserRole).toString().isEmpty();
+				 QMenu menu(findTree);
+				 if (placed) {
+					 QObject::connect(menu.addAction("Go to source"), &QAction::triggered, findTree,
+							  [goToOrInspect]() { goToOrInspect(); });
+				 }
+				 QObject::connect(menu.addAction("Properties"), &QAction::triggered, findTree,
+						  [doProps]() { doProps(); });
+				 if (placed) {
+					 QObject::connect(
+						 menu.addAction(QString("Remove from scene \"%1\"").arg(it->text(2))),
 						 &QAction::triggered, findTree,
-						 [goToOrInspect]() { goToOrInspect(); });
-			}
-			QObject::connect(menu.addAction("Properties"),
-					 &QAction::triggered, findTree,
-					 [doProps]() { doProps(); });
-			if (placed) {
-				QObject::connect(
-					menu.addAction(
-						QString("Remove from scene \"%1\"")
-							.arg(it->text(2))),
-					&QAction::triggered, findTree,
-					[doRemoveFromScene]() { doRemoveFromScene(); });
-			}
-			menu.addSeparator();
-			QObject::connect(menu.addAction("Delete source from project"),
-					 &QAction::triggered, findTree,
-					 [doDelete]() { doDelete(); });
-			menu.exec(findTree->viewport()->mapToGlobal(pos));
-		});
+						 [doRemoveFromScene]() { doRemoveFromScene(); });
+				 }
+				 menu.addSeparator();
+				 QObject::connect(menu.addAction("Delete source from project"), &QAction::triggered,
+						  findTree, [doDelete]() { doDelete(); });
+				 menu.exec(findTree->viewport()->mapToGlobal(pos));
+			 });
 
 	QHBoxLayout *findBtns = new QHBoxLayout();
 	QPushButton *revealBtn = new QPushButton("Go to source", findTab);
@@ -542,19 +515,16 @@ void showDialog(const QString &initialTab)
 	findBtns->addStretch(1);
 	findBtns->addWidget(refreshBtn);
 	findV->addLayout(findBtns);
-	QObject::connect(revealBtn, &QPushButton::clicked, findTab,
-			 [goToOrInspect]() { goToOrInspect(); });
-	QObject::connect(refreshBtn, &QPushButton::clicked, findTab,
-			 [rescan]() { rescan(); });
+	QObject::connect(revealBtn, &QPushButton::clicked, findTab, [goToOrInspect]() { goToOrInspect(); });
+	QObject::connect(refreshBtn, &QPushButton::clicked, findTab, [rescan]() { rescan(); });
 
-	QLabel *findHint = new QLabel(
-		"Search every scene in this collection at once. Double-click a "
-		"result to jump to that scene and select it. Right-click any "
-		"result for more: open its Properties, remove it from just that "
-		"scene, or delete it from the whole project. Sources listed as "
-		"(unused) are loaded in your project but not placed in any scene "
-		"(OBS can't show these), so right-click to identify or clear them.",
-		findTab);
+	QLabel *findHint = new QLabel("Search every scene in this collection at once. Double-click a "
+				      "result to jump to that scene and select it. Right-click any "
+				      "result for more: open its Properties, remove it from just that "
+				      "scene, or delete it from the whole project. Sources listed as "
+				      "(unused) are loaded in your project but not placed in any scene "
+				      "(OBS can't show these), so right-click to identify or clear them.",
+				      findTab);
 	findHint->setWordWrap(true);
 	findV->addWidget(findHint);
 
@@ -618,8 +588,7 @@ void showDialog(const QString &initialTab)
 			return;
 		bool ok = false;
 		QString suggested = QString("Layout %1").arg((int)state().layouts.size() + 1);
-		QString name = QInputDialog::getText(&dlg, "Save layout",
-						     "Name this dock layout:", QLineEdit::Normal,
+		QString name = QInputDialog::getText(&dlg, "Save layout", "Name this dock layout:", QLineEdit::Normal,
 						     suggested, &ok);
 		name = name.trimmed();
 		if (!ok || name.isEmpty())
@@ -635,79 +604,68 @@ void showDialog(const QString &initialTab)
 		}
 		panels::applyLayout(id);
 	});
-	QObject::connect(renameBtn, &QPushButton::clicked, &dlg,
-			 [&dlg, selectedLayoutId, reloadLayouts]() {
-				 int id = selectedLayoutId();
-				 Layout *l = id ? findLayout(id) : nullptr;
-				 if (!l)
-					 return;
-				 bool ok = false;
-				 QString name = QInputDialog::getText(&dlg, "Rename layout",
-								      "New name:",
-								      QLineEdit::Normal, l->name,
-								      &ok);
-				 name = name.trimmed();
-				 if (!ok || name.isEmpty())
-					 return;
-				 renameLayout(id, name);
-				 reloadLayouts();
-			 });
-	QObject::connect(deleteBtn, &QPushButton::clicked, &dlg,
-			 [&dlg, selectedLayoutId, reloadLayouts]() {
-				 int id = selectedLayoutId();
-				 Layout *l = id ? findLayout(id) : nullptr;
-				 if (!l)
-					 return;
-				 auto answer = QMessageBox::question(
-					 &dlg, "Delete layout",
-					 QString("Delete \"%1\"? Your current dock arrangement "
-						 "is not touched.")
-						 .arg(l->name));
-				 if (answer != QMessageBox::Yes)
-					 return;
-				 removeLayout(id);
-				 reloadLayouts();
-			 });
+	QObject::connect(renameBtn, &QPushButton::clicked, &dlg, [&dlg, selectedLayoutId, reloadLayouts]() {
+		int id = selectedLayoutId();
+		Layout *l = id ? findLayout(id) : nullptr;
+		if (!l)
+			return;
+		bool ok = false;
+		QString name =
+			QInputDialog::getText(&dlg, "Rename layout", "New name:", QLineEdit::Normal, l->name, &ok);
+		name = name.trimmed();
+		if (!ok || name.isEmpty())
+			return;
+		renameLayout(id, name);
+		reloadLayouts();
+	});
+	QObject::connect(deleteBtn, &QPushButton::clicked, &dlg, [&dlg, selectedLayoutId, reloadLayouts]() {
+		int id = selectedLayoutId();
+		Layout *l = id ? findLayout(id) : nullptr;
+		if (!l)
+			return;
+		auto answer = QMessageBox::question(&dlg, "Delete layout",
+						    QString("Delete \"%1\"? Your current dock arrangement "
+							    "is not touched.")
+							    .arg(l->name));
+		if (answer != QMessageBox::Yes)
+			return;
+		removeLayout(id);
+		reloadLayouts();
+	});
 	QObject::connect(undoBtn, &QPushButton::clicked, &dlg, [&dlg]() {
 		if (!panels::undoLayout())
 			QMessageBox::information(&dlg, "DockX", "Nothing to undo yet.");
 	});
-	QObject::connect(hotkeyBtn, &QPushButton::clicked, &dlg,
-			 [&dlg, selectedLayoutId, reloadLayouts]() {
-				 int id = selectedLayoutId();
-				 Layout *l = id ? findLayout(id) : nullptr;
-				 if (!l) {
-					 QMessageBox::information(&dlg, "DockX",
-								  "Pick a layout first.");
-					 return;
-				 }
-				 QKeySequence seq;
-				 const int r = promptHotkey(
-					 &dlg, QString("Hotkey for \"%1\"").arg(l->name), seq);
-				 if (r == 0)
-					 return;
-				 if (r == 1 && !setLayoutHotkey(l, seq))
-					 QMessageBox::information(
-						 &dlg, "DockX",
+	QObject::connect(hotkeyBtn, &QPushButton::clicked, &dlg, [&dlg, selectedLayoutId, reloadLayouts]() {
+		int id = selectedLayoutId();
+		Layout *l = id ? findLayout(id) : nullptr;
+		if (!l) {
+			QMessageBox::information(&dlg, "DockX", "Pick a layout first.");
+			return;
+		}
+		QKeySequence seq;
+		const int r = promptHotkey(&dlg, QString("Hotkey for \"%1\"").arg(l->name), seq);
+		if (r == 0)
+			return;
+		if (r == 1 && !setLayoutHotkey(l, seq))
+			QMessageBox::information(&dlg, "DockX",
 						 "That key is not supported here. You can still "
 						 "bind it in OBS under Settings > Hotkeys "
 						 "(search for DockX).");
-				 if (r == 2)
-					 setLayoutHotkey(l, QKeySequence());
-				 reloadLayouts();
-			 });
-	QObject::connect(unbindBtn, &QPushButton::clicked, &dlg,
-			 [&dlg, selectedLayoutId, reloadLayouts]() {
-				 int id = selectedLayoutId();
-				 Layout *l = id ? findLayout(id) : nullptr;
-				 if (!l) {
-					 QMessageBox::information(&dlg, "DockX",
-								  "Pick a layout first.");
-					 return;
-				 }
-				 setLayoutHotkey(l, QKeySequence());
-				 reloadLayouts();
-			 });
+		if (r == 2)
+			setLayoutHotkey(l, QKeySequence());
+		reloadLayouts();
+	});
+	QObject::connect(unbindBtn, &QPushButton::clicked, &dlg, [&dlg, selectedLayoutId, reloadLayouts]() {
+		int id = selectedLayoutId();
+		Layout *l = id ? findLayout(id) : nullptr;
+		if (!l) {
+			QMessageBox::information(&dlg, "DockX", "Pick a layout first.");
+			return;
+		}
+		setLayoutHotkey(l, QKeySequence());
+		reloadLayouts();
+	});
 
 	tabs->addTab(layoutsTab, "Layouts");
 
@@ -723,11 +681,10 @@ void showDialog(const QString &initialTab)
 	}
 	tplV->addWidget(tplList, 1);
 
-	QLabel *tplDesc = new QLabel(
-		"Pick a starting point, then make it yours. Applying a template "
-		"hides OBS's fixed preview, adds a DockX Preview, and arranges your "
-		"docks. It always keeps an undo, so it is safe to try on any layout.",
-		tplTab);
+	QLabel *tplDesc = new QLabel("Pick a starting point, then make it yours. Applying a template "
+				     "hides OBS's fixed preview, adds a DockX Preview, and arranges your "
+				     "docks. It always keeps an undo, so it is safe to try on any layout.",
+				     tplTab);
 	tplDesc->setWordWrap(true);
 	tplV->addWidget(tplDesc);
 
@@ -738,8 +695,7 @@ void showDialog(const QString &initialTab)
 	QObject::connect(tplList, &QListWidget::currentItemChanged, tplTab,
 			 [tplDesc](QListWidgetItem *cur, QListWidgetItem *) {
 				 if (cur)
-					 tplDesc->setText(
-						 cur->data(Qt::UserRole + 1).toString());
+					 tplDesc->setText(cur->data(Qt::UserRole + 1).toString());
 			 });
 
 	QHBoxLayout *tplBtns = new QHBoxLayout();
@@ -757,9 +713,8 @@ void showDialog(const QString &initialTab)
 			return;
 		}
 		if (!templates::apply(id, &dlg))
-			QMessageBox::information(
-				&dlg, "DockX",
-				"Could not apply that template. Your layout was not changed.");
+			QMessageBox::information(&dlg, "DockX",
+						 "Could not apply that template. Your layout was not changed.");
 	});
 	QObject::connect(tplUndo, &QPushButton::clicked, &dlg, [&dlg]() {
 		if (!panels::undoLayout())
@@ -778,12 +733,9 @@ void showDialog(const QString &initialTab)
 	auto reloadLoadouts = [loList]() {
 		loList->clear();
 		for (const SourceLoadout &l : state().loadouts) {
-			const QString scope =
-				l.sceneUuid.isEmpty() ? "All scenes" : l.sceneName;
+			const QString scope = l.sceneUuid.isEmpty() ? "All scenes" : l.sceneName;
 			QListWidgetItem *it = new QListWidgetItem(
-				QString("%1   ·   %2   ·   %3 sources")
-					.arg(l.name, scope)
-					.arg((int)l.items.size()),
+				QString("%1   ·   %2   ·   %3 sources").arg(l.name, scope).arg((int)l.items.size()),
 				loList);
 			it->setData(Qt::UserRole, l.id);
 		}
@@ -805,29 +757,24 @@ void showDialog(const QString &initialTab)
 		if (!allScenes) {
 			obs_source_t *cur = obs_frontend_get_current_scene();
 			if (!cur) {
-				QMessageBox::information(&dlg, "DockX",
-							 "No current scene to save.");
+				QMessageBox::information(&dlg, "DockX", "No current scene to save.");
 				return;
 			}
 			uuid = QString::fromUtf8(obs_source_get_uuid(cur));
 			sceneName = QString::fromUtf8(obs_source_get_name(cur));
 			obs_source_release(cur);
 		}
-		const QString suggested =
-			allScenes ? QString("Everything %1")
-					    .arg((int)state().loadouts.size() + 1)
-				  : QString("%1 loadout").arg(sceneName);
+		const QString suggested = allScenes ? QString("Everything %1").arg((int)state().loadouts.size() + 1)
+						    : QString("%1 loadout").arg(sceneName);
 		bool ok = false;
-		QString name = QInputDialog::getText(&dlg, "Save loadout",
-						     "Name this loadout:",
-						     QLineEdit::Normal, suggested, &ok)
+		QString name = QInputDialog::getText(&dlg, "Save loadout", "Name this loadout:", QLineEdit::Normal,
+						     suggested, &ok)
 				       .trimmed();
 		if (!ok || name.isEmpty())
 			return;
 		SourceLoadout l = loadouts::capture(uuid, sceneName);
 		if (l.items.empty()) {
-			QMessageBox::information(&dlg, "DockX",
-						 "There are no sources to save yet.");
+			QMessageBox::information(&dlg, "DockX", "There are no sources to save yet.");
 			return;
 		}
 		l.id = state().nextLoadoutId++;
@@ -860,33 +807,29 @@ void showDialog(const QString &initialTab)
 	lob2->addStretch(1);
 	lov->addLayout(lob2);
 
-	QLabel *loHint = new QLabel(
-		"A loadout remembers where every source sits: position, size, rotation, "
-		"crop, visibility, and lock. Restore snaps them all back. Restoring "
-		"always keeps an undo; pressing Undo restore twice flips back again. "
-		"Back up to file saves your loadouts as a JSON file you can move to "
-		"another PC or share; Import adds them back without overwriting anything.",
-		loTab);
+	QLabel *loHint = new QLabel("A loadout remembers where every source sits: position, size, rotation, "
+				    "crop, visibility, and lock. Restore snaps them all back. Restoring "
+				    "always keeps an undo; pressing Undo restore twice flips back again. "
+				    "Back up to file saves your loadouts as a JSON file you can move to "
+				    "another PC or share; Import adds them back without overwriting anything.",
+				    loTab);
 	loHint->setWordWrap(true);
 	lov->addWidget(loHint);
 
-	QObject::connect(loSaveCur, &QPushButton::clicked, &dlg,
-			 [saveLoadout]() { saveLoadout(false); });
-	QObject::connect(loSaveAll, &QPushButton::clicked, &dlg,
-			 [saveLoadout]() { saveLoadout(true); });
+	QObject::connect(loSaveCur, &QPushButton::clicked, &dlg, [saveLoadout]() { saveLoadout(false); });
+	QObject::connect(loSaveAll, &QPushButton::clicked, &dlg, [saveLoadout]() { saveLoadout(true); });
 	QObject::connect(loRestore, &QPushButton::clicked, &dlg, [&dlg, selectedLoadout]() {
 		SourceLoadout *l = selectedLoadout();
 		if (!l) {
 			QMessageBox::information(&dlg, "DockX", "Pick a loadout first.");
 			return;
 		}
-		const QString scope =
-			l->sceneUuid.isEmpty() ? "every scene" : l->sceneName;
-		const auto answer = QMessageBox::question(
-			&dlg, "Restore loadout",
-			QString("Every saved source in %1 snaps back to its saved spot. "
-				"You can undo this. Restore \"%2\"?")
-				.arg(scope, l->name));
+		const QString scope = l->sceneUuid.isEmpty() ? "every scene" : l->sceneName;
+		const auto answer =
+			QMessageBox::question(&dlg, "Restore loadout",
+					      QString("Every saved source in %1 snaps back to its saved spot. "
+						      "You can undo this. Restore \"%2\"?")
+						      .arg(scope, l->name));
 		if (answer != QMessageBox::Yes)
 			return;
 		const loadouts::RestoreReport r = loadouts::restore(*l);
@@ -895,8 +838,7 @@ void showDialog(const QString &initialTab)
 		if (!r.missing.isEmpty()) {
 			QStringList shown = r.missing.mid(0, 8);
 			if (r.missing.size() > 8)
-				shown << QString("and %1 more")
-						 .arg(r.missing.size() - 8);
+				shown << QString("and %1 more").arg(r.missing.size() - 8);
 			msg += "\n\nNot found anymore:\n" + shown.join("\n");
 		}
 		QMessageBox::information(&dlg, "DockX", msg);
@@ -908,90 +850,76 @@ void showDialog(const QString &initialTab)
 			return;
 		}
 		folders::rebuildSoon();
-		QMessageBox::information(
-			&dlg, "DockX",
-			QString("Put %1 sources back the way they were.").arg(r.restored));
+		QMessageBox::information(&dlg, "DockX",
+					 QString("Put %1 sources back the way they were.").arg(r.restored));
 	});
-	QObject::connect(loRename, &QPushButton::clicked, &dlg,
-			 [&dlg, selectedLoadout, reloadLoadouts]() {
-				 SourceLoadout *l = selectedLoadout();
-				 if (!l)
-					 return;
-				 bool ok = false;
-				 const QString name =
-					 QInputDialog::getText(&dlg, "Rename loadout",
-							       "New name:",
-							       QLineEdit::Normal, l->name,
-							       &ok)
-						 .trimmed();
-				 if (!ok || name.isEmpty())
-					 return;
-				 l->name = name;
-				 stateSave();
-				 reloadLoadouts();
-			 });
-	QObject::connect(loDelete, &QPushButton::clicked, &dlg,
-			 [&dlg, selectedLoadout, reloadLoadouts]() {
-				 SourceLoadout *l = selectedLoadout();
-				 if (!l)
-					 return;
-				 const auto answer = QMessageBox::question(
-					 &dlg, "Delete loadout",
-					 QString("Delete \"%1\"? Your sources are not "
-						 "touched.")
-						 .arg(l->name));
-				 if (answer != QMessageBox::Yes)
-					 return;
-				 const int id = l->id;
-				 auto &v = state().loadouts;
-				 for (size_t i = 0; i < v.size(); i++) {
-					 if (v[i].id == id) {
-						 v.erase(v.begin() + i);
-						 break;
-					 }
-				 }
-				 stateSave();
-				 reloadLoadouts();
-			 });
+	QObject::connect(loRename, &QPushButton::clicked, &dlg, [&dlg, selectedLoadout, reloadLoadouts]() {
+		SourceLoadout *l = selectedLoadout();
+		if (!l)
+			return;
+		bool ok = false;
+		const QString name =
+			QInputDialog::getText(&dlg, "Rename loadout", "New name:", QLineEdit::Normal, l->name, &ok)
+				.trimmed();
+		if (!ok || name.isEmpty())
+			return;
+		l->name = name;
+		stateSave();
+		reloadLoadouts();
+	});
+	QObject::connect(loDelete, &QPushButton::clicked, &dlg, [&dlg, selectedLoadout, reloadLoadouts]() {
+		SourceLoadout *l = selectedLoadout();
+		if (!l)
+			return;
+		const auto answer = QMessageBox::question(&dlg, "Delete loadout",
+							  QString("Delete \"%1\"? Your sources are not "
+								  "touched.")
+								  .arg(l->name));
+		if (answer != QMessageBox::Yes)
+			return;
+		const int id = l->id;
+		auto &v = state().loadouts;
+		for (size_t i = 0; i < v.size(); i++) {
+			if (v[i].id == id) {
+				v.erase(v.begin() + i);
+				break;
+			}
+		}
+		stateSave();
+		reloadLoadouts();
+	});
 	QObject::connect(loExport, &QPushButton::clicked, &dlg, [&dlg]() {
 		if (state().loadouts.empty()) {
-			QMessageBox::information(&dlg, "DockX",
-						 "You have no loadouts to back up yet.");
+			QMessageBox::information(&dlg, "DockX", "You have no loadouts to back up yet.");
 			return;
 		}
-		const QString path = QFileDialog::getSaveFileName(
-			&dlg, "Back up loadouts", "dockx-loadouts.json",
-			"DockX loadouts (*.json)");
+		const QString path = QFileDialog::getSaveFileName(&dlg, "Back up loadouts", "dockx-loadouts.json",
+								  "DockX loadouts (*.json)");
 		if (path.isEmpty())
 			return;
 		if (loadouts::exportFile(path))
-			QMessageBox::information(
-				&dlg, "DockX",
-				QString("Backed up %1 loadout(s). Keep this file to move "
-					"them to another PC or share them.")
-					.arg((int)state().loadouts.size()));
+			QMessageBox::information(&dlg, "DockX",
+						 QString("Backed up %1 loadout(s). Keep this file to move "
+							 "them to another PC or share them.")
+							 .arg((int)state().loadouts.size()));
 		else
-			QMessageBox::warning(&dlg, "DockX",
-					     "Could not write that file.");
+			QMessageBox::warning(&dlg, "DockX", "Could not write that file.");
 	});
 	QObject::connect(loImport, &QPushButton::clicked, &dlg, [&dlg, reloadLoadouts]() {
-		const QString path = QFileDialog::getOpenFileName(
-			&dlg, "Import loadouts", QString(), "DockX loadouts (*.json)");
+		const QString path =
+			QFileDialog::getOpenFileName(&dlg, "Import loadouts", QString(), "DockX loadouts (*.json)");
 		if (path.isEmpty())
 			return;
 		const int n = loadouts::importFile(path);
 		if (n < 0) {
-			QMessageBox::warning(
-				&dlg, "DockX",
-				"That file could not be read as a DockX loadouts backup.");
+			QMessageBox::warning(&dlg, "DockX", "That file could not be read as a DockX loadouts backup.");
 			return;
 		}
 		reloadLoadouts();
-		QMessageBox::information(
-			&dlg, "DockX",
-			QString("Imported %1 loadout(s). They were added to your list; "
-				"nothing was overwritten.")
-				.arg(n));
+		QMessageBox::information(&dlg, "DockX",
+					 QString("Imported %1 loadout(s). They were added to your list; "
+						 "nothing was overwritten.")
+						 .arg(n));
 	});
 
 	tabs->addTab(loTab, "Loadouts");
@@ -1004,23 +932,19 @@ void showDialog(const QString &initialTab)
 	QGroupBox *dockGroup = new QGroupBox("Dock layout", lockTab);
 	QVBoxLayout *dg = new QVBoxLayout(dockGroup);
 
-	QCheckBox *hardLockChk = new QCheckBox(
-		"Lock docks in place (they can't be dragged or floated by accident)",
-		dockGroup);
+	QCheckBox *hardLockChk =
+		new QCheckBox("Lock docks in place (they can't be dragged or floated by accident)", dockGroup);
 	hardLockChk->setChecked(locks::hardLock());
 	dg->addWidget(hardLockChk);
-	QObject::connect(hardLockChk, &QCheckBox::toggled, dockGroup,
-			 [](bool on) { locks::setHardLock(on); });
+	QObject::connect(hardLockChk, &QCheckBox::toggled, dockGroup, [](bool on) { locks::setHardLock(on); });
 
 	QLabel *pointLbl = new QLabel(dockGroup);
 	pointLbl->setWordWrap(true);
 	auto refreshPoint = [pointLbl]() {
-		pointLbl->setText(
-			locks::hasLockPoint()
-				? "Revert point saved. If a dock drifts, snap the whole "
-				  "layout back with Revert to point."
-				: "No revert point saved yet. Arrange your docks, then Set "
-				  "revert point to lock in that spot.");
+		pointLbl->setText(locks::hasLockPoint() ? "Revert point saved. If a dock drifts, snap the whole "
+							  "layout back with Revert to point."
+							: "No revert point saved yet. Arrange your docks, then Set "
+							  "revert point to lock in that spot.");
 	};
 	refreshPoint();
 	dg->addWidget(pointLbl);
@@ -1032,24 +956,21 @@ void showDialog(const QString &initialTab)
 	dgb->addWidget(revertBtn);
 	dgb->addStretch(1);
 	dg->addLayout(dgb);
-	QObject::connect(setPointBtn, &QPushButton::clicked, dockGroup,
-			 [refreshPoint]() {
-				 locks::setLockPoint();
-				 refreshPoint();
-			 });
+	QObject::connect(setPointBtn, &QPushButton::clicked, dockGroup, [refreshPoint]() {
+		locks::setLockPoint();
+		refreshPoint();
+	});
 	QObject::connect(revertBtn, &QPushButton::clicked, &dlg, [&dlg]() {
 		if (!locks::revertToLockPoint())
-			QMessageBox::information(
-				&dlg, "DockX",
-				"Set a revert point first, then this snaps your docks "
-				"back to it.");
+			QMessageBox::information(&dlg, "DockX",
+						 "Set a revert point first, then this snaps your docks "
+						 "back to it.");
 	});
 
-	QLabel *dockTip = new QLabel(
-		"Tip: give Revert to point and the dock lock a hotkey in OBS Settings "
-		"> Hotkeys (search DockX) so you can snap back mid stream without "
-		"opening this window. Tools > DockX: Revert dock layout works too.",
-		dockGroup);
+	QLabel *dockTip = new QLabel("Tip: give Revert to point and the dock lock a hotkey in OBS Settings "
+				     "> Hotkeys (search DockX) so you can snap back mid stream without "
+				     "opening this window. Tools > DockX: Revert dock layout works too.",
+				     dockGroup);
 	dockTip->setWordWrap(true);
 	dg->addWidget(dockTip);
 	lkv->addWidget(dockGroup);
@@ -1057,12 +978,11 @@ void showDialog(const QString &initialTab)
 	/* -- scene source locking -- */
 	QGroupBox *srcGroup = new QGroupBox("Scene sources", lockTab);
 	QVBoxLayout *sg = new QVBoxLayout(srcGroup);
-	QLabel *srcLbl = new QLabel(
-		"Lock every source in a scene at once so nothing on the canvas can be "
-		"dragged or resized. Perfect for a Just Chatting scene you never want to "
-		"nudge. This flips the same lock you see on each source, just all "
-		"together.",
-		srcGroup);
+	QLabel *srcLbl = new QLabel("Lock every source in a scene at once so nothing on the canvas can be "
+				    "dragged or resized. Perfect for a Just Chatting scene you never want to "
+				    "nudge. This flips the same lock you see on each source, just all "
+				    "together.",
+				    srcGroup);
 	srcLbl->setWordWrap(true);
 	sg->addWidget(srcLbl);
 
@@ -1098,36 +1018,30 @@ void showDialog(const QString &initialTab)
 		const QString n = currentSceneName();
 		locks::lockCurrentScene(true);
 		QMessageBox::information(&dlg, "DockX",
-					 n.isEmpty()
-						 ? "Locked every source in the current scene."
-						 : QString("Locked every source in \"%1\".")
-							   .arg(n));
+					 n.isEmpty() ? "Locked every source in the current scene."
+						     : QString("Locked every source in \"%1\".").arg(n));
 	});
 	QObject::connect(unlockCur, &QPushButton::clicked, &dlg, [&dlg, currentSceneName]() {
 		const QString n = currentSceneName();
 		locks::lockCurrentScene(false);
-		QMessageBox::information(
-			&dlg, "DockX",
-			n.isEmpty() ? "Unlocked every source in the current scene."
-				    : QString("Unlocked every source in \"%1\".").arg(n));
+		QMessageBox::information(&dlg, "DockX",
+					 n.isEmpty() ? "Unlocked every source in the current scene."
+						     : QString("Unlocked every source in \"%1\".").arg(n));
 	});
 	QObject::connect(lockAllBtn, &QPushButton::clicked, &dlg, [&dlg]() {
 		locks::lockAllScenes(true);
-		QMessageBox::information(&dlg, "DockX",
-					 "Locked every source in every scene.");
+		QMessageBox::information(&dlg, "DockX", "Locked every source in every scene.");
 	});
 	QObject::connect(unlockAllBtn, &QPushButton::clicked, &dlg, [&dlg]() {
 		locks::lockAllScenes(false);
-		QMessageBox::information(&dlg, "DockX",
-					 "Unlocked every source in every scene.");
+		QMessageBox::information(&dlg, "DockX", "Unlocked every source in every scene.");
 	});
 	QObject::connect(pickBtn, &QPushButton::clicked, &dlg, [&dlg]() {
 		QDialog pick(&dlg);
 		pick.setWindowTitle("Lock selected scenes");
 		pick.setMinimumWidth(340);
 		QVBoxLayout *pv = new QVBoxLayout(&pick);
-		pv->addWidget(new QLabel("Check the scenes, then lock or unlock them:",
-					 &pick));
+		pv->addWidget(new QLabel("Check the scenes, then lock or unlock them:", &pick));
 		QListWidget *plist = new QListWidget(&pick);
 		for (const SceneRef &r : sceneRefs()) {
 			QListWidgetItem *it = new QListWidgetItem(r.name, plist);
@@ -1154,8 +1068,7 @@ void showDialog(const QString &initialTab)
 			action = 2;
 			pick.accept();
 		});
-		QObject::connect(cancelSel, &QPushButton::clicked, &pick,
-				 [&pick]() { pick.reject(); });
+		QObject::connect(cancelSel, &QPushButton::clicked, &pick, [&pick]() { pick.reject(); });
 		if (pick.exec() != QDialog::Accepted || action == 0)
 			return;
 		QStringList uuids;
@@ -1167,11 +1080,10 @@ void showDialog(const QString &initialTab)
 		if (uuids.isEmpty())
 			return;
 		locks::lockScenes(uuids, action == 1);
-		QMessageBox::information(
-			&dlg, "DockX",
-			QString("%1 every source in %2 scene(s).")
-				.arg(action == 1 ? "Locked" : "Unlocked")
-				.arg(uuids.size()));
+		QMessageBox::information(&dlg, "DockX",
+					 QString("%1 every source in %2 scene(s).")
+						 .arg(action == 1 ? "Locked" : "Unlocked")
+						 .arg(uuids.size()));
 	});
 
 	tabs->addTab(lockTab, "Locks");
@@ -1198,8 +1110,8 @@ void showDialog(const QString &initialTab)
 			Layout *l = findLayout(state().sceneLayouts.value(scene));
 			if (!l)
 				continue;
-			QListWidgetItem *it = new QListWidgetItem(
-				QString("%1   applies   %2").arg(scene, l->name), ruleList);
+			QListWidgetItem *it =
+				new QListWidgetItem(QString("%1   applies   %2").arg(scene, l->name), ruleList);
 			it->setData(Qt::UserRole, scene);
 		}
 	};
@@ -1215,8 +1127,7 @@ void showDialog(const QString &initialTab)
 
 	QObject::connect(addRuleBtn, &QPushButton::clicked, &dlg, [&dlg, reloadRules]() {
 		if (state().layouts.empty()) {
-			QMessageBox::information(&dlg, "DockX",
-						 "Save a layout first (Layouts tab).");
+			QMessageBox::information(&dlg, "DockX", "Save a layout first (Layouts tab).");
 			return;
 		}
 		QDialog rd(&dlg);
@@ -1242,23 +1153,20 @@ void showDialog(const QString &initialTab)
 		QObject::connect(cancel, &QPushButton::clicked, &rd, [&rd]() { rd.reject(); });
 		if (rd.exec() != QDialog::Accepted || sceneBox->currentText().isEmpty())
 			return;
-		state().sceneLayouts[sceneBox->currentText()] =
-			layoutBox->currentData().toInt();
+		state().sceneLayouts[sceneBox->currentText()] = layoutBox->currentData().toInt();
 		stateSave();
 		reloadRules();
 	});
-	QObject::connect(removeRuleBtn, &QPushButton::clicked, &dlg,
-			 [&dlg, ruleList, reloadRules]() {
-				 QListWidgetItem *it = ruleList->currentItem();
-				 if (!it) {
-					 QMessageBox::information(&dlg, "DockX",
-								  "Pick a pairing first.");
-					 return;
-				 }
-				 state().sceneLayouts.remove(it->data(Qt::UserRole).toString());
-				 stateSave();
-				 reloadRules();
-			 });
+	QObject::connect(removeRuleBtn, &QPushButton::clicked, &dlg, [&dlg, ruleList, reloadRules]() {
+		QListWidgetItem *it = ruleList->currentItem();
+		if (!it) {
+			QMessageBox::information(&dlg, "DockX", "Pick a pairing first.");
+			return;
+		}
+		state().sceneLayouts.remove(it->data(Qt::UserRole).toString());
+		stateSave();
+		reloadRules();
+	});
 
 	QLabel *ahint = new QLabel("Tip: a Stream Deck button that switches the scene will pull "
 				   "the matching layout with it automatically.",
@@ -1296,49 +1204,40 @@ void showDialog(const QString &initialTab)
 	fb->addStretch(1);
 	fv->addLayout(fb);
 
-	QObject::connect(filterUnbindBtn, &QPushButton::clicked, &dlg,
-			 [&dlg, filterListW, reloadFilters]() {
-				 QListWidgetItem *it = filterListW->currentItem();
-				 if (!it) {
-					 QMessageBox::information(&dlg, "DockX",
-								  "Pick a filter first.");
-					 return;
-				 }
-				 applyHotkeyBinding(
-					 (obs_hotkey_id)it->data(Qt::UserRole).toULongLong(),
-					 QKeySequence());
-				 reloadFilters();
-			 });
+	QObject::connect(filterUnbindBtn, &QPushButton::clicked, &dlg, [&dlg, filterListW, reloadFilters]() {
+		QListWidgetItem *it = filterListW->currentItem();
+		if (!it) {
+			QMessageBox::information(&dlg, "DockX", "Pick a filter first.");
+			return;
+		}
+		applyHotkeyBinding((obs_hotkey_id)it->data(Qt::UserRole).toULongLong(), QKeySequence());
+		reloadFilters();
+	});
 
-	QObject::connect(filterKeyBtn, &QPushButton::clicked, &dlg,
-			 [&dlg, filterListW, reloadFilters]() {
-				 QListWidgetItem *it = filterListW->currentItem();
-				 if (!it) {
-					 QMessageBox::information(&dlg, "DockX",
-								  "Pick a filter first.");
-					 return;
-				 }
-				 const obs_hotkey_id id =
-					 (obs_hotkey_id)it->data(Qt::UserRole).toULongLong();
-				 QKeySequence seq;
-				 const int r = promptHotkey(&dlg, "Filter hotkey", seq);
-				 if (r == 0)
-					 return;
-				 if (r == 1 && !applyHotkeyBinding(id, seq))
-					 QMessageBox::information(
-						 &dlg, "DockX",
+	QObject::connect(filterKeyBtn, &QPushButton::clicked, &dlg, [&dlg, filterListW, reloadFilters]() {
+		QListWidgetItem *it = filterListW->currentItem();
+		if (!it) {
+			QMessageBox::information(&dlg, "DockX", "Pick a filter first.");
+			return;
+		}
+		const obs_hotkey_id id = (obs_hotkey_id)it->data(Qt::UserRole).toULongLong();
+		QKeySequence seq;
+		const int r = promptHotkey(&dlg, "Filter hotkey", seq);
+		if (r == 0)
+			return;
+		if (r == 1 && !applyHotkeyBinding(id, seq))
+			QMessageBox::information(&dlg, "DockX",
 						 "That key is not supported here. You can still "
 						 "bind it in OBS under Settings > Hotkeys.");
-				 if (r == 2)
-					 applyHotkeyBinding(id, QKeySequence());
-				 reloadFilters();
-			 });
+		if (r == 2)
+			applyHotkeyBinding(id, QKeySequence());
+		reloadFilters();
+	});
 
-	QLabel *fhint = new QLabel(
-		"Every filter on every source gets its own on/off hotkey, saved with your "
-		"scene collection. Bind keys here, and press them live (or from a Stream "
-		"Deck) to toggle the filter.",
-		filtersTab);
+	QLabel *fhint = new QLabel("Every filter on every source gets its own on/off hotkey, saved with your "
+				   "scene collection. Bind keys here, and press them live (or from a Stream "
+				   "Deck) to toggle the filter.",
+				   filtersTab);
 	fhint->setWordWrap(true);
 	fv->addWidget(fhint);
 
@@ -1363,8 +1262,7 @@ void showDialog(const QString &initialTab)
 	auto setSceneColor = [sceneListW, &dlg](const QString &hex) {
 		const QList<QListWidgetItem *> sel = sceneListW->selectedItems();
 		if (sel.isEmpty()) {
-			QMessageBox::information(&dlg, "DockX",
-						 "Pick one or more scenes first.");
+			QMessageBox::information(&dlg, "DockX", "Pick one or more scenes first.");
 			return;
 		}
 		for (QListWidgetItem *it : sel) {
@@ -1414,8 +1312,7 @@ void showDialog(const QString &initialTab)
 	auto setDockColor = [dockListW, &dlg](const QString &hex) {
 		const QList<QListWidgetItem *> sel = dockListW->selectedItems();
 		if (sel.isEmpty()) {
-			QMessageBox::information(&dlg, "DockX",
-						 "Pick one or more docks first.");
+			QMessageBox::information(&dlg, "DockX", "Pick one or more docks first.");
 			return;
 		}
 		for (QListWidgetItem *it : sel) {
@@ -1476,8 +1373,7 @@ void showDialog(const QString &initialTab)
 	sepRow->addStretch(1);
 	dv->addLayout(sepRow);
 
-	QLabel *sephint = new QLabel("Thicker lines make dock edges easier to see and grab.",
-				     dockTab);
+	QLabel *sephint = new QLabel("Thicker lines make dock edges easier to see and grab.", dockTab);
 	sephint->setWordWrap(true);
 	dv->addWidget(sephint);
 
@@ -1503,8 +1399,7 @@ void showDialog(const QString &initialTab)
 			it->setData(Qt::UserRole + 1, false); /* not an editable dock */
 		}
 		for (int id : editpreview::dockIds()) {
-			QListWidgetItem *it =
-				new QListWidgetItem("DockX Preview", sdListW);
+			QListWidgetItem *it = new QListWidgetItem("DockX Preview", sdListW);
 			it->setData(Qt::UserRole, id);
 			it->setData(Qt::UserRole + 1, true); /* editable dock */
 		}
@@ -1535,8 +1430,7 @@ void showDialog(const QString &initialTab)
 
 	/* --- add a new dock: scenes and sources live in their own searchable
 	   dropdowns so the two never blur together --- */
-	auto makeSearchCombo = [sdTab](const QStringList &items,
-				       const QString &placeholder) {
+	auto makeSearchCombo = [sdTab](const QStringList &items, const QString &placeholder) {
 		QComboBox *c = new QComboBox(sdTab);
 		c->addItems(items);
 		c->setEditable(true);
@@ -1590,8 +1484,7 @@ void showDialog(const QString &initialTab)
 	QHBoxLayout *editRow = new QHBoxLayout();
 	QLabel *editLbl = new QLabel("Preview", addGroup);
 	editLbl->setMinimumWidth(60);
-	QPushButton *editBtn =
-		new QPushButton("Add DockX Preview (movable, editable)", addGroup);
+	QPushButton *editBtn = new QPushButton("Add DockX Preview (movable, editable)", addGroup);
 	editRow->addWidget(editLbl);
 	editRow->addWidget(editBtn);
 	editRow->addStretch(1);
@@ -1599,12 +1492,10 @@ void showDialog(const QString &initialTab)
 
 	sdv->addWidget(addGroup);
 
-	QObject::connect(addSceneBtn, &QPushButton::clicked, sdTab,
-			 [addNamed, sceneCombo]() { addNamed(sceneCombo); });
+	QObject::connect(addSceneBtn, &QPushButton::clicked, sdTab, [addNamed, sceneCombo]() { addNamed(sceneCombo); });
 	QObject::connect(sceneCombo->lineEdit(), &QLineEdit::returnPressed, sdTab,
 			 [addNamed, sceneCombo]() { addNamed(sceneCombo); });
-	QObject::connect(addSrcBtn, &QPushButton::clicked, sdTab,
-			 [addNamed, srcCombo]() { addNamed(srcCombo); });
+	QObject::connect(addSrcBtn, &QPushButton::clicked, sdTab, [addNamed, srcCombo]() { addNamed(srcCombo); });
 	QObject::connect(srcCombo->lineEdit(), &QLineEdit::returnPressed, sdTab,
 			 [addNamed, srcCombo]() { addNamed(srcCombo); });
 	QObject::connect(editBtn, &QPushButton::clicked, sdTab, [sdReload]() {
@@ -1612,15 +1503,14 @@ void showDialog(const QString &initialTab)
 		sdReload();
 	});
 
-	QLabel *sdHint = new QLabel(
-		"A scene or source dock shows that one thing live. Audio sources get "
-		"volume and mute controls; browser sources are clickable right in the "
-		"dock. A DockX Preview is the movable, editable window of your current "
-		"scene: click a source and drag it, with snapping, right in the dock, "
-		"and its Show/Hide OBS preview button gives you OBS's built-in preview "
-		"back any time. Find them in the Docks menu; their position saves with "
-		"your dock layouts.",
-		sdTab);
+	QLabel *sdHint = new QLabel("A scene or source dock shows that one thing live. Audio sources get "
+				    "volume and mute controls; browser sources are clickable right in the "
+				    "dock. A DockX Preview is the movable, editable window of your current "
+				    "scene: click a source and drag it, with snapping, right in the dock, "
+				    "and its Show/Hide OBS preview button gives you OBS's built-in preview "
+				    "back any time. Find them in the Docks menu; their position saves with "
+				    "your dock layouts.",
+				    sdTab);
 	sdHint->setWordWrap(true);
 	sdv->addWidget(sdHint);
 
@@ -1658,8 +1548,7 @@ void showDialog(const QString &initialTab)
 		stateSave();
 		panels::applyMixerOrder();
 	};
-	QObject::connect(mixList->model(), &QAbstractItemModel::rowsMoved, mixTab,
-			 [mixPersist]() { mixPersist(); });
+	QObject::connect(mixList->model(), &QAbstractItemModel::rowsMoved, mixTab, [mixPersist]() { mixPersist(); });
 
 	QHBoxLayout *mixRow = new QHBoxLayout();
 	QPushButton *mixReset = new QPushButton("Forget custom order", mixTab);
@@ -1672,11 +1561,10 @@ void showDialog(const QString &initialTab)
 		mixReload();
 	});
 
-	QLabel *mixHint = new QLabel(
-		"Drag to reorder the Audio Mixer. The order sticks and reapplies "
-		"itself whenever OBS rebuilds the mixer. Forgetting the custom order "
-		"returns to OBS ordering after the next scene switch.",
-		mixTab);
+	QLabel *mixHint = new QLabel("Drag to reorder the Audio Mixer. The order sticks and reapplies "
+				     "itself whenever OBS rebuilds the mixer. Forgetting the custom order "
+				     "returns to OBS ordering after the next scene switch.",
+				     mixTab);
 	mixHint->setWordWrap(true);
 	mxv->addWidget(mixHint);
 
@@ -1687,42 +1575,37 @@ void showDialog(const QString &initialTab)
 		QWidget *alignTab = new QWidget();
 		QVBoxLayout *alv = new QVBoxLayout(alignTab);
 
-		QLabel *alIntro = new QLabel(
-			"Select two or more sources on the canvas (Ctrl click them in the "
-			"preview, or drag a box around them), then line them up or space "
-			"them out. It lines up the visible edges, so scaled, cropped, or "
-			"rotated sources still land right. Locked sources are left alone.",
-			alignTab);
+		QLabel *alIntro = new QLabel("Select two or more sources on the canvas (Ctrl click them in the "
+					     "preview, or drag a box around them), then line them up or space "
+					     "them out. It lines up the visible edges, so scaled, cropped, or "
+					     "rotated sources still land right. Locked sources are left alone.",
+					     alignTab);
 		alIntro->setWordWrap(true);
 		alv->addWidget(alIntro);
 
 		auto doAlign = [&dlg](align::Op op) {
 			if (align::selectedCount() < 2) {
-				QMessageBox::information(
-					&dlg, "DockX",
-					"Select at least two sources on the canvas first. "
-					"Ctrl click them in the preview, or drag a box "
-					"around them.");
+				QMessageBox::information(&dlg, "DockX",
+							 "Select at least two sources on the canvas first. "
+							 "Ctrl click them in the preview, or drag a box "
+							 "around them.");
 				return;
 			}
 			align::run(op);
 		};
 		auto doDist = [&dlg](align::Op op) {
 			if (align::selectedCount() < 3) {
-				QMessageBox::information(
-					&dlg, "DockX",
-					"Pick at least three sources to space them evenly. "
-					"The two on the ends stay put and the rest spread "
-					"out between them.");
+				QMessageBox::information(&dlg, "DockX",
+							 "Pick at least three sources to space them evenly. "
+							 "The two on the ends stay put and the rest spread "
+							 "out between them.");
 				return;
 			}
 			align::run(op);
 		};
 		auto doCenter = [&dlg](bool h, bool v) {
 			if (align::selectedCount() < 1) {
-				QMessageBox::information(
-					&dlg, "DockX",
-					"Select a source on the canvas first.");
+				QMessageBox::information(&dlg, "DockX", "Select a source on the canvas first.");
 				return;
 			}
 			align::center(h, v);
@@ -1737,19 +1620,15 @@ void showDialog(const QString &initialTab)
 			int col;
 		};
 		const AB ab[] = {
-			{"Left", align::ALIGN_LEFT, 0, 0},
-			{"Center", align::ALIGN_HCENTER, 0, 1},
-			{"Right", align::ALIGN_RIGHT, 0, 2},
-			{"Top", align::ALIGN_TOP, 1, 0},
-			{"Middle", align::ALIGN_VCENTER, 1, 1},
-			{"Bottom", align::ALIGN_BOTTOM, 1, 2},
+			{"Left", align::ALIGN_LEFT, 0, 0},      {"Center", align::ALIGN_HCENTER, 0, 1},
+			{"Right", align::ALIGN_RIGHT, 0, 2},    {"Top", align::ALIGN_TOP, 1, 0},
+			{"Middle", align::ALIGN_VCENTER, 1, 1}, {"Bottom", align::ALIGN_BOTTOM, 1, 2},
 		};
 		for (const AB &x : ab) {
 			QPushButton *b = new QPushButton(x.label, alignBox);
 			alg->addWidget(b, x.row, x.col);
 			const align::Op op = x.op;
-			QObject::connect(b, &QPushButton::clicked, alignBox,
-					 [doAlign, op]() { doAlign(op); });
+			QObject::connect(b, &QPushButton::clicked, alignBox, [doAlign, op]() { doAlign(op); });
 		}
 		alv->addWidget(alignBox);
 
@@ -1760,10 +1639,8 @@ void showDialog(const QString &initialTab)
 		dgl->addWidget(distH);
 		dgl->addWidget(distV);
 		dgl->addStretch(1);
-		QObject::connect(distH, &QPushButton::clicked, distBox,
-				 [doDist]() { doDist(align::DIST_H); });
-		QObject::connect(distV, &QPushButton::clicked, distBox,
-				 [doDist]() { doDist(align::DIST_V); });
+		QObject::connect(distH, &QPushButton::clicked, distBox, [doDist]() { doDist(align::DIST_H); });
+		QObject::connect(distV, &QPushButton::clicked, distBox, [doDist]() { doDist(align::DIST_V); });
 		alv->addWidget(distBox);
 
 		QGroupBox *canvasBox = new QGroupBox("Center on the canvas", alignTab);
@@ -1775,19 +1652,15 @@ void showDialog(const QString &initialTab)
 		cgl->addWidget(cV);
 		cgl->addWidget(cB);
 		cgl->addStretch(1);
-		QObject::connect(cH, &QPushButton::clicked, canvasBox,
-				 [doCenter]() { doCenter(true, false); });
-		QObject::connect(cV, &QPushButton::clicked, canvasBox,
-				 [doCenter]() { doCenter(false, true); });
-		QObject::connect(cB, &QPushButton::clicked, canvasBox,
-				 [doCenter]() { doCenter(true, true); });
+		QObject::connect(cH, &QPushButton::clicked, canvasBox, [doCenter]() { doCenter(true, false); });
+		QObject::connect(cV, &QPushButton::clicked, canvasBox, [doCenter]() { doCenter(false, true); });
+		QObject::connect(cB, &QPushButton::clicked, canvasBox, [doCenter]() { doCenter(true, true); });
 		alv->addWidget(canvasBox);
 
-		QLabel *alHint = new QLabel(
-			"Center lines everything up along one line through the middle of "
-			"your selection. Space evenly keeps the two end sources put and "
-			"spreads the rest between them.",
-			alignTab);
+		QLabel *alHint = new QLabel("Center lines everything up along one line through the middle of "
+					    "your selection. Space evenly keeps the two end sources put and "
+					    "spreads the rest between them.",
+					    alignTab);
 		alHint->setWordWrap(true);
 		alv->addWidget(alHint);
 		alv->addStretch(1);
@@ -1821,12 +1694,11 @@ void showDialog(const QString &initialTab)
 	swCols->addLayout(collCol, 1);
 
 	swv->addLayout(swCols, 1);
-	QLabel *swHint = new QLabel(
-		"Switching either is instant when you are offline. When you are live "
-		"or recording, DockX blocks profile changes (OBS cannot do them) and "
-		"warns before a collection change, because rebuilding scenes can "
-		"hiccup the stream.",
-		swTab);
+	QLabel *swHint = new QLabel("Switching either is instant when you are offline. When you are live "
+				    "or recording, DockX blocks profile changes (OBS cannot do them) and "
+				    "warns before a collection change, because rebuilding scenes can "
+				    "hiccup the stream.",
+				    swTab);
 	swHint->setWordWrap(true);
 	swv->addWidget(swHint);
 
@@ -1835,8 +1707,7 @@ void showDialog(const QString &initialTab)
 		const QString cur = QString::fromUtf8(current ? current : "");
 		for (char **n = names; n && *n; n++) {
 			const QString name = QString::fromUtf8(*n);
-			QListWidgetItem *it = new QListWidgetItem(
-				name == cur ? name + "   (current)" : name, list);
+			QListWidgetItem *it = new QListWidgetItem(name == cur ? name + "   (current)" : name, list);
 			it->setData(Qt::UserRole, name);
 			if (name == cur) {
 				QFont f = it->font();
@@ -1860,8 +1731,7 @@ void showDialog(const QString &initialTab)
 	reloadSwitch();
 
 	auto anyOutputActive = []() {
-		return obs_frontend_streaming_active() ||
-		       obs_frontend_recording_active() ||
+		return obs_frontend_streaming_active() || obs_frontend_recording_active() ||
 		       obs_frontend_virtualcam_active();
 	};
 	auto switchProfile = [&dlg, profList, reloadSwitch, anyOutputActive]() {
@@ -1869,15 +1739,13 @@ void showDialog(const QString &initialTab)
 		if (!it)
 			return;
 		if (anyOutputActive()) {
-			QMessageBox::information(
-				&dlg, "DockX",
-				"OBS cannot change profiles while you are streaming, "
-				"recording, or running the virtual camera. Stop first, "
-				"then switch.");
+			QMessageBox::information(&dlg, "DockX",
+						 "OBS cannot change profiles while you are streaming, "
+						 "recording, or running the virtual camera. Stop first, "
+						 "then switch.");
 			return;
 		}
-		obs_frontend_set_current_profile(
-			it->data(Qt::UserRole).toString().toUtf8().constData());
+		obs_frontend_set_current_profile(it->data(Qt::UserRole).toString().toUtf8().constData());
 		reloadSwitch();
 	};
 	auto switchCollection = [&dlg, collList, reloadSwitch, anyOutputActive]() {
@@ -1885,15 +1753,14 @@ void showDialog(const QString &initialTab)
 		if (!it)
 			return;
 		if (anyOutputActive()) {
-			const auto answer = QMessageBox::question(
-				&dlg, "You are live",
-				"Switching scene collections rebuilds every scene and "
-				"can hiccup your stream or recording. Switch anyway?");
+			const auto answer =
+				QMessageBox::question(&dlg, "You are live",
+						      "Switching scene collections rebuilds every scene and "
+						      "can hiccup your stream or recording. Switch anyway?");
 			if (answer != QMessageBox::Yes)
 				return;
 		}
-		obs_frontend_set_current_scene_collection(
-			it->data(Qt::UserRole).toString().toUtf8().constData());
+		obs_frontend_set_current_scene_collection(it->data(Qt::UserRole).toString().toUtf8().constData());
 		reloadSwitch();
 	};
 	QObject::connect(profBtn, &QPushButton::clicked, &dlg, switchProfile);
@@ -1909,12 +1776,11 @@ void showDialog(const QString &initialTab)
 	QWidget *monTab = new QWidget();
 	QVBoxLayout *mv = new QVBoxLayout(monTab);
 
-	QLabel *monIntro = new QLabel(
-		"Send docks to any monitor and DockX tiles them there. Save a layout "
-		"afterward and your multi monitor setup rides along with it. If a "
-		"monitor gets unplugged, DockX brings any stranded dock back onto your "
-		"main screen so you never lose one.",
-		monTab);
+	QLabel *monIntro = new QLabel("Send docks to any monitor and DockX tiles them there. Save a layout "
+				      "afterward and your multi monitor setup rides along with it. If a "
+				      "monitor gets unplugged, DockX brings any stranded dock back onto your "
+				      "main screen so you never lose one.",
+				      monTab);
 	monIntro->setWordWrap(true);
 	mv->addWidget(monIntro);
 
@@ -1959,8 +1825,7 @@ void showDialog(const QString &initialTab)
 
 	QHBoxLayout *monBtns = new QHBoxLayout();
 	QPushButton *monSend = new QPushButton("Send docks to monitor", monTab);
-	QPushButton *monRescue =
-		new QPushButton("Rescue lost docks to this screen", monTab);
+	QPushButton *monRescue = new QPushButton("Rescue lost docks to this screen", monTab);
 	QPushButton *monRefresh = new QPushButton("Refresh", monTab);
 	monBtns->addWidget(monSend);
 	monBtns->addWidget(monRescue);
@@ -1968,11 +1833,10 @@ void showDialog(const QString &initialTab)
 	monBtns->addWidget(monRefresh);
 	mv->addLayout(monBtns);
 
-	QObject::connect(monRefresh, &QPushButton::clicked, monTab,
-			 [monReloadScreens, monReloadDocks]() {
-				 monReloadScreens();
-				 monReloadDocks();
-			 });
+	QObject::connect(monRefresh, &QPushButton::clicked, monTab, [monReloadScreens, monReloadDocks]() {
+		monReloadScreens();
+		monReloadDocks();
+	});
 	QObject::connect(monSend, &QPushButton::clicked, monTab, [monScreens, monDocks]() {
 		QListWidgetItem *si = monScreens->currentItem();
 		if (!si)
@@ -1990,16 +1854,13 @@ void showDialog(const QString &initialTab)
 		const QString msg =
 			n == 0 ? QString("No off screen docks found. Everything is "
 					 "already in view.")
-			       : QString("Brought %1 dock%2 back onto this screen.")
-					 .arg(n)
-					 .arg(n == 1 ? "" : "s");
+			       : QString("Brought %1 dock%2 back onto this screen.").arg(n).arg(n == 1 ? "" : "s");
 		QMessageBox::information(monTab->window(), "DockX", msg);
 	});
 
-	QLabel *monHint = new QLabel(
-		"Tip: pull a dock out of OBS by its title bar to float it, then send it "
-		"where you want. Auto rescue on an unplug can be turned off in Settings.",
-		monTab);
+	QLabel *monHint = new QLabel("Tip: pull a dock out of OBS by its title bar to float it, then send it "
+				     "where you want. Auto rescue on an unplug can be turned off in Settings.",
+				     monTab);
 	monHint->setWordWrap(true);
 	mv->addWidget(monHint);
 
@@ -2009,8 +1870,7 @@ void showDialog(const QString &initialTab)
 	QWidget *settingsTab = new QWidget();
 	QVBoxLayout *sv = new QVBoxLayout(settingsTab);
 
-	auto addCheck = [settingsTab, sv](const QString &label, bool value,
-					  std::function<void(bool)> onChange) {
+	auto addCheck = [settingsTab, sv](const QString &label, bool value, std::function<void(bool)> onChange) {
 		QCheckBox *c = new QCheckBox(label, settingsTab);
 		c->setChecked(value);
 		QObject::connect(c, &QCheckBox::toggled, settingsTab, [onChange](bool v) {
@@ -2020,11 +1880,10 @@ void showDialog(const QString &initialTab)
 		sv->addWidget(c);
 	};
 
-	addCheck("Flexible dock layouts (drop docks side by side to build columns)",
-		 state().nesting, [](bool v) {
-			 state().nesting = v;
-			 panels::applyNesting();
-		 });
+	addCheck("Flexible dock layouts (drop docks side by side to build columns)", state().nesting, [](bool v) {
+		state().nesting = v;
+		panels::applyNesting();
+	});
 	addCheck("Search bar in the Scenes panel", state().sceneSearch, [](bool v) {
 		state().sceneSearch = v;
 		panels::applySearchBars();
@@ -2041,25 +1900,23 @@ void showDialog(const QString &initialTab)
 		state().dockColors = v;
 		panels::applyDockColors();
 	});
-	addCheck("Filter hotkeys (every filter gets an on/off hotkey)", state().filterHotkeys,
+	addCheck("Filter hotkeys (every filter gets an on/off hotkey)", state().filterHotkeys, [](bool v) {
+		state().filterHotkeys = v;
+		filters::applyEnabled();
+	});
+	addCheck("New folder button in the Scene Folders dock (off = right click only)", state().folderNewButton,
 		 [](bool v) {
-			 state().filterHotkeys = v;
-			 filters::applyEnabled();
-		 });
-	addCheck("New folder button in the Scene Folders dock (off = right click only)",
-		 state().folderNewButton, [](bool v) {
 			 state().folderNewButton = v;
 			 folders::applySettings();
 		 });
 	addCheck("Nested folders (drag a folder into a folder)", state().folderNesting,
 		 [](bool v) { state().folderNesting = v; });
-	addCheck("Sources under scenes in the Scene Folders dock", state().folderSources,
+	addCheck("Sources under scenes in the Scene Folders dock", state().folderSources, [](bool v) {
+		state().folderSources = v;
+		folders::rebuildSoon();
+	});
+	addCheck("Live scene thumbnails in the folder grid (grid view = visual browser)", state().sceneThumbs,
 		 [](bool v) {
-			 state().folderSources = v;
-			 folders::rebuildSoon();
-		 });
-	addCheck("Live scene thumbnails in the folder grid (grid view = visual browser)",
-		 state().sceneThumbs, [](bool v) {
 			 state().sceneThumbs = v;
 			 if (!v)
 				 thumbs::invalidateAll();
@@ -2068,8 +1925,8 @@ void showDialog(const QString &initialTab)
 	addCheck("Align and distribute tools (off by default; adds an Align tab, reopen this "
 		 "window to see it)",
 		 state().alignTools, [](bool v) { state().alignTools = v; });
-	addCheck("Bring stranded docks back when a monitor is unplugged (auto rescue)",
-		 state().autoRescue, [](bool v) { state().autoRescue = v; });
+	addCheck("Bring stranded docks back when a monitor is unplugged (auto rescue)", state().autoRescue,
+		 [](bool v) { state().autoRescue = v; });
 	addCheck("Collapse the main video preview (docks take the space; your stream "
 		 "keeps running)",
 		 state().previewCollapsed, [settingsTab](bool v) {
@@ -2078,18 +1935,14 @@ void showDialog(const QString &initialTab)
 			 if (v)
 				 preview::offerVideoDock(settingsTab->window());
 		 });
-	addCheck("Pop the Missing Media cleaner at startup when files are missing",
-		 state().missingAutoPop, [](bool v) { state().missingAutoPop = v; });
+	addCheck("Pop the Missing Media cleaner at startup when files are missing", state().missingAutoPop,
+		 [](bool v) { state().missingAutoPop = v; });
 
 	QHBoxLayout *missingRow = new QHBoxLayout();
-	QPushButton *missingBtn =
-		new QPushButton("Open Missing Media cleaner", settingsTab);
-	missingBtn->setToolTip(
-		"Find sources whose file is gone and remove or relink them");
+	QPushButton *missingBtn = new QPushButton("Open Missing Media cleaner", settingsTab);
+	missingBtn->setToolTip("Find sources whose file is gone and remove or relink them");
 	QObject::connect(missingBtn, &QPushButton::clicked, settingsTab,
-			 [settingsTab]() {
-				 missing::showDialog(settingsTab->window());
-			 });
+			 [settingsTab]() { missing::showDialog(settingsTab->window()); });
 	missingRow->addWidget(missingBtn);
 	missingRow->addStretch(1);
 	sv->addLayout(missingRow);
@@ -2110,9 +1963,7 @@ void showDialog(const QString &initialTab)
 
 	sv->addStretch(1);
 	QLabel *about = new QLabel(
-		QString("DockX %1 · by <a href=\"https://strmrx.com\">StrmrX</a>")
-			.arg(PLUGIN_VERSION),
-		settingsTab);
+		QString("DockX %1 · by <a href=\"https://strmrx.com\">StrmrX</a>").arg(PLUGIN_VERSION), settingsTab);
 	about->setOpenExternalLinks(true);
 	sv->addWidget(about);
 

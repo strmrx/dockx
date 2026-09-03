@@ -127,10 +127,9 @@ void showDialog(QWidget *parent)
 
 	QVBoxLayout *root = new QVBoxLayout(&dlg);
 
-	QLabel *intro = new QLabel(
-		"Sources pointing at a file that is gone. Relink one, or just get "
-		"rid of it so OBS stops asking.",
-		&dlg);
+	QLabel *intro = new QLabel("Sources pointing at a file that is gone. Relink one, or just get "
+				   "rid of it so OBS stops asking.",
+				   &dlg);
 	intro->setWordWrap(true);
 	root->addWidget(intro);
 
@@ -149,13 +148,11 @@ void showDialog(QWidget *parent)
 	QHBoxLayout *btnRow = new QHBoxLayout();
 	QPushButton *locateBtn = new QPushButton("Relink...", &dlg);
 	QPushButton *removeBtn = new QPushButton("Remove source", &dlg);
-	QPushButton *removeFileBtn =
-		new QPushButton("Remove source + delete file", &dlg);
+	QPushButton *removeFileBtn = new QPushButton("Remove source + delete file", &dlg);
 	QPushButton *removeAllBtn = new QPushButton("Remove all missing", &dlg);
 	locateBtn->setToolTip("Point this source at the file's new location");
 	removeBtn->setToolTip("Delete this source from OBS (leaves any file alone)");
-	removeFileBtn->setToolTip(
-		"Delete this source and permanently delete its file from disk");
+	removeFileBtn->setToolTip("Delete this source and permanently delete its file from disk");
 	btnRow->addWidget(locateBtn);
 	btnRow->addWidget(removeBtn);
 	btnRow->addWidget(removeFileBtn);
@@ -181,8 +178,7 @@ void showDialog(QWidget *parent)
 		const bool has = r >= 0 && r < (int)scan->rows.size();
 		locateBtn->setEnabled(has);
 		removeBtn->setEnabled(has);
-		removeFileBtn->setEnabled(has &&
-					 QFileInfo::exists(scan->rows[r].path));
+		removeFileBtn->setEnabled(has && QFileInfo::exists(scan->rows[r].path));
 		removeAllBtn->setEnabled(!scan->rows.empty());
 	};
 
@@ -190,36 +186,30 @@ void showDialog(QWidget *parent)
 		runScan(*scan);
 		table->setRowCount((int)scan->rows.size());
 		for (int i = 0; i < (int)scan->rows.size(); i++) {
-			QTableWidgetItem *s =
-				new QTableWidgetItem(scan->rows[i].source);
-			QTableWidgetItem *pth =
-				new QTableWidgetItem(scan->rows[i].path);
+			QTableWidgetItem *s = new QTableWidgetItem(scan->rows[i].source);
+			QTableWidgetItem *pth = new QTableWidgetItem(scan->rows[i].path);
 			pth->setToolTip(scan->rows[i].path);
 			table->setItem(i, 0, s);
 			table->setItem(i, 1, pth);
 		}
 		if (scan->rows.empty())
-			intro->setText(
-				"Nothing missing. Every source can find its file.");
+			intro->setText("Nothing missing. Every source can find its file.");
 		refreshButtons();
 	};
 
-	QObject::connect(table, &QTableWidget::itemSelectionChanged, &dlg,
-			 [refreshButtons]() { refreshButtons(); });
+	QObject::connect(table, &QTableWidget::itemSelectionChanged, &dlg, [refreshButtons]() { refreshButtons(); });
 
 	QObject::connect(locateBtn, &QPushButton::clicked, &dlg, [&, rebuild]() {
 		const int r = selectedRow();
 		if (r < 0 || r >= (int)scan->rows.size())
 			return;
 		const QString start = QFileInfo(scan->rows[r].path).absolutePath();
-		const QString picked = QFileDialog::getOpenFileName(
-			&dlg, "Find the file for \"" + scan->rows[r].source + "\"",
-			start);
+		const QString picked =
+			QFileDialog::getOpenFileName(&dlg, "Find the file for \"" + scan->rows[r].source + "\"", start);
 		if (picked.isEmpty())
 			return;
 		if (scan->rows[r].file)
-			obs_missing_file_issue_callback(
-				scan->rows[r].file, picked.toUtf8().constData());
+			obs_missing_file_issue_callback(scan->rows[r].file, picked.toUtf8().constData());
 		rebuild();
 	});
 
@@ -228,11 +218,10 @@ void showDialog(QWidget *parent)
 		if (r < 0 || r >= (int)scan->rows.size())
 			return;
 		const QString name = scan->rows[r].source;
-		if (QMessageBox::question(
-			    &dlg, "Remove source",
-			    QString("Remove \"%1\" from OBS? This deletes the "
-				    "source from every scene it is in.")
-				    .arg(name)) != QMessageBox::Yes)
+		if (QMessageBox::question(&dlg, "Remove source",
+					  QString("Remove \"%1\" from OBS? This deletes the "
+						  "source from every scene it is in.")
+						  .arg(name)) != QMessageBox::Yes)
 			return;
 		removeSource(name);
 		rebuild();
@@ -245,26 +234,22 @@ void showDialog(QWidget *parent)
 		const QString name = scan->rows[r].source;
 		const QString path = scan->rows[r].path;
 		if (!QFileInfo::exists(path)) {
-			QMessageBox::information(
-				&dlg, "DockX",
-				"That file is already gone, so there is nothing to "
-				"delete. Use Remove source instead.");
+			QMessageBox::information(&dlg, "DockX",
+						 "That file is already gone, so there is nothing to "
+						 "delete. Use Remove source instead.");
 			return;
 		}
-		if (QMessageBox::warning(
-			    &dlg, "Remove source and delete file",
-			    QString("Remove \"%1\" and permanently delete this file "
-				    "from your disk?\n\n%2\n\nThis cannot be undone.")
-				    .arg(name, path),
-			    QMessageBox::Yes | QMessageBox::No,
-			    QMessageBox::No) != QMessageBox::Yes)
+		if (QMessageBox::warning(&dlg, "Remove source and delete file",
+					 QString("Remove \"%1\" and permanently delete this file "
+						 "from your disk?\n\n%2\n\nThis cannot be undone.")
+						 .arg(name, path),
+					 QMessageBox::Yes | QMessageBox::No, QMessageBox::No) != QMessageBox::Yes)
 			return;
 		removeSource(name);
 		if (!QFile::remove(path))
-			QMessageBox::warning(
-				&dlg, "DockX",
-				"Removed the source, but could not delete the file "
-				"(it may be open or read only).");
+			QMessageBox::warning(&dlg, "DockX",
+					     "Removed the source, but could not delete the file "
+					     "(it may be open or read only).");
 		rebuild();
 	});
 
@@ -275,19 +260,17 @@ void showDialog(QWidget *parent)
 		for (const Row &row : scan->rows)
 			if (!names.contains(row.source))
 				names << row.source;
-		if (QMessageBox::question(
-			    &dlg, "Remove all missing",
-			    QString("Remove %1 source(s) with missing files from "
-				    "OBS? Files on disk are left alone.")
-				    .arg(names.size())) != QMessageBox::Yes)
+		if (QMessageBox::question(&dlg, "Remove all missing",
+					  QString("Remove %1 source(s) with missing files from "
+						  "OBS? Files on disk are left alone.")
+						  .arg(names.size())) != QMessageBox::Yes)
 			return;
 		for (const QString &n : names)
 			removeSource(n);
 		rebuild();
 	});
 
-	QObject::connect(closeBtn, &QPushButton::clicked, &dlg,
-			 [&dlg]() { dlg.accept(); });
+	QObject::connect(closeBtn, &QPushButton::clicked, &dlg, [&dlg]() { dlg.accept(); });
 
 	rebuild();
 	dlg.exec();

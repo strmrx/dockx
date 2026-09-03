@@ -141,8 +141,7 @@ void run(Op op)
 	case DIST_H: {
 		if (b.size() < 3)
 			break;
-		std::sort(b.begin(), b.end(),
-			  [](const Box &a, const Box &c) { return a.cx() < c.cx(); });
+		std::sort(b.begin(), b.end(), [](const Box &a, const Box &c) { return a.cx() < c.cx(); });
 		const float first = b.front().cx();
 		const float step = (b.back().cx() - first) / (float)(b.size() - 1);
 		for (size_t i = 1; i + 1 < b.size(); i++)
@@ -152,8 +151,7 @@ void run(Op op)
 	case DIST_V: {
 		if (b.size() < 3)
 			break;
-		std::sort(b.begin(), b.end(),
-			  [](const Box &a, const Box &c) { return a.cy() < c.cy(); });
+		std::sort(b.begin(), b.end(), [](const Box &a, const Box &c) { return a.cy() < c.cy(); });
 		const float first = b.front().cy();
 		const float step = (b.back().cy() - first) / (float)(b.size() - 1);
 		for (size_t i = 1; i + 1 < b.size(); i++)
@@ -180,10 +178,8 @@ void center(bool horizontal, bool vertical)
 		maxR = std::max(maxR, x.right);
 		maxB = std::max(maxB, x.bottom);
 	}
-	const float dx =
-		horizontal ? ((float)ovi.base_width - (minL + maxR)) / 2.0f : 0.0f;
-	const float dy =
-		vertical ? ((float)ovi.base_height - (minT + maxB)) / 2.0f : 0.0f;
+	const float dx = horizontal ? ((float)ovi.base_width - (minL + maxR)) / 2.0f : 0.0f;
+	const float dy = vertical ? ((float)ovi.base_height - (minT + maxB)) / 2.0f : 0.0f;
 	for (Box &x : b)
 		shift(x.item, dx, dy);
 }
