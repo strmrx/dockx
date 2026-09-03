@@ -283,9 +283,19 @@ off-thesis: encoders, multi-output, NDI, VST, replay buffer.
 - Guided drag hints -- SHIPPED v0.11 (illustrated Dock Layout Guide dialog: title bar
   grab, edge drop = split, center drop = tabs, DockX columns; auto opens once on first
   run, reopenable from Settings, linked to strmrx.com/dockx)
-- strmrx.com/dockx help page (the Help "?" button in the Scene Folders dock and the
-  guide dialog already point there; page = guides + layout ideas + theme download +
-  the conversion doorway into the StrmrX family). NEEDS BUILDING on the hub.
+- strmrx.com/dockx help page -- BUILT 2026-08-29 (in the hub repo,
+  `strmrx-hub-repo/src/pages/dockx.astro`; Astro page in the house design system). The
+  Help "?" button in the Scene Folders dock + the guide dialog already point here. Covers
+  what DockX does, the three starter layouts (CSS diagrams), the free StrmrX Midnight theme
+  download (served from `public/dockx/StrmrX_Midnight.ovt`), a Getting-started guide, the
+  full Uninstall / revert story, and the conversion doorway into the StrmrX family.
+  Carries a `SoftwareApplication` schema node and is in the sitemap. ONE thing pending
+  launch: the download CTA is a single swappable `DOWNLOAD_URL` constant, empty for now so
+  the button shows an honest "in final beta -> /beta" state; set it to the obsproject.com
+  resource-listing URL at launch (strategy: forum listing = discovery + download counter,
+  GitHub Releases hosts the file, this page routes every download through the listing).
+  NOT yet committed/deployed on the hub (awaiting Joey; the hub had another dev's WIP in
+  the tree this session).
 - macOS build (template supports it; needs a Mac or CI to compile)
 - Distribution: obsproject.com forum resource (free, the funnel) + strmrx.com page;
   GPL means source is public, the moat is polish + first-mover + StrmrX brand
