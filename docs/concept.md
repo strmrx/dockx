@@ -296,7 +296,9 @@ off-thesis: encoders, multi-output, NDI, VST, replay buffer.
   GitHub Releases hosts the file, this page routes every download through the listing).
   NOT yet committed/deployed on the hub (awaiting Joey; the hub had another dev's WIP in
   the tree this session).
-- macOS build (template supports it; needs a Mac or CI to compile)
+- macOS build -- CI DONE (2026-09-03): GitHub Actions builds Win + macOS universal + Ubuntu
+  on every push; version tags draft a Release with all installers. Unsigned Mac builds until
+  the Apple Developer account is bought at launch (see the platforms note below).
 - Distribution: obsproject.com forum resource (free, the funnel) + strmrx.com page;
   GPL means source is public, the moat is polish + first-mover + StrmrX brand
 - The real name: "DockX" is a working title; by feature parity it's bigger than docks
@@ -327,7 +329,9 @@ plugin land, needs its own thinking).
      so storage tiers map naturally to S/X. Small per-user cloud element storage too.
 - **Aitum precedent:** free GPL plugins became defaults for thousands of streamers and
   funnel into their paid product. Same play.
-- **macOS (and Linux) later:** the plugin template ships CI that builds all three
-  platforms; our code is plain Qt/C++ with no Windows-only pieces. Needs GitHub Actions
-  setup + an Apple Developer ID (~$99/yr) for signing/notarization so Mac installs are
-  painless. Do after the Windows feature set settles.
+- **All platforms OUT OF THE GATE (Joey, 2026-09-03):** DockX launches on Mac, PC, and
+  Linux together. GitHub Actions CI (restored from obs-plugintemplate, 2026-09-03) builds
+  all three on every push; code is plain Qt/C++ with no Windows-only pieces. Mac builds are
+  UNSIGNED until launch: buy ONE Apple Developer account (~$99/yr, covers every StrmrX app),
+  add the signing secrets, and the same CI signs + notarizes automatically. Joey's Mac
+  laptop is the Mac test rig (unsigned installs fine via right-click > Open).
