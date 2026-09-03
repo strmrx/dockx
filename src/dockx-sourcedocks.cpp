@@ -296,11 +296,11 @@ private:
 		info.cy = (uint32_t)(height() > 0 ? height() * dpr : 8);
 		info.format = GS_BGRA;
 		info.zsformat = GS_ZS_NONE;
-#ifdef _WIN32
-		info.window.hwnd = reinterpret_cast<void *>(winId());
-#else
-#error "source docks: window handle wiring needed for this platform"
-#endif
+		if (!wireDisplayWindow(info, (quintptr)winId())) {
+			obs_log(LOG_WARNING, "source dock %d: display unsupported on this platform (Wayland needs Qt 6.9+)",
+				id);
+			return;
+		}
 		display = obs_display_create(&info, 0x151515);
 		if (display)
 			obs_display_add_draw_callback(display, &VideoWidget::drawCb, this);

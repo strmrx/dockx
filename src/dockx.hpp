@@ -6,6 +6,10 @@ GPL v2, see plugin-main.cpp for the full notice.
 
 #include <obs.h>
 
+#if !defined(_WIN32) && !defined(__APPLE__)
+#include <obs-nix-platform.h>
+#endif
+
 #include <QByteArray>
 #include <QHash>
 #include <QIcon>
@@ -23,6 +27,36 @@ class QListWidget;
 class QWidget;
 
 namespace dockx {
+
+/* Hand a Qt widget's native window handle to libobs for obs_display creation,
+   per platform (mirrors OBS's own QTToGSWindow). Returns false when this
+   platform cannot host a display (Linux Wayland needs Qt 6.9+ for a usable
+   handle) -- callers must then skip obs_display_create and just log. */
+inline bool wireDisplayWindow(gs_init_data &info, quintptr wid)
+{
+#if defined(_WIN32)
+	info.window.hwnd = reinterpret_cast<void *>(wid);
+	return true;
+#elif defined(__APPLE__)
+	info.window.view = (id)wid;
+	return true;
+#else
+	switch (obs_get_nix_platform()) {
+	case OBS_NIX_PLATFORM_X11_EGL:
+		info.window.id = (uint32_t)wid;
+		info.window.display = obs_get_nix_platform_display();
+		return true;
+#if QT_VERSION >= QT_VERSION_CHECK(6, 9, 0)
+	case OBS_NIX_PLATFORM_WAYLAND:
+		/* Qt 6.9+: winId of a native window IS the wl_surface */
+		info.window.display = reinterpret_cast<void *>(wid);
+		return info.window.display != nullptr;
+#endif
+	default:
+		return false;
+	}
+#endif
+}
 
 struct Layout {
 	int id = 0;
