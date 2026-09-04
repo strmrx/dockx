@@ -36,12 +36,27 @@ endif()
 
 target_sources(
   ${CMAKE_PROJECT_NAME}
-  PRIVATE src/plugin-main.cpp src/dockx-core.cpp src/dockx-align.cpp src/dockx-collections.cpp
-          src/dockx-dialog.cpp src/dockx-editpreview.cpp src/dockx-filters.cpp src/dockx-folders.cpp
-          src/dockx-hints.cpp src/dockx-loadouts.cpp src/dockx-locks.cpp src/dockx-missing.cpp
-          src/dockx-monitors.cpp src/dockx-placeholders.cpp src/dockx-preview.cpp src/dockx-search.cpp
-          src/dockx-sourcedocks.cpp src/dockx-templates.cpp
-          src/dockx-thumbs.cpp src/dockx.hpp
+  PRIVATE
+    src/plugin-main.cpp
+    src/dockx-core.cpp
+    src/dockx-align.cpp
+    src/dockx-collections.cpp
+    src/dockx-dialog.cpp
+    src/dockx-editpreview.cpp
+    src/dockx-filters.cpp
+    src/dockx-folders.cpp
+    src/dockx-hints.cpp
+    src/dockx-loadouts.cpp
+    src/dockx-locks.cpp
+    src/dockx-missing.cpp
+    src/dockx-monitors.cpp
+    src/dockx-placeholders.cpp
+    src/dockx-preview.cpp
+    src/dockx-search.cpp
+    src/dockx-sourcedocks.cpp
+    src/dockx-templates.cpp
+    src/dockx-thumbs.cpp
+    src/dockx.hpp
 )
 
 set_target_properties_plugin(${CMAKE_PROJECT_NAME} PROPERTIES OUTPUT_NAME ${_name})
