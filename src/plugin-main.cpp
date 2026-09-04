@@ -76,6 +76,7 @@ static void on_frontend_event(enum obs_frontend_event event, void *)
 		dockx::sourcedocks::shutdown(); /* displays first, while graphics lives */
 		dockx::filters::shutdown();
 		dockx::folders::shutdown();
+		dockx::placeholders::shutdown(); /* drops always-on-top from pinned windows */
 		dockx::thumbs::shutdown();
 		dockx::panels::shutdown();
 		break;
@@ -89,41 +90,6 @@ static void tools_menu_clicked(void *)
 	dockx::showDialog();
 }
 
-static void find_menu_clicked(void *)
-{
-	dockx::showDialog("Find");
-}
-
-static void missing_menu_clicked(void *)
-{
-	dockx::missing::showDialog(nullptr);
-}
-
-static void revert_menu_clicked(void *)
-{
-	dockx::locks::revertToLockPoint();
-}
-
-static void rescue_menu_clicked(void *)
-{
-	dockx::monitors::rescueStrayDocks();
-}
-
-static void collapse_menu_clicked(void *)
-{
-	dockx::preview::toggleWithPrompt(static_cast<QWidget *>(obs_frontend_get_main_window()));
-}
-
-static void edit_preview_menu_clicked(void *)
-{
-	dockx::editpreview::addDock();
-}
-
-static void templates_menu_clicked(void *)
-{
-	dockx::showDialog("Templates");
-}
-
 bool obs_module_load(void)
 {
 	obs_log(LOG_INFO, "DockX loaded (version %s)", PLUGIN_VERSION);
@@ -132,15 +98,9 @@ bool obs_module_load(void)
 	dockx::folders::createDock();
 	dockx::sourcedocks::createFromState();
 	dockx::editpreview::createFromState();
+	dockx::placeholders::createFromState();
 	obs_frontend_add_event_callback(on_frontend_event, nullptr);
 	obs_frontend_add_tools_menu_item("DockX", tools_menu_clicked, nullptr);
-	obs_frontend_add_tools_menu_item("DockX: Find source", find_menu_clicked, nullptr);
-	obs_frontend_add_tools_menu_item("DockX: Missing media", missing_menu_clicked, nullptr);
-	obs_frontend_add_tools_menu_item("DockX: Revert dock layout", revert_menu_clicked, nullptr);
-	obs_frontend_add_tools_menu_item("DockX: Rescue docks to this screen", rescue_menu_clicked, nullptr);
-	obs_frontend_add_tools_menu_item("DockX: Show or hide OBS preview", collapse_menu_clicked, nullptr);
-	obs_frontend_add_tools_menu_item("DockX: Add DockX Preview (editable)", edit_preview_menu_clicked, nullptr);
-	obs_frontend_add_tools_menu_item("DockX: Layout templates", templates_menu_clicked, nullptr);
 	return true;
 }
 

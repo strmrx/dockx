@@ -116,6 +116,7 @@ void stateLoad()
 	obs_data_set_default_int(d, "next_id", 1);
 	obs_data_set_default_int(d, "next_source_dock_id", 1);
 	obs_data_set_default_int(d, "next_loadout_id", 1);
+	obs_data_set_default_int(d, "next_placeholder_id", 1);
 
 	g_state.nesting = obs_data_get_bool(d, "nesting");
 	g_state.sceneSearch = obs_data_get_bool(d, "scene_search");
@@ -189,6 +190,24 @@ void stateLoad()
 			obs_data_release(o);
 		}
 		obs_data_array_release(sdocks);
+	}
+
+	g_state.nextPlaceholderId = (int)obs_data_get_int(d, "next_placeholder_id");
+	obs_data_array_t *phs = obs_data_get_array(d, "placeholders");
+	if (phs) {
+		const size_t n = obs_data_array_count(phs);
+		for (size_t i = 0; i < n; i++) {
+			obs_data_t *o = obs_data_array_item(phs, i);
+			PlaceholderEntry e;
+			e.id = (int)obs_data_get_int(o, "id");
+			e.label = QString::fromUtf8(obs_data_get_string(o, "label"));
+			e.color = QString::fromUtf8(obs_data_get_string(o, "color"));
+			e.pinTitle = QString::fromUtf8(obs_data_get_string(o, "pin_title"));
+			if (e.id > 0)
+				g_state.placeholders.push_back(e);
+			obs_data_release(o);
+		}
+		obs_data_array_release(phs);
 	}
 
 	obs_data_t *colors = obs_data_get_obj(d, "colors");
@@ -362,6 +381,20 @@ void stateSave()
 	}
 	obs_data_set_array(d, "source_docks", sdocks);
 	obs_data_array_release(sdocks);
+
+	obs_data_set_int(d, "next_placeholder_id", g_state.nextPlaceholderId);
+	obs_data_array_t *phs = obs_data_array_create();
+	for (const PlaceholderEntry &e : g_state.placeholders) {
+		obs_data_t *o = obs_data_create();
+		obs_data_set_int(o, "id", e.id);
+		obs_data_set_string(o, "label", e.label.toUtf8().constData());
+		obs_data_set_string(o, "color", e.color.toUtf8().constData());
+		obs_data_set_string(o, "pin_title", e.pinTitle.toUtf8().constData());
+		obs_data_array_push_back(phs, o);
+		obs_data_release(o);
+	}
+	obs_data_set_array(d, "placeholders", phs);
+	obs_data_array_release(phs);
 
 	obs_data_t *colors = obs_data_create();
 	for (auto it = g_state.colors.constBegin(); it != g_state.colors.constEnd(); ++it)

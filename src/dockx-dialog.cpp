@@ -1516,6 +1516,135 @@ void showDialog(const QString &initialTab)
 
 	tabs->addTab(sdTab, "Source docks");
 
+	/* ---------- Placeholders tab ---------- */
+	QWidget *phTab = new QWidget();
+	QVBoxLayout *phv = new QVBoxLayout(phTab);
+
+	QLabel *phIntro =
+		new QLabel("A placeholder is an empty dock that reserves a spot in your layout for a window OBS "
+			   "can't own, like a TikTok Live Studio chat. Give it a label and a color, then float "
+			   "the real window over it. On Windows you can go further: pin the window, and DockX "
+			   "keeps it on top of OBS, sized exactly over the placeholder, following it through dock "
+			   "drags, layout switches and restarts.",
+			   phTab);
+	phIntro->setWordWrap(true);
+	phv->addWidget(phIntro);
+
+	QListWidget *phList = new QListWidget(phTab);
+	auto phTitle = [](const PlaceholderEntry &e) {
+		QString t = e.label.isEmpty() ? QString("Placeholder") : e.label;
+		if (!e.pinTitle.isEmpty())
+			t += QString(" · pinned: %1").arg(e.pinTitle);
+		return t;
+	};
+	auto phReload = [phList, phTitle]() {
+		phList->clear();
+		for (const PlaceholderEntry &e : state().placeholders) {
+			QListWidgetItem *it = new QListWidgetItem(phTitle(e), phList);
+			it->setData(Qt::UserRole, e.id);
+		}
+	};
+	phReload();
+	QLabel *phListLbl = new QLabel("Your placeholders", phTab);
+	phv->addWidget(phListLbl);
+	phv->addWidget(phList, 1);
+
+	auto phSelected = [phList]() -> int {
+		QListWidgetItem *it = phList->currentItem();
+		return it ? it->data(Qt::UserRole).toInt() : 0;
+	};
+
+	QHBoxLayout *phBtns = new QHBoxLayout();
+	QPushButton *phAdd = new QPushButton("Add placeholder", phTab);
+	QPushButton *phLabelBtn = new QPushButton("Set label", phTab);
+	QPushButton *phColorBtn = new QPushButton("Set color", phTab);
+	QPushButton *phPinBtn = new QPushButton("Pin a window", phTab);
+	QPushButton *phUnpinBtn = new QPushButton("Unpin", phTab);
+	QPushButton *phRemoveBtn = new QPushButton("Remove", phTab);
+	phBtns->addWidget(phAdd);
+	phBtns->addWidget(phLabelBtn);
+	phBtns->addWidget(phColorBtn);
+	if (placeholders::pinningSupported()) {
+		phBtns->addWidget(phPinBtn);
+		phBtns->addWidget(phUnpinBtn);
+	} else {
+		phPinBtn->hide();
+		phUnpinBtn->hide();
+	}
+	phBtns->addWidget(phRemoveBtn);
+	phBtns->addStretch(1);
+	phv->addLayout(phBtns);
+
+	QObject::connect(phAdd, &QPushButton::clicked, phTab, [phTab, phReload]() {
+		bool ok = false;
+		const QString label = QInputDialog::getText(phTab, "Add placeholder",
+							    "Label (what belongs in this spot):", QLineEdit::Normal,
+							    "TikTok chat", &ok);
+		if (!ok)
+			return;
+		placeholders::addDock(label.trimmed());
+		phReload();
+	});
+	QObject::connect(phLabelBtn, &QPushButton::clicked, phTab, [phTab, phSelected, phReload]() {
+		const int id = phSelected();
+		if (!id)
+			return;
+		QString current;
+		for (const PlaceholderEntry &e : state().placeholders)
+			if (e.id == id)
+				current = e.label;
+		bool ok = false;
+		const QString label =
+			QInputDialog::getText(phTab, "Placeholder label", "Label:", QLineEdit::Normal, current, &ok);
+		if (!ok)
+			return;
+		placeholders::setLabel(id, label.trimmed());
+		phReload();
+	});
+	QObject::connect(phColorBtn, &QPushButton::clicked, phTab, [phTab, phSelected]() {
+		const int id = phSelected();
+		if (!id)
+			return;
+		QString current;
+		for (const PlaceholderEntry &e : state().placeholders)
+			if (e.id == id)
+				current = e.color;
+		const QColor start = current.isEmpty() ? QColor("#232330") : QColor(current);
+		const QColor c = QColorDialog::getColor(start, phTab, "Placeholder background");
+		if (c.isValid())
+			placeholders::setColor(id, c.name());
+	});
+	QObject::connect(phPinBtn, &QPushButton::clicked, phTab, [phTab, phSelected, phReload]() {
+		const int id = phSelected();
+		if (!id)
+			return;
+		placeholders::pinWindow(id, phTab);
+		phReload();
+	});
+	QObject::connect(phUnpinBtn, &QPushButton::clicked, phTab, [phSelected, phReload]() {
+		const int id = phSelected();
+		if (!id)
+			return;
+		placeholders::unpinWindow(id);
+		phReload();
+	});
+	QObject::connect(phRemoveBtn, &QPushButton::clicked, phTab, [phSelected, phReload]() {
+		const int id = phSelected();
+		if (!id)
+			return;
+		placeholders::removeDock(id);
+		phReload();
+	});
+
+	QLabel *phHint = new QLabel("Tip: every option here is also one right click away on the "
+				    "placeholder dock itself. Its position saves with your dock layouts, "
+				    "like any other dock.",
+				    phTab);
+	phHint->setWordWrap(true);
+	phv->addWidget(phHint);
+
+	tabs->addTab(phTab, "Placeholders");
+
 	/* ---------- Mixer tab ---------- */
 	QWidget *mixTab = new QWidget();
 	QVBoxLayout *mxv = new QVBoxLayout(mixTab);

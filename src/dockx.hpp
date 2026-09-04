@@ -72,6 +72,16 @@ struct SourceDockEntry {
 	QString sourceName;
 };
 
+/* an empty labeled dock that reserves layout space for a window OBS cannot
+   own (TikTok Live Studio chat, any app floated over OBS). On Windows a real
+   window can be pinned over it and follows the dock */
+struct PlaceholderEntry {
+	int id = 0;
+	QString label;    /* centered text; also the dock title. May be empty */
+	QString color;    /* "#rrggbb" background; empty = theme default */
+	QString pinTitle; /* title of the window pinned over this dock; empty = none */
+};
+
 /* one captured source state inside a loadout (LoadoutX ported natively) */
 struct LoadoutItem {
 	QString sceneUuid;
@@ -140,6 +150,8 @@ struct State {
 	int nextSourceDockId = 1;
 	std::vector<int> editDocks; /* ids of the editable Preview docks */
 	int nextEditDockId = 1;
+	std::vector<PlaceholderEntry> placeholders;
+	int nextPlaceholderId = 1;
 	QStringList mixerOrder; /* custom Audio Mixer order (source names, top first) */
 	std::vector<SourceLoadout> loadouts;
 	int nextLoadoutId = 1;
@@ -247,6 +259,24 @@ bool showDocks();     /* reopen closed editable docks; false = none exist */
 QList<int> dockIds(); /* editable dock ids, for the management list */
 void shutdown();      /* MUST run at EXIT, before graphics dies */
 } // namespace editpreview
+
+/* placeholder docks: an empty colored dock with a label that reserves a spot
+   in the layout for an external window. On Windows that window can be PINNED:
+   DockX keeps it always on top and moves + sizes it to sit exactly over the
+   placeholder, following drags, layout switches and restarts. The foreign
+   window is only ever repositioned (SetWindowPos), never reparented, so a
+   misbehaving target can never take OBS down */
+namespace placeholders {
+void createFromState(); /* register saved placeholders; call once at module load */
+void addDock(const QString &label);
+void removeDock(int id);
+void setLabel(int id, const QString &label);
+void setColor(int id, const QString &color); /* "#rrggbb" or empty = theme default */
+bool pinningSupported();                     /* true on Windows */
+void pinWindow(int id, QWidget *parent);     /* pick a running window to pin */
+void unpinWindow(int id);
+void shutdown();
+} // namespace placeholders
 
 /* source loadouts + lock tools (LoadoutX's last features, done natively) */
 namespace loadouts {
