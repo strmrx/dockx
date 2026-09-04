@@ -657,8 +657,16 @@ void pinWindow(int id, QWidget *parent)
 	v->addWidget(intro);
 	QListWidget *list = new QListWidget(&dlg);
 	for (const auto &row : rows) {
+		/* exe + size make twin titles tellable apart: an app's popped
+		   out panel and its main window often share a name, but never
+		   a size */
+		QString shown = row.first;
 		const QString exe = exeBaseName(reinterpret_cast<HWND>(row.second));
-		const QString shown = exe.isEmpty() ? row.first : QString("%1 · %2").arg(row.first, exe);
+		if (!exe.isEmpty())
+			shown += QString(" · %1").arg(exe);
+		RECT r = {};
+		if (GetWindowRect(reinterpret_cast<HWND>(row.second), &r))
+			shown += QString(" · %1×%2").arg(r.right - r.left).arg(r.bottom - r.top);
 		QListWidgetItem *it = new QListWidgetItem(shown, list);
 		it->setData(Qt::UserRole, QVariant::fromValue<qulonglong>(row.second));
 		it->setData(Qt::UserRole + 1, row.first); /* the real title */
