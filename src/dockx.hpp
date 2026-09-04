@@ -77,9 +77,10 @@ struct SourceDockEntry {
    window can be pinned over it and follows the dock */
 struct PlaceholderEntry {
 	int id = 0;
-	QString label;    /* centered text; also the dock title. May be empty */
-	QString color;    /* "#rrggbb" background; empty = theme default */
-	QString pinTitle; /* title of the window pinned over this dock; empty = none */
+	QString label;         /* centered text; also the dock title. May be empty */
+	QString color;         /* "#rrggbb" background; empty = theme default */
+	QString pinTitle;      /* title of the window pinned over this dock; empty = none */
+	bool seamless = false; /* strip the pinned window's title bar + border while pinned */
 };
 
 /* one captured source state inside a loadout (LoadoutX ported natively) */
@@ -275,6 +276,7 @@ void setColor(int id, const QString &color); /* "#rrggbb" or empty = theme defau
 bool pinningSupported();                     /* true on Windows */
 void pinWindow(int id, QWidget *parent);     /* pick a running window to pin */
 void unpinWindow(int id);
+void setSeamless(int id, bool on); /* hide/restore the pinned window's own frame */
 void shutdown();
 } // namespace placeholders
 

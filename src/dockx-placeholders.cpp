@@ -36,6 +36,7 @@ broken plugin takes the whole stream down with it.
 #include <QVBoxLayout>
 #include <QWidget>
 
+#include <cmath>
 #include <cstdlib>
 
 #ifdef _WIN32
@@ -172,10 +173,12 @@ public:
 	void releaseTarget()
 	{
 #ifdef _WIN32
+		applySeamless(false);
 		if (hwnd && IsWindow(hwnd) && topmostApplied)
 			SetWindowPos(hwnd, HWND_NOTOPMOST, 0, 0, 0, 0, SWP_NOMOVE | SWP_NOSIZE | SWP_NOACTIVATE);
 		topmostApplied = false;
 		hwnd = nullptr;
+		setMinimumSize(80, 60); /* forget a learned window minimum */
 #endif
 	}
 
@@ -273,6 +276,11 @@ protected:
 			if (!e->pinTitle.isEmpty()) {
 				QAction *un = menu.addAction(QString("Unpin \"%1\"").arg(e->pinTitle));
 				QObject::connect(un, &QAction::triggered, this, [this]() { unpinWindow(id); });
+				QAction *seam = menu.addAction("Seamless look (hide its title bar)");
+				seam->setCheckable(true);
+				seam->setChecked(e->seamless);
+				QObject::connect(seam, &QAction::triggered, this,
+						 [this](bool on) { setSeamless(id, on); });
 			}
 		} else {
 			QAction *na = menu.addAction("Window pinning: Windows only for now");
@@ -291,6 +299,30 @@ private:
 	QTimer *timer = nullptr;
 	HWND hwnd = nullptr;
 	bool topmostApplied = false;
+	LONG_PTR origStyle = 0;
+	bool styleStripped = false;
+
+	/* seamless look: drop the pinned window's title bar + sizing frame
+	   while pinned so it reads as pure content; the original style is
+	   put back on unpin/remove/shutdown (and the app itself restores it
+	   on its next restart, so nothing can stick permanently) */
+	void applySeamless(bool want)
+	{
+		if (!hwnd || !IsWindow(hwnd))
+			return;
+		if (want && !styleStripped) {
+			origStyle = GetWindowLongPtr(hwnd, GWL_STYLE);
+			SetWindowLongPtr(hwnd, GWL_STYLE, origStyle & ~((LONG_PTR)(WS_CAPTION | WS_THICKFRAME)));
+			SetWindowPos(hwnd, nullptr, 0, 0, 0, 0,
+				     SWP_NOMOVE | SWP_NOSIZE | SWP_NOZORDER | SWP_NOACTIVATE | SWP_FRAMECHANGED);
+			styleStripped = true;
+		} else if (!want && styleStripped) {
+			SetWindowLongPtr(hwnd, GWL_STYLE, origStyle);
+			SetWindowPos(hwnd, nullptr, 0, 0, 0, 0,
+				     SWP_NOMOVE | SWP_NOSIZE | SWP_NOZORDER | SWP_NOACTIVATE | SWP_FRAMECHANGED);
+			styleStripped = false;
+		}
+	}
 
 	void dropTopmost()
 	{
@@ -310,11 +342,15 @@ private:
 		if (hwnd && !IsWindow(hwnd)) {
 			hwnd = nullptr;
 			topmostApplied = false;
+			styleStripped = false; /* a recreated window has its frame back */
+			setMinimumSize(80, 60);
 		}
 		if (!hwnd)
 			hwnd = findByTitle(e->pinTitle);
 		if (!hwnd)
 			return;
+
+		applySeamless(e->seamless);
 
 		/* dock hidden (closed, tabbed behind, a layout without it, OBS
 		   minimized): the pinned window's spot is gone, so tuck it into
@@ -361,6 +397,26 @@ private:
 		SetWindowPos(hwnd, HWND_TOPMOST, mine.left, mine.top, mine.right - mine.left, mine.bottom - mine.top,
 			     SWP_NOACTIVATE);
 		topmostApplied = true;
+
+		/* smart minimum: if the window refused to shrink to the spot
+		   (it has its own minimum size), teach the placeholder that
+		   minimum so the dock can never claim space the window can't
+		   actually fit -- the layout stays honest */
+		RECT after = {};
+		if (GetWindowRect(hwnd, &after)) {
+			const int gotW = (int)(after.right - after.left);
+			const int gotH = (int)(after.bottom - after.top);
+			const int wantW = (int)(mine.right - mine.left);
+			const int wantH = (int)(mine.bottom - mine.top);
+			const qreal dpr = devicePixelRatio() > 0 ? devicePixelRatio() : 1.0;
+			int minW = minimumWidth(), minH = minimumHeight();
+			if (gotW > wantW + 2)
+				minW = qMax(minW, (int)std::ceil(gotW / dpr));
+			if (gotH > wantH + 2)
+				minH = qMax(minH, (int)std::ceil(gotH / dpr));
+			if (minW != minimumWidth() || minH != minimumHeight())
+				setMinimumSize(minW, minH);
+		}
 	}
 #endif
 };
@@ -515,6 +571,17 @@ void pinWindow(int id, QWidget *parent)
 	(void)id;
 	(void)parent;
 #endif
+}
+
+void setSeamless(int id, bool on)
+{
+	PlaceholderEntry *e = entryFor(id);
+	if (!e)
+		return;
+	e->seamless = on;
+	stateSave();
+	if (PlaceholderPanel *p = panelFor(id))
+		p->update(); /* the follower applies the style on its next tick */
 }
 
 void unpinWindow(int id)

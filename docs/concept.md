@@ -231,7 +231,11 @@ off-thesis: encoders, multi-output, NDI, VST, replay buffer.
   never reparented -- reparenting foreign windows crashes both apps), following dock drags,
   layout switches and restarts (pin persists by window title). Right click menu on the dock
   + a Placeholders tab in Tools > DockX. Mac/Linux get the placeholder without pinning for
-  now. Generic by design: works for any app floated over OBS, not just TikTok.
+  now. Generic by design: works for any app floated over OBS, not just TikTok. v0.30.0
+  rounds it out: SMART MINIMUM (standard: if the window refuses to shrink below its own
+  minimum, the placeholder learns it and the dock can't be dragged smaller -- the layout
+  never lies) and SEAMLESS LOOK (opt-in per placeholder: hides the pinned window's title
+  bar/border while pinned, restored on unpin), both explained in the tab's hint text.
 - **Tools menu slimmed to ONE entry** (Joey 2026-09-04) -- SHIPPED v0.28.1. The Tools menu had
   grown eight "DockX: ..." lines; Joey called it overwhelming/info overload and picked the
   single-entry option. Tools now shows just **"DockX"** (opens the dialog); every removed item

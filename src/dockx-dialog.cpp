@@ -1538,6 +1538,8 @@ void showDialog(const QString &initialTab)
 		QString t = e.label.isEmpty() ? QString("Placeholder") : e.label;
 		if (!e.pinTitle.isEmpty())
 			t += QString(" · pinned: %1").arg(e.pinTitle);
+		if (e.seamless)
+			t += " · seamless";
 		return t;
 	};
 	auto phReload = [phList, phTitle]() {
@@ -1563,6 +1565,7 @@ void showDialog(const QString &initialTab)
 	QPushButton *phColorBtn = new QPushButton("Set color", phTab);
 	QPushButton *phPinBtn = new QPushButton("Pin a window", phTab);
 	QPushButton *phUnpinBtn = new QPushButton("Unpin", phTab);
+	QPushButton *phSeamBtn = new QPushButton("Seamless on/off", phTab);
 	QPushButton *phRemoveBtn = new QPushButton("Remove", phTab);
 	phBtns->addWidget(phAdd);
 	phBtns->addWidget(phLabelBtn);
@@ -1570,9 +1573,11 @@ void showDialog(const QString &initialTab)
 	if (placeholders::pinningSupported()) {
 		phBtns->addWidget(phPinBtn);
 		phBtns->addWidget(phUnpinBtn);
+		phBtns->addWidget(phSeamBtn);
 	} else {
 		phPinBtn->hide();
 		phUnpinBtn->hide();
+		phSeamBtn->hide();
 	}
 	phBtns->addWidget(phRemoveBtn);
 	phBtns->addStretch(1);
@@ -1631,6 +1636,18 @@ void showDialog(const QString &initialTab)
 		placeholders::unpinWindow(id);
 		phReload();
 	});
+	QObject::connect(phSeamBtn, &QPushButton::clicked, phTab, [phSelected, phReload]() {
+		const int id = phSelected();
+		if (!id)
+			return;
+		for (const PlaceholderEntry &e : state().placeholders) {
+			if (e.id == id) {
+				placeholders::setSeamless(id, !e.seamless);
+				break;
+			}
+		}
+		phReload();
+	});
 	QObject::connect(phRemoveBtn, &QPushButton::clicked, phTab, [phSelected, phReload]() {
 		const int id = phSelected();
 		if (!id)
@@ -1639,10 +1656,16 @@ void showDialog(const QString &initialTab)
 		phReload();
 	});
 
-	QLabel *phHint = new QLabel("Tip: every option here is also one right click away on the "
-				    "placeholder dock itself. Its position saves with your dock layouts, "
-				    "like any other dock.",
-				    phTab);
+	QLabel *phHint =
+		new QLabel("Tip: every option here is also one right click away on the placeholder dock itself. "
+			   "Its position saves with your dock layouts, like any other dock. Two things worth "
+			   "knowing about pinned windows: DockX resizes the window to fill the spot, but every "
+			   "window has a minimum size it refuses to shrink below. When that happens, the "
+			   "placeholder learns that minimum and won't let you drag the dock any smaller, so the "
+			   "space you see is always the space the window really fits. And Seamless hides the "
+			   "pinned window's own title bar and border so it reads as pure content living in OBS; "
+			   "turning it off or unpinning brings the frame right back (so does restarting that app).",
+			   phTab);
 	phHint->setWordWrap(true);
 	phv->addWidget(phHint);
 
