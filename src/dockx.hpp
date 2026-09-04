@@ -80,6 +80,7 @@ struct PlaceholderEntry {
 	QString label;         /* centered text; also the dock title. May be empty */
 	QString color;         /* "#rrggbb" background; empty = theme default */
 	QString pinTitle;      /* title of the window pinned over this dock; empty = none */
+	QString pinExe;        /* lower-case exe basename of the pinned app; re-find guard */
 	bool seamless = false; /* strip the pinned window's title bar + border while pinned */
 };
 

@@ -76,12 +76,6 @@ static QMainWindow *mainWindow()
 
 #ifdef _WIN32
 
-struct FindCtx {
-	QString wanted;
-	HWND exact = nullptr;
-	HWND partial = nullptr;
-};
-
 static bool eligibleWindow(HWND h)
 {
 	if (!IsWindowVisible(h))
@@ -105,27 +99,79 @@ static QString windowTitle(HWND h)
 	return QString::fromWCharArray(buf, n);
 }
 
-static BOOL CALLBACK findByTitleCb(HWND h, LPARAM lp)
+static QString exeBaseName(HWND h)
 {
-	FindCtx *ctx = reinterpret_cast<FindCtx *>(lp);
+	DWORD pid = 0;
+	GetWindowThreadProcessId(h, &pid);
+	if (!pid)
+		return QString();
+	HANDLE proc = OpenProcess(PROCESS_QUERY_LIMITED_INFORMATION, FALSE, pid);
+	if (!proc)
+		return QString();
+	wchar_t buf[MAX_PATH];
+	DWORD len = MAX_PATH;
+	QString out;
+	if (QueryFullProcessImageNameW(proc, 0, buf, &len))
+		out = QString::fromWCharArray(buf, (int)len);
+	CloseHandle(proc);
+	const int slash = out.lastIndexOf(QChar('\\'));
+	return (slash >= 0 ? out.mid(slash + 1) : out).toLower();
+}
+
+struct PinFindCtx {
+	QString wantedTitle;
+	QString wantedExe;             /* lower-case basename; empty = don't check */
+	QList<QPair<HWND, bool>> hits; /* hwnd, exact-title match */
+};
+
+static BOOL CALLBACK pinFindCb(HWND h, LPARAM lp)
+{
+	PinFindCtx *ctx = reinterpret_cast<PinFindCtx *>(lp);
 	if (!eligibleWindow(h))
 		return TRUE;
 	const QString t = windowTitle(h);
-	if (t == ctx->wanted) {
-		ctx->exact = h;
-		return FALSE;
-	}
-	if (!ctx->partial && t.contains(ctx->wanted, Qt::CaseInsensitive))
-		ctx->partial = h;
+	const bool exact = (t == ctx->wantedTitle);
+	if (!exact && !t.contains(ctx->wantedTitle, Qt::CaseInsensitive))
+		return TRUE;
+	if (!ctx->wantedExe.isEmpty() && exeBaseName(h) != ctx->wantedExe)
+		return TRUE;
+	ctx->hits.append({h, exact});
 	return TRUE;
 }
 
-static HWND findByTitle(const QString &title)
+/* Re-find the pinned window after it (or OBS) went away. Apps like TikTok
+   Live Studio re-dock their popped-out chat on restart, so for a while the
+   only title match is the app's whole MAIN window -- and yanking that into
+   the slot is far worse than waiting for the user to pop the chat back out
+   (Joey hit exactly this). So: never adopt a window that is much bigger
+   than the spot in BOTH dimensions, and among survivors prefer exact title,
+   then the smallest window (panels are small, main windows are big). */
+static HWND findPinTarget(const QString &title, const QString &exe, int spotW, int spotH)
 {
-	FindCtx ctx;
-	ctx.wanted = title;
-	EnumWindows(findByTitleCb, reinterpret_cast<LPARAM>(&ctx));
-	return ctx.exact ? ctx.exact : ctx.partial;
+	PinFindCtx ctx;
+	ctx.wantedTitle = title;
+	ctx.wantedExe = exe;
+	EnumWindows(pinFindCb, reinterpret_cast<LPARAM>(&ctx));
+	const int capW = qMax(2 * spotW, 800);
+	const int capH = qMax(2 * spotH, 800);
+	HWND best = nullptr;
+	bool bestExact = false;
+	long long bestArea = 0;
+	for (const auto &hit : ctx.hits) {
+		RECT r = {};
+		if (!GetWindowRect(hit.first, &r))
+			continue;
+		const int w = (int)(r.right - r.left), hgt = (int)(r.bottom - r.top);
+		if (w > capW && hgt > capH)
+			continue; /* reads as the app's main window, not a popped-out panel */
+		const long long area = (long long)w * hgt;
+		if (!best || (hit.second && !bestExact) || (hit.second == bestExact && area < bestArea)) {
+			best = hit.first;
+			bestExact = hit.second;
+			bestArea = area;
+		}
+	}
+	return best;
 }
 
 struct ListCtx {
@@ -391,19 +437,11 @@ private:
 			owned = false;
 			setMinimumSize(80, 60);
 		}
-		if (!hwnd)
-			hwnd = findByTitle(e->pinTitle);
-		if (!hwnd)
-			return;
-
-		applySeamless(e->seamless);
-		applyOwnership();
-
 		/* OBS minimized: an owned window hides with it automatically
 		   (part of OBS, like its own dialogs); nothing to do */
 		QWidget *top = window();
 		if (top && top->isMinimized()) {
-			if (!owned)
+			if (hwnd && !owned)
 				dropTopmost();
 			return;
 		}
@@ -412,20 +450,32 @@ private:
 		   the spot is gone, tuck the window away until it comes back
 		   (Joey's call 09-04) */
 		if (!isVisible()) {
-			dropTopmost();
-			if (!IsIconic(hwnd))
-				ShowWindow(hwnd, SW_SHOWMINNOACTIVE);
+			if (hwnd) {
+				dropTopmost();
+				if (!IsIconic(hwnd))
+					ShowWindow(hwnd, SW_SHOWMINNOACTIVE);
+			}
 			return;
 		}
+
+		RECT mine;
+		if (!GetWindowRect(reinterpret_cast<HWND>(winId()), &mine))
+			return;
+
+		if (!hwnd)
+			hwnd = findPinTarget(e->pinTitle, e->pinExe, (int)(mine.right - mine.left),
+					     (int)(mine.bottom - mine.top));
+		if (!hwnd)
+			return; /* e.g. the app re-docked its panel; wait for it */
+
+		applySeamless(e->seamless);
+		applyOwnership();
 
 		/* the spot is visible: the window belongs in it, even if
 		   something minimized it meanwhile */
 		if (IsIconic(hwnd))
 			ShowWindow(hwnd, SW_SHOWNOACTIVATE);
 
-		RECT mine;
-		if (!GetWindowRect(reinterpret_cast<HWND>(winId()), &mine))
-			return;
 		RECT theirs = {};
 		GetWindowRect(hwnd, &theirs);
 		const bool fits = abs((int)theirs.left - (int)mine.left) <= 1 &&
@@ -607,8 +657,11 @@ void pinWindow(int id, QWidget *parent)
 	v->addWidget(intro);
 	QListWidget *list = new QListWidget(&dlg);
 	for (const auto &row : rows) {
-		QListWidgetItem *it = new QListWidgetItem(row.first, list);
+		const QString exe = exeBaseName(reinterpret_cast<HWND>(row.second));
+		const QString shown = exe.isEmpty() ? row.first : QString("%1 · %2").arg(row.first, exe);
+		QListWidgetItem *it = new QListWidgetItem(shown, list);
 		it->setData(Qt::UserRole, QVariant::fromValue<qulonglong>(row.second));
+		it->setData(Qt::UserRole + 1, row.first); /* the real title */
 	}
 	v->addWidget(list, 1);
 	QDialogButtonBox *bb = new QDialogButtonBox(QDialogButtonBox::Ok | QDialogButtonBox::Cancel, &dlg);
@@ -624,13 +677,15 @@ void pinWindow(int id, QWidget *parent)
 	if (!it)
 		return;
 
-	e->pinTitle = it->text();
+	e->pinTitle = it->data(Qt::UserRole + 1).toString();
+	e->pinExe = exeBaseName(reinterpret_cast<HWND>((quintptr)it->data(Qt::UserRole).toULongLong()));
 	stateSave();
 	if (PlaceholderPanel *p = panelFor(id)) {
 		p->adoptTarget((quintptr)it->data(Qt::UserRole).toULongLong());
 		p->update();
 	}
-	obs_log(LOG_INFO, "placeholder %d pinned window \"%s\"", id, it->text().toUtf8().constData());
+	obs_log(LOG_INFO, "placeholder %d pinned window \"%s\" (%s)", id, e->pinTitle.toUtf8().constData(),
+		e->pinExe.toUtf8().constData());
 #else
 	(void)id;
 	(void)parent;
@@ -654,6 +709,7 @@ void unpinWindow(int id)
 	if (!e)
 		return;
 	e->pinTitle.clear();
+	e->pinExe.clear();
 	stateSave();
 	if (PlaceholderPanel *p = panelFor(id)) {
 		p->releaseTarget();
