@@ -224,12 +224,12 @@ off-thesis: encoders, multi-output, NDI, VST, replay buffer.
 - **Placeholder docks + window pinning** (Joey ask 2026-09-04) -- SHIPPED v0.29.0. Joey
   floats the TikTok Live Studio chat over OBS and wanted it to feel docked. A placeholder
   is an empty dock (bg color + centered label, e.g. "TikTok chat") that reserves a spot in
-  any layout for a window OBS can't own. On Windows, DockX can PIN that window: on top
-  while OBS or the pinned app is in use (other apps stack normally over it), minimized to
-  the taskbar while the placeholder is hidden (so a layout without the placeholder = no
-  chat), moved + sized exactly over the placeholder by a follower timer (SetWindowPos only,
-  never reparented -- reparenting foreign windows crashes both apps), following dock drags,
-  layout switches and restarts (pin persists by window title). Right click menu on the dock
+  any layout for a window OBS can't host. On Windows, DockX can PIN that window: it joins
+  OBS's own window group (owned window), so it stacks exactly like part of OBS -- just
+  above OBS, under whatever app the user selects, hidden when OBS minimizes -- while a
+  follower keeps it sized exactly over the placeholder. Placeholder hidden (a layout
+  without it) = window tucked away; spot back = window back. Never reparented into OBS
+  (that crashes both apps); pin persists across restarts by window title. Right click menu on the dock
   + a Placeholders tab in Tools > DockX. Mac/Linux get the placeholder without pinning for
   now. Generic by design: works for any app floated over OBS, not just TikTok. v0.30.0
   rounds it out: SMART MINIMUM (standard: if the window refuses to shrink below its own

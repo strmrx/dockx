@@ -3,13 +3,16 @@ DockX for OBS Studio (by StrmrX) -- placeholder docks.
 GPL v2, see plugin-main.cpp for the full notice.
 
 An empty labeled dock that reserves a spot in the layout for a window OBS
-cannot own (TikTok Live Studio chat, a music player, any app floated over
-OBS). On Windows that window can be PINNED: a timer keeps it always on top
-and moves + sizes it to sit exactly over the placeholder, so it follows dock
+cannot host (TikTok Live Studio chat, a music player, any app floated over
+OBS). On Windows that window can be PINNED: it becomes an OWNED window of
+the OBS main window, so the shell stacks it as part of OBS (just above OBS,
+under whatever app the user selects, hidden when OBS minimizes), while a
+timer moves + sizes it to sit exactly over the placeholder through dock
 drags, layout switches and OBS restarts. The foreign window is only ever
-repositioned via SetWindowPos, never reparented into OBS -- reparenting a
-window another process owns is the classic way to crash both apps, and a
-broken plugin takes the whole stream down with it.
+repositioned/owner-tagged via SetWindowPos/SetWindowLongPtr, never
+reparented into OBS's widget tree -- reparenting a window another process
+owns is the classic way to crash both apps, and a broken plugin takes the
+whole stream down with it.
 */
 
 #include <obs-module.h>
@@ -174,6 +177,7 @@ public:
 	{
 #ifdef _WIN32
 		applySeamless(false);
+		releaseOwnership();
 		if (hwnd && IsWindow(hwnd) && topmostApplied)
 			SetWindowPos(hwnd, HWND_NOTOPMOST, 0, 0, 0, 0, SWP_NOMOVE | SWP_NOSIZE | SWP_NOACTIVATE);
 		topmostApplied = false;
@@ -301,6 +305,8 @@ private:
 	bool topmostApplied = false;
 	LONG_PTR origStyle = 0;
 	bool styleStripped = false;
+	LONG_PTR origOwner = 0;
+	bool owned = false;
 
 	/* seamless look: drop the pinned window's title bar + sizing frame
 	   while pinned so it reads as pure content; the original style is
@@ -332,6 +338,45 @@ private:
 		}
 	}
 
+	/* stacking: registering the pinned window as OWNED by the OBS main
+	   window makes the shell stack it as part of OBS -- always just above
+	   OBS, underneath whatever app the user actually selects, hidden with
+	   OBS when OBS minimizes. This is what makes it FEEL native; the first
+	   always-on-top approach sandwiched other apps between the pinned
+	   window and OBS (Joey's 09-04 bug report). Cross-process owner
+	   changes don't stick for elevated targets, so verify -- if it fails,
+	   fall back to on-top-while-engaged */
+	void applyOwnership()
+	{
+		if (owned || !hwnd || !IsWindow(hwnd))
+			return;
+		QMainWindow *m = mainWindow();
+		if (!m)
+			return;
+		const LONG_PTR obsWin = (LONG_PTR)m->winId();
+		origOwner = GetWindowLongPtr(hwnd, GWLP_HWNDPARENT);
+		if (origOwner == obsWin) {
+			owned = true;
+			return;
+		}
+		SetWindowLongPtr(hwnd, GWLP_HWNDPARENT, obsWin);
+		owned = GetWindowLongPtr(hwnd, GWLP_HWNDPARENT) == obsWin;
+		if (owned)
+			dropTopmost(); /* the shell owns stacking now */
+		else
+			obs_log(LOG_INFO, "placeholder %d: window refused OBS ownership, using on-top fallback", id);
+	}
+
+	void releaseOwnership()
+	{
+		if (owned && hwnd && IsWindow(hwnd)) {
+			SetWindowLongPtr(hwnd, GWLP_HWNDPARENT, origOwner);
+			SetWindowPos(hwnd, nullptr, 0, 0, 0, 0,
+				     SWP_NOMOVE | SWP_NOSIZE | SWP_NOZORDER | SWP_NOACTIVATE | SWP_FRAMECHANGED);
+		}
+		owned = false;
+	}
+
 	void tick()
 	{
 		PlaceholderEntry *e = entryFor(id);
@@ -343,6 +388,7 @@ private:
 			hwnd = nullptr;
 			topmostApplied = false;
 			styleStripped = false; /* a recreated window has its frame back */
+			owned = false;
 			setMinimumSize(80, 60);
 		}
 		if (!hwnd)
@@ -351,35 +397,29 @@ private:
 			return;
 
 		applySeamless(e->seamless);
+		applyOwnership();
 
-		/* dock hidden (closed, tabbed behind, a layout without it, OBS
-		   minimized): the pinned window's spot is gone, so tuck it into
-		   the taskbar until the spot comes back (Joey's call 09-04) */
+		/* OBS minimized: an owned window hides with it automatically
+		   (part of OBS, like its own dialogs); nothing to do */
 		QWidget *top = window();
-		const bool active = isVisible() && top && !top->isMinimized();
-		if (!active) {
+		if (top && top->isMinimized()) {
+			if (!owned)
+				dropTopmost();
+			return;
+		}
+
+		/* dock hidden (closed, tabbed behind, a layout without it):
+		   the spot is gone, tuck the window away until it comes back
+		   (Joey's call 09-04) */
+		if (!isVisible()) {
 			dropTopmost();
 			if (!IsIconic(hwnd))
 				ShowWindow(hwnd, SW_SHOWMINNOACTIVE);
 			return;
 		}
 
-		/* on top only while OBS or the pinned app itself is in use;
-		   in any other program the window stacks normally (Joey's
-		   call 09-04) */
-		HWND fg = GetForegroundWindow();
-		DWORD fgPid = 0, chatPid = 0;
-		if (fg)
-			GetWindowThreadProcessId(fg, &fgPid);
-		GetWindowThreadProcessId(hwnd, &chatPid);
-		const bool engaged = fg && (fgPid == GetCurrentProcessId() || (chatPid && fgPid == chatPid));
-		if (!engaged) {
-			dropTopmost();
-			return;
-		}
-
-		/* the spot is visible and OBS is in use: the window belongs in
-		   it, even if something minimized it meanwhile */
+		/* the spot is visible: the window belongs in it, even if
+		   something minimized it meanwhile */
 		if (IsIconic(hwnd))
 			ShowWindow(hwnd, SW_SHOWNOACTIVATE);
 
@@ -388,15 +428,39 @@ private:
 			return;
 		RECT theirs = {};
 		GetWindowRect(hwnd, &theirs);
-		const bool same = topmostApplied && abs((int)theirs.left - (int)mine.left) <= 1 &&
+		const bool fits = abs((int)theirs.left - (int)mine.left) <= 1 &&
 				  abs((int)theirs.top - (int)mine.top) <= 1 &&
 				  abs((int)(theirs.right - theirs.left) - (int)(mine.right - mine.left)) <= 1 &&
 				  abs((int)(theirs.bottom - theirs.top) - (int)(mine.bottom - mine.top)) <= 1;
-		if (same)
-			return;
-		SetWindowPos(hwnd, HWND_TOPMOST, mine.left, mine.top, mine.right - mine.left, mine.bottom - mine.top,
-			     SWP_NOACTIVATE);
-		topmostApplied = true;
+
+		if (owned) {
+			/* the shell keeps it stacked with OBS; we only track the
+			   spot */
+			if (fits)
+				return;
+			SetWindowPos(hwnd, nullptr, mine.left, mine.top, mine.right - mine.left, mine.bottom - mine.top,
+				     SWP_NOZORDER | SWP_NOACTIVATE);
+		} else {
+			/* fallback for windows that refuse ownership: on top
+			   only while OBS or the pinned app itself is in use */
+			HWND fg = GetForegroundWindow();
+			DWORD fgPid = 0, chatPid = 0;
+			if (fg)
+				GetWindowThreadProcessId(fg, &fgPid);
+			GetWindowThreadProcessId(hwnd, &chatPid);
+			const bool engaged = fg && (fgPid == GetCurrentProcessId() || (chatPid && fgPid == chatPid));
+			if (!engaged) {
+				dropTopmost();
+				return;
+			}
+			if (fits && topmostApplied)
+				return;
+			SetWindowPos(hwnd, HWND_TOPMOST, mine.left, mine.top, mine.right - mine.left,
+				     mine.bottom - mine.top, SWP_NOACTIVATE);
+			topmostApplied = true;
+			if (fits)
+				return; /* only the z order needed reasserting */
+		}
 
 		/* smart minimum: if the window refused to shrink to the spot
 		   (it has its own minimum size), teach the placeholder that
