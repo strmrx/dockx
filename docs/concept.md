@@ -221,6 +221,23 @@ off-thesis: encoders, multi-output, NDI, VST, replay buffer.
   panels::undoLayout() ("Undo apply") reverts it -- safe even fired at a hand-built layout. UI:
   Tools > DockX > Templates tab + a "DockX: Layout templates" Tools item. STILL OPEN: per-user
   saved templates, more starters, and detecting more service dock names as they appear.
+- **Placeholder docks + window pinning** (Joey ask 2026-09-04) -- SHIPPED v0.29.0. Joey
+  floats the TikTok Live Studio chat over OBS and wanted it to feel docked. A placeholder
+  is an empty dock (bg color + centered label, e.g. "TikTok chat") that reserves a spot in
+  any layout for a window OBS can't own. On Windows, DockX can PIN that window: on top
+  while OBS or the pinned app is in use (other apps stack normally over it), minimized to
+  the taskbar while the placeholder is hidden (so a layout without the placeholder = no
+  chat), moved + sized exactly over the placeholder by a follower timer (SetWindowPos only,
+  never reparented -- reparenting foreign windows crashes both apps), following dock drags,
+  layout switches and restarts (pin persists by window title). Right click menu on the dock
+  + a Placeholders tab in Tools > DockX. Mac/Linux get the placeholder without pinning for
+  now. Generic by design: works for any app floated over OBS, not just TikTok.
+- **Tools menu slimmed to ONE entry** (Joey 2026-09-04) -- SHIPPED v0.28.1. The Tools menu had
+  grown eight "DockX: ..." lines; Joey called it overwhelming/info overload and picked the
+  single-entry option. Tools now shows just **"DockX"** (opens the dialog); every removed item
+  was already reachable inside it (Find + Templates tabs, Missing media via Settings, Revert /
+  Rescue / preview toggle / Add Preview as buttons + hotkeys). Any "DockX: ..." Tools item
+  mentioned elsewhere in this doc is pre-0.28.1 history.
 - **Starter layout gallery / one-click presets** (Joey 2026-08-07) -- headline onboarding.
   Curated one-click layouts (flagship: "Vertical Chat Focus" -- full-height chat + stacked
   side panels, collapsed preview -> Program dock) so a normal streamer gets the flexible
