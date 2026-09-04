@@ -191,6 +191,15 @@ void showGuide(QWidget *parent)
 		"height chat next to a column of tools finally works. Happy with a "
 		"layout? Save it in Tools &gt; DockX and give it a hotkey.");
 
+	QLabel *folders = new QLabel("<b>Tip:</b> the new Scene Folders dock does everything the OBS Scenes "
+				     "panel does, plus folders, search, colors, and your sources under each "
+				     "scene. Drop it where your Scenes panel sits and you get the upgrade "
+				     "without losing anything.",
+				     dlg);
+	folders->setWordWrap(true);
+	folders->setTextFormat(Qt::RichText);
+	v->addWidget(folders);
+
 	QLabel *optional = new QLabel("Prefer to keep things simple? DockX stays out of your way. Optional "
 				      "extras, like Align &amp; distribute tools for lining sources up on the "
 				      "canvas, start switched off. Turn on anything you want any time in "
