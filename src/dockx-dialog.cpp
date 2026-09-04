@@ -37,6 +37,9 @@ GPL v2, see plugin-main.cpp for the full notice.
 #include <QPushButton>
 #include <QSpinBox>
 #include <QTabWidget>
+#include <QTabBar>
+#include <QScreen>
+#include <QGuiApplication>
 #include <QHeaderView>
 #include <QTreeWidget>
 #include <QVBoxLayout>
@@ -313,7 +316,7 @@ void showDialog(const QString &initialTab)
 	QMainWindow *main = mainWindow();
 	QDialog dlg(main);
 	dlg.setWindowTitle("DockX");
-	dlg.setMinimumSize(980, 520); /* wide enough that every tab shows */
+	dlg.setMinimumSize(980, 520); /* floor; widened below to fit the tab row */
 
 	QVBoxLayout *root = new QVBoxLayout(&dlg);
 	QTabWidget *tabs = new QTabWidget(&dlg);
@@ -2112,6 +2115,15 @@ void showDialog(const QString &initialTab)
 				break;
 			}
 	}
+
+	/* open wide enough that every tab is visible (measured, so new tabs
+	   never reintroduce the scroll arrows), capped to the screen */
+	int wantWidth = tabs->tabBar()->sizeHint().width() + 48;
+	QScreen *scr = main ? main->screen() : QGuiApplication::primaryScreen();
+	if (scr)
+		wantWidth = qMin(wantWidth, (int)(scr->availableGeometry().width() * 0.92));
+	if (wantWidth > dlg.minimumWidth())
+		dlg.setMinimumWidth(wantWidth);
 
 	dlg.exec();
 }
