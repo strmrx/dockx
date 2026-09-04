@@ -407,10 +407,17 @@ private:
 		}
 		SetWindowLongPtr(hwnd, GWLP_HWNDPARENT, obsWin);
 		owned = GetWindowLongPtr(hwnd, GWLP_HWNDPARENT) == obsWin;
-		if (owned)
+		if (owned) {
 			dropTopmost(); /* the shell owns stacking now */
-		else
+			/* changing the owner does NOT re-stack an already visible
+			   window; without this lift, a window pinned while OBS is
+			   focused lands BEHIND OBS and looks like nothing happened
+			   (Joey's taste-test) */
+			SetWindowPos(hwnd, HWND_TOP, 0, 0, 0, 0, SWP_NOMOVE | SWP_NOSIZE | SWP_NOACTIVATE);
+			obs_log(LOG_INFO, "placeholder %d: window joined OBS's window group", id);
+		} else {
 			obs_log(LOG_INFO, "placeholder %d: window refused OBS ownership, using on-top fallback", id);
+		}
 	}
 
 	void releaseOwnership()
@@ -484,12 +491,20 @@ private:
 				  abs((int)(theirs.bottom - theirs.top) - (int)(mine.bottom - mine.top)) <= 1;
 
 		if (owned) {
-			/* the shell keeps it stacked with OBS; we only track the
-			   spot */
+			/* the shell keeps it stacked with OBS across activation
+			   changes; we track the spot, and while the user is IN
+			   OBS we also lift it back above OBS (repositioning can
+			   happen right after adoption, before any activation has
+			   let the shell enforce the owned-above-owner order) */
 			if (fits)
 				return;
-			SetWindowPos(hwnd, nullptr, mine.left, mine.top, mine.right - mine.left, mine.bottom - mine.top,
-				     SWP_NOZORDER | SWP_NOACTIVATE);
+			HWND fg = GetForegroundWindow();
+			DWORD fgPid = 0;
+			if (fg)
+				GetWindowThreadProcessId(fg, &fgPid);
+			const UINT zflag = (fg && fgPid == GetCurrentProcessId()) ? 0 : SWP_NOZORDER;
+			SetWindowPos(hwnd, HWND_TOP, mine.left, mine.top, mine.right - mine.left,
+				     mine.bottom - mine.top, SWP_NOACTIVATE | zflag);
 		} else {
 			/* fallback for windows that refuse ownership: on top
 			   only while OBS or the pinned app itself is in use */
