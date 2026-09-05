@@ -353,6 +353,9 @@ private:
 	bool styleStripped = false;
 	LONG_PTR origOwner = 0;
 	bool owned = false;
+	bool ownershipVetoed = false; /* owned moves proved ineffective; stay on-top */
+	int ownedMoveFails = 0;
+	bool warnedMoveFail = false;
 
 	/* seamless look: drop the pinned window's title bar + sizing frame
 	   while pinned so it reads as pure content; the original style is
@@ -394,7 +397,7 @@ private:
 	   fall back to on-top-while-engaged */
 	void applyOwnership()
 	{
-		if (owned || !hwnd || !IsWindow(hwnd))
+		if (owned || ownershipVetoed || !hwnd || !IsWindow(hwnd))
 			return;
 		QMainWindow *m = mainWindow();
 		if (!m)
@@ -442,6 +445,8 @@ private:
 			topmostApplied = false;
 			styleStripped = false; /* a recreated window has its frame back */
 			owned = false;
+			ownershipVetoed = false;
+			ownedMoveFails = 0;
 			setMinimumSize(80, 60);
 		}
 		/* OBS minimized: an owned window hides with it automatically
@@ -479,8 +484,9 @@ private:
 		applyOwnership();
 
 		/* the spot is visible: the window belongs in it, even if
-		   something minimized it meanwhile */
-		if (IsIconic(hwnd))
+		   something minimized it meanwhile. A MAXIMIZED window ignores
+		   resize requests, so bring it to normal first */
+		if (IsIconic(hwnd) || IsZoomed(hwnd))
 			ShowWindow(hwnd, SW_SHOWNOACTIVATE);
 
 		RECT theirs = {};
@@ -503,8 +509,32 @@ private:
 			if (fg)
 				GetWindowThreadProcessId(fg, &fgPid);
 			const UINT zflag = (fg && fgPid == GetCurrentProcessId()) ? 0 : SWP_NOZORDER;
-			SetWindowPos(hwnd, HWND_TOP, mine.left, mine.top, mine.right - mine.left,
-				     mine.bottom - mine.top, SWP_NOACTIVATE | zflag);
+			const BOOL ok = SetWindowPos(hwnd, HWND_TOP, mine.left, mine.top, mine.right - mine.left,
+						     mine.bottom - mine.top, SWP_NOACTIVATE | zflag);
+			const DWORD err = GetLastError();
+
+			/* trust nothing: verify the window actually went where we
+			   sent it. If owned-mode repositioning has no effect on
+			   this window (Joey hit a silent no-op pin), give up on
+			   ownership and go back to the proven on-top approach */
+			RECT check = {};
+			GetWindowRect(hwnd, &check);
+			const bool landed = abs((int)check.left - (int)mine.left) <= 8 &&
+					    abs((int)check.top - (int)mine.top) <= 8;
+			if (!ok || !landed) {
+				if (++ownedMoveFails >= 3) {
+					obs_log(LOG_WARNING,
+						"placeholder %d: owned reposition not taking effect "
+						"(ok=%d err=%lu at %ld,%ld want %ld,%ld), reverting to on-top mode",
+						id, (int)ok, (unsigned long)err, (long)check.left, (long)check.top,
+						(long)mine.left, (long)mine.top);
+					releaseOwnership();
+					ownershipVetoed = true;
+					ownedMoveFails = 0;
+				}
+			} else {
+				ownedMoveFails = 0;
+			}
 		} else {
 			/* fallback for windows that refuse ownership: on top
 			   only while OBS or the pinned app itself is in use */
@@ -520,8 +550,17 @@ private:
 			}
 			if (fits && topmostApplied)
 				return;
-			SetWindowPos(hwnd, HWND_TOPMOST, mine.left, mine.top, mine.right - mine.left,
-				     mine.bottom - mine.top, SWP_NOACTIVATE);
+			if (!SetWindowPos(hwnd, HWND_TOPMOST, mine.left, mine.top, mine.right - mine.left,
+					  mine.bottom - mine.top, SWP_NOACTIVATE)) {
+				if (!warnedMoveFail) {
+					warnedMoveFail = true;
+					obs_log(LOG_WARNING,
+						"placeholder %d: SetWindowPos failed (err %lu) -- "
+						"target may be elevated; pinning cannot control it",
+						id, (unsigned long)GetLastError());
+				}
+				return;
+			}
 			topmostApplied = true;
 			if (fits)
 				return; /* only the z order needed reasserting */
