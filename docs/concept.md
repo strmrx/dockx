@@ -236,6 +236,19 @@ off-thesis: encoders, multi-output, NDI, VST, replay buffer.
   minimum, the placeholder learns it and the dock can't be dragged smaller -- the layout
   never lies) and SEAMLESS LOOK (opt-in per placeholder: hides the pinned window's title
   bar/border while pinned, restored on unpin), both explained in the tab's hint text.
+  v0.31.0 (Joey's first real-use feedback, 2026-09-08) makes re-finding SIZE-AWARE: the pin
+  stores the window's size at pick time (`pin_w`/`pin_h`) and re-find rejects any candidate
+  much bigger in EITHER dimension -- fixes OBS-starts-first grabbing the app's whole main
+  window when panel + main share a title (the old spot-based cap required too-big in BOTH
+  dimensions and a tall skinny slot let the main window through). Launch order no longer
+  matters; the dock paints "Waiting for: <window>" while the panel isn't out yet. The
+  learned smart minimum now auto-forgets every ~15s (relearns in a tick if still real), so
+  an app whose innards shrank no longer leaves the dock stuck large; plus a right click
+  "Reset size limit" escape hatch. Known hard limits (documented in the tab's hint text):
+  a third party app's true minimum size can't be overridden (trim panels inside the app to
+  shrink it further), and DockX can't pop a re-docked panel back out (one manual click per
+  app restart). A window truly identical to another in title, program AND size stays
+  ambiguous by nature -- DockX picks the closest match; a wrong grab is fixed by re-pinning.
 - **Tools menu slimmed to ONE entry** (Joey 2026-09-04) -- SHIPPED v0.28.1. The Tools menu had
   grown eight "DockX: ..." lines; Joey called it overwhelming/info overload and picked the
   single-entry option. Tools now shows just **"DockX"** (opens the dialog); every removed item

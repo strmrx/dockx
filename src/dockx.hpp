@@ -77,10 +77,14 @@ struct SourceDockEntry {
    window can be pinned over it and follows the dock */
 struct PlaceholderEntry {
 	int id = 0;
-	QString label;         /* centered text; also the dock title. May be empty */
-	QString color;         /* "#rrggbb" background; empty = theme default */
-	QString pinTitle;      /* title of the window pinned over this dock; empty = none */
-	QString pinExe;        /* lower-case exe basename of the pinned app; re-find guard */
+	QString label;    /* centered text; also the dock title. May be empty */
+	QString color;    /* "#rrggbb" background; empty = theme default */
+	QString pinTitle; /* title of the window pinned over this dock; empty = none */
+	QString pinExe;   /* lower-case exe basename of the pinned app; re-find guard */
+	int pinW = 0;     /* the window's size when it was picked: the strongest re-find
+	                          tell between an app's panel and its MAIN window when both
+	                          share a title (0 = pinned before this was stored) */
+	int pinH = 0;
 	bool seamless = false; /* strip the pinned window's title bar + border while pinned */
 };
 

@@ -204,6 +204,8 @@ void stateLoad()
 			e.color = QString::fromUtf8(obs_data_get_string(o, "color"));
 			e.pinTitle = QString::fromUtf8(obs_data_get_string(o, "pin_title"));
 			e.pinExe = QString::fromUtf8(obs_data_get_string(o, "pin_exe"));
+			e.pinW = (int)obs_data_get_int(o, "pin_w");
+			e.pinH = (int)obs_data_get_int(o, "pin_h");
 			e.seamless = obs_data_get_bool(o, "seamless");
 			if (e.id > 0)
 				g_state.placeholders.push_back(e);
@@ -393,6 +395,8 @@ void stateSave()
 		obs_data_set_string(o, "color", e.color.toUtf8().constData());
 		obs_data_set_string(o, "pin_title", e.pinTitle.toUtf8().constData());
 		obs_data_set_string(o, "pin_exe", e.pinExe.toUtf8().constData());
+		obs_data_set_int(o, "pin_w", e.pinW);
+		obs_data_set_int(o, "pin_h", e.pinH);
 		obs_data_set_bool(o, "seamless", e.seamless);
 		obs_data_array_push_back(phs, o);
 		obs_data_release(o);

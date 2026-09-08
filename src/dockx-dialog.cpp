@@ -1657,14 +1657,28 @@ void showDialog(const QString &initialTab)
 	});
 
 	QLabel *phHint =
-		new QLabel("Tip: every option here is also one right click away on the placeholder dock itself. "
-			   "Its position saves with your dock layouts, like any other dock. Two things worth "
-			   "knowing about pinned windows: DockX resizes the window to fill the spot, but every "
-			   "window has a minimum size it refuses to shrink below. When that happens, the "
-			   "placeholder learns that minimum and won't let you drag the dock any smaller, so the "
-			   "space you see is always the space the window really fits. And Seamless hides the "
-			   "pinned window's own title bar and border so it reads as pure content living in OBS; "
-			   "turning it off or unpinning brings the frame right back (so does restarting that app).",
+		new QLabel("Tip: every option here is also one right click away on the placeholder dock itself, "
+			   "and its position saves with your dock layouts like any other dock.\n\n"
+			   "Good to know about pinned windows:\n"
+			   "•  DockX resizes the window to fill the spot, but every app has a true minimum "
+			   "size that DockX cannot override. If the window refuses to shrink, the placeholder "
+			   "learns that minimum and stops you dragging the dock smaller, so the space you see is "
+			   "always the space the window really fits. You can often make an app shrink further by "
+			   "trimming what is inside it (closing extra panels or options in that app); adding more "
+			   "can raise its minimum.\n"
+			   "•  If the app's minimum changes while pinned, DockX notices and relearns within "
+			   "about 15 seconds. To fix it right away, right click the placeholder, choose Reset "
+			   "size limit, then drag the dock to the size you want.\n"
+			   "•  Some apps (TikTok Live Studio, for one) pull their popped out panel back into "
+			   "the main window whenever the app restarts. DockX remembers the exact window you "
+			   "pinned by its program and size, so it will not grab the app's main window by mistake; "
+			   "the spot shows Waiting until you pop the panel back out, then grabs it within a "
+			   "moment. It does not matter which program you open first.\n"
+			   "•  When a panel and its app share a name in the pin picker, the size on the row "
+			   "tells them apart: pin the small one.\n"
+			   "•  Seamless hides the pinned window's own title bar and border so it reads as "
+			   "pure content living in OBS; turning it off or unpinning brings the frame right back "
+			   "(so does restarting that app).",
 			   phTab);
 	phHint->setWordWrap(true);
 	phv->addWidget(phHint);

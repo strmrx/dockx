@@ -143,32 +143,45 @@ static BOOL CALLBACK pinFindCb(HWND h, LPARAM lp)
    Live Studio re-dock their popped-out chat on restart, so for a while the
    only title match is the app's whole MAIN window -- and yanking that into
    the slot is far worse than waiting for the user to pop the chat back out
-   (Joey hit exactly this). So: never adopt a window that is much bigger
-   than the spot in BOTH dimensions, and among survivors prefer exact title,
-   then the smallest window (panels are small, main windows are big). */
-static HWND findPinTarget(const QString &title, const QString &exe, int spotW, int spotH)
+   (Joey hit exactly this). Titles are often IDENTICAL between a panel and
+   its main window, so the pin remembers the window's size from when it was
+   picked: a candidate much bigger than that in EITHER dimension reads as
+   the main window -- skip it and wait. (The old spot-based cap failed Joey
+   because it required too-big in BOTH dimensions; a tall skinny chat slot
+   made the height cap huge and the main window slipped through.) Pins from
+   before the size was stored keep the legacy spot cap. Among survivors
+   prefer exact title, then the size closest to the remembered one (else
+   smallest -- panels are small, main windows are big). */
+static HWND findPinTarget(const QString &title, const QString &exe, int savedW, int savedH, int spotW, int spotH)
 {
 	PinFindCtx ctx;
 	ctx.wantedTitle = title;
 	ctx.wantedExe = exe;
 	EnumWindows(pinFindCb, reinterpret_cast<LPARAM>(&ctx));
-	const int capW = qMax(2 * spotW, 800);
-	const int capH = qMax(2 * spotH, 800);
+	const bool haveSaved = savedW > 0 && savedH > 0;
+	const int capW = haveSaved ? qMax(2 * savedW, 480) : qMax(2 * spotW, 800);
+	const int capH = haveSaved ? qMax(2 * savedH, 480) : qMax(2 * spotH, 800);
+	const long long savedArea = (long long)savedW * savedH;
 	HWND best = nullptr;
 	bool bestExact = false;
-	long long bestArea = 0;
+	long long bestScore = 0;
 	for (const auto &hit : ctx.hits) {
 		RECT r = {};
 		if (!GetWindowRect(hit.first, &r))
 			continue;
 		const int w = (int)(r.right - r.left), hgt = (int)(r.bottom - r.top);
-		if (w > capW && hgt > capH)
-			continue; /* reads as the app's main window, not a popped-out panel */
+		if (haveSaved) {
+			if (w > capW || hgt > capH)
+				continue; /* far bigger than what was pinned = the main window */
+		} else if (w > capW && hgt > capH) {
+			continue; /* legacy pin without a stored size */
+		}
 		const long long area = (long long)w * hgt;
-		if (!best || (hit.second && !bestExact) || (hit.second == bestExact && area < bestArea)) {
+		const long long score = haveSaved ? qAbs(area - savedArea) : area;
+		if (!best || (hit.second && !bestExact) || (hit.second == bestExact && score < bestScore)) {
 			best = hit.first;
 			bestExact = hit.second;
-			bestArea = area;
+			bestScore = score;
 		}
 	}
 	return best;
@@ -242,6 +255,17 @@ public:
 #endif
 	}
 
+	/* user-triggered escape hatch for a stale learned minimum (the app
+	   got smaller inside, the dock stayed stuck large); safe to fire any
+	   time because a real minimum relearns on the next tick */
+	void resetSizeLimit()
+	{
+		setMinimumSize(80, 60);
+#ifdef _WIN32
+		minForgetTicks = 0;
+#endif
+	}
+
 protected:
 	void paintEvent(QPaintEvent *) override
 	{
@@ -279,9 +303,17 @@ protected:
 		p.setFont(font());
 		QString hint;
 		const bool pinned = e && !e->pinTitle.isEmpty();
-		if (pinned)
+		if (pinned) {
 			hint = QString("Pinned: %1").arg(e->pinTitle);
-		else if (pinningSupported())
+#ifdef _WIN32
+			/* tell the user WHY the spot is empty: the window does
+			   not exist yet (e.g. the app pulled its panel back in
+			   after a restart) and DockX is deliberately waiting
+			   instead of grabbing the app's main window */
+			if (!hwnd)
+				hint = QString("Waiting for: %1 (open it, or pop the panel back out)").arg(e->pinTitle);
+#endif
+		} else if (pinningSupported())
 			hint = "Right click to pin a window here";
 		else
 			hint = "Right click for options";
@@ -331,6 +363,8 @@ protected:
 				seam->setChecked(e->seamless);
 				QObject::connect(seam, &QAction::triggered, this,
 						 [this](bool on) { setSeamless(id, on); });
+				QAction *rs = menu.addAction("Reset size limit (relearn how small it fits)");
+				QObject::connect(rs, &QAction::triggered, this, [this]() { resetSizeLimit(); });
 			}
 		} else {
 			QAction *na = menu.addAction("Window pinning: Windows only for now");
@@ -356,6 +390,7 @@ private:
 	bool ownershipVetoed = false; /* owned moves proved ineffective; stay on-top */
 	int ownedMoveFails = 0;
 	bool warnedMoveFail = false;
+	int minForgetTicks = 0; /* countdown to forgetting a learned window minimum */
 
 	/* seamless look: drop the pinned window's title bar + sizing frame
 	   while pinned so it reads as pure content; the original style is
@@ -448,6 +483,7 @@ private:
 			ownershipVetoed = false;
 			ownedMoveFails = 0;
 			setMinimumSize(80, 60);
+			update(); /* hint flips to the waiting message */
 		}
 		/* OBS minimized: an owned window hides with it automatically
 		   (part of OBS, like its own dialogs); nothing to do */
@@ -474,14 +510,29 @@ private:
 		if (!GetWindowRect(reinterpret_cast<HWND>(winId()), &mine))
 			return;
 
-		if (!hwnd)
-			hwnd = findPinTarget(e->pinTitle, e->pinExe, (int)(mine.right - mine.left),
+		if (!hwnd) {
+			hwnd = findPinTarget(e->pinTitle, e->pinExe, e->pinW, e->pinH, (int)(mine.right - mine.left),
 					     (int)(mine.bottom - mine.top));
+			if (hwnd)
+				update(); /* hint flips from waiting to pinned */
+		}
 		if (!hwnd)
 			return; /* e.g. the app re-docked its panel; wait for it */
 
 		applySeamless(e->seamless);
 		applyOwnership();
+
+		/* a learned minimum must not outlive its reason: the app's own
+		   minimum SHRINKS when the user trims panels inside it (Joey's
+		   TikTok gift panel stuck the dock large). Forget it every ~15s;
+		   if it is still real, the next too-small resize attempt
+		   relearns it within a tick. Forgetting never resizes anything
+		   by itself, it only re-allows dragging the dock smaller */
+		if (++minForgetTicks >= 60) {
+			minForgetTicks = 0;
+			if (minimumWidth() > 80 || minimumHeight() > 60)
+				setMinimumSize(80, 60);
+		}
 
 		/* the spot is visible: the window belongs in it, even if
 		   something minimized it meanwhile. A MAXIMIZED window ignores
@@ -705,7 +756,10 @@ void pinWindow(int id, QWidget *parent)
 	QVBoxLayout *v = new QVBoxLayout(&dlg);
 	QLabel *intro = new QLabel("Pick the window to keep on top of OBS, sized exactly over this "
 				   "placeholder. It follows the placeholder wherever you dock it. "
-				   "Unpin any time from the placeholder's right click menu.",
+				   "When an app's popped out panel shares a name with the app itself, "
+				   "the size at the end of the row tells them apart: pin the SMALL "
+				   "one (the panel, not the whole app). Unpin any time from the "
+				   "placeholder's right click menu.",
 				   &dlg);
 	intro->setWordWrap(true);
 	v->addWidget(intro);
@@ -739,15 +793,24 @@ void pinWindow(int id, QWidget *parent)
 	if (!it)
 		return;
 
+	const HWND picked = reinterpret_cast<HWND>((quintptr)it->data(Qt::UserRole).toULongLong());
 	e->pinTitle = it->data(Qt::UserRole + 1).toString();
-	e->pinExe = exeBaseName(reinterpret_cast<HWND>((quintptr)it->data(Qt::UserRole).toULongLong()));
+	e->pinExe = exeBaseName(picked);
+	/* remember the window's size: on re-find it is the strongest tell
+	   between this panel and the app's main window (titles often match) */
+	e->pinW = e->pinH = 0;
+	RECT pr = {};
+	if (GetWindowRect(picked, &pr)) {
+		e->pinW = (int)(pr.right - pr.left);
+		e->pinH = (int)(pr.bottom - pr.top);
+	}
 	stateSave();
 	if (PlaceholderPanel *p = panelFor(id)) {
 		p->adoptTarget((quintptr)it->data(Qt::UserRole).toULongLong());
 		p->update();
 	}
-	obs_log(LOG_INFO, "placeholder %d pinned window \"%s\" (%s)", id, e->pinTitle.toUtf8().constData(),
-		e->pinExe.toUtf8().constData());
+	obs_log(LOG_INFO, "placeholder %d pinned window \"%s\" (%s, %dx%d)", id, e->pinTitle.toUtf8().constData(),
+		e->pinExe.toUtf8().constData(), e->pinW, e->pinH);
 #else
 	(void)id;
 	(void)parent;
@@ -772,6 +835,7 @@ void unpinWindow(int id)
 		return;
 	e->pinTitle.clear();
 	e->pinExe.clear();
+	e->pinW = e->pinH = 0;
 	stateSave();
 	if (PlaceholderPanel *p = panelFor(id)) {
 		p->releaseTarget();
