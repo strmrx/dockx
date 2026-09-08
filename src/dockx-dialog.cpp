@@ -1676,6 +1676,10 @@ void showDialog(const QString &initialTab)
 			   "moment. It does not matter which program you open first.\n"
 			   "•  When a panel and its app share a name in the pin picker, the size on the row "
 			   "tells them apart: pin the small one.\n"
+			   "•  Rare edge case: if an app ever shows two windows with the same name, program, "
+			   "AND size, DockX cannot tell them apart and may grab the wrong one after a restart. "
+			   "The fix is quick: right click the placeholder, unpin, and pin the right window "
+			   "again.\n"
 			   "•  Seamless hides the pinned window's own title bar and border so it reads as "
 			   "pure content living in OBS; turning it off or unpinning brings the frame right back "
 			   "(so does restarting that app).",
