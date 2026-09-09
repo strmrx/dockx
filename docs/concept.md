@@ -97,6 +97,18 @@ off-thesis: encoders, multi-output, NDI, VST, replay buffer.
 ## Roadmap (in rough order; folds in the validated demand list above -- Joey 2026-07-30:
 ## ALL remaining items from that list stay on this roadmap; DockX is the ONE mega plugin,
 ## every OBS QoL fix ships in this single download, never ten separate plugins)
+- **DockX stats dock** (Joey 2026-09-09, greenlit as an idea: "love it... is there a
+  world we can recreate our own stats panel"): OBS's Stats dock demands ~590px minimum
+  width and jams any column it sits in (the exact wall Joey hit). Build our own from
+  the same public counters (CPU, memory, disk, FPS, render time, lagged/skipped frames,
+  per output dropped frames + bitrate; OBS frontend's window-basic-stats.cpp is the
+  reference) with a RESPONSIVE layout: wide = grid, narrow = stacked label/value, tiny
+  = a color coded health strip (FPS, CPU, dropped, bitrate). 1s QTimer polling, read
+  only, negligible cost. "A stats panel that actually fits in a corner."
+- **Resize blocker hint** (Joey 2026-09-09: "cool idea... love it"): when a dock
+  divider drag hits a wall, tell the user WHICH dock's minimum size is blocking (e.g.
+  a toast or a brief highlight on the stubborn dock). Docks can only shrink to the
+  widest minimum in their row/column; today that wall is invisible and reads as a bug.
 - Scene Folders visual pass (Joey: must read as large/clear as the native panel) + his
   v0.4/v0.5 test feedback
 - Source docks / preview-as-a-dock (demand #2, 227k downloads proof; unlocks multiview,
