@@ -190,26 +190,6 @@ off-thesis: encoders, multi-output, NDI, VST, replay buffer.
   now also flips obs_frontend_set_preview_enabled, the same switch as Disable Preview.
   Caveat that drives the next item: a Program view is view-only, so a collapsed preview
   loses click-drag scene editing -- the editable Preview dock below is the real payoff.
-  v0.45.0 (2026-09-09), the frozen divider + settling fix: Joey proved live that BOTH his
-  open layout bugs (the divider between dock columns freezing, and the layout physically
-  "settling"/nudging for a while after changes) only happen while the preview is
-  collapsed. Root cause: QMainWindow dock areas never trade space with each other
-  directly, only with the CENTRAL WIDGET; hiding it removed the mediator entirely, so the
-  between-areas boundary froze and the space negotiation drifted. Fix, two parts:
-  (1) collapse now pins the central widget to ZERO SIZE (visible, min+max forced 0x0,
-  original limits restored on expand) instead of hiding it, so the layout keeps a fully
-  constrained center item and stops drifting -- preview rendering stays disabled via
-  obs_frontend_set_preview_enabled, so the v0.21.1 stutter fix is untouched; (2) new file
-  dockx-divider.cpp: even a zero-size center has no space to give, so the between-areas
-  separators stay frozen; DockX overlays thin invisible drag handles on exactly those
-  boundaries (two visible docked docks from DIFFERENT areas, edge to edge; refreshed by a
-  400ms timer while collapsed) and performs the drag itself, both directions. Same-area
-  separators stay native and are never covered; handles tear down the moment the preview
-  expands. Rig test same day: settling CONFIRMED fixed; the divider half needed v0.45.1 --
-  QMainWindow::resizeDocks (the first drag mechanism) proved to silently refuse trading
-  space ACROSS dock areas, so the drag now PINS the near-side dock's size (min = max =
-  target) for the duration of the drag, a hard constraint the layout cannot refuse, and
-  releases the pin on mouse up.
 - **Fully interactive (editable) Preview dock** (Joey 2026-08-07) -- FIRST SLICE SHIPPED
   v0.22.0, SECOND SLICE (resize + rotate + snap-to-sources) SHIPPED v0.23.0, THIRD SLICE
   (multi-item group resize + Alt-drag edge crop) SHIPPED v0.24.0 (2026-08-28).

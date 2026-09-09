@@ -4,20 +4,12 @@ GPL v2, see plugin-main.cpp for the full notice.
 
 OBS's video canvas is the QMainWindow central widget, not a dock: docks can
 only ring it, so it always claims a fixed block in the middle of the window.
-Collapsing it hands the whole window to the docks; a live Program/Preview
-source dock (dockx-sourcedocks.cpp) becomes the movable, resizable stand in.
-Collapse = pin the widget to ZERO SIZE (visible, min and max forced to 0x0)
-AND disable the preview display (the switch OBS's own "Disable Preview"
-flips). Disabling is required: a zero sized or hidden window does NOT stop
-its display from rendering, and presenting frames into one stalls the
-graphics pipeline on Windows (the v0.21.0 stutter bug).
-Zero size instead of hidden (v0.45.0): a HIDDEN central widget leaves the
-QMainWindow layout with no center item at all, which froze the separator
-between opposite dock areas AND let the layout drift ("settling") -- dock
-areas only ever negotiate space through the center. Pinned at 0x0 the center
-stays in the layout as a fully constrained item, so the negotiation is
-stable; dockx-divider.cpp then bridges the still-frozen between-areas
-separators with its own drag handles.
+Hiding it hands the whole window to the docks; a live Program/Preview source
+dock (dockx-sourcedocks.cpp) becomes the movable, resizable stand in.
+Collapse = hide the widget AND disable the preview display (the switch OBS's
+own "Disable Preview" flips). Both are required: a hidden window does NOT
+stop its display from rendering, and presenting frames into a hidden window
+stalls the graphics pipeline on Windows (the v0.21.0 stutter bug).
 Stream/record/sources keep running throughout.
 */
 
@@ -54,34 +46,16 @@ void apply()
 		return;
 	}
 	const bool on = state().previewCollapsed;
-	/* tracked here, not read off the widget: collapsed no longer hides it */
-	static bool constrained = false;
-	static QSize savedMin, savedMax;
-	if (constrained == on) {
-		divider::setActive(on);
+	if (c->isHidden() == on)
 		return;
-	}
-	/* the preview display must actually STOP rendering, not just shrink:
-	   presenting frames into a zero sized or hidden window stalls the
-	   graphics pipeline on Windows (v0.21.0 bug: whole-UI stutter). This is
-	   the same switch OBS's own "Disable Preview" flips. Studio mode never
-	   reaches here collapsed (onStudioModeEnabled expands first) */
+	/* the preview display must actually STOP rendering, not just lose its
+	   window: presenting frames into a hidden window stalls the graphics
+	   pipeline on Windows (v0.21.0 bug: whole-UI stutter). This is the same
+	   switch OBS's own "Disable Preview" flips. Studio mode never reaches
+	   here collapsed (onStudioModeEnabled expands first) */
 	if (on && !obs_frontend_preview_program_mode_active())
 		obs_frontend_set_preview_enabled(false);
-	if (on) {
-		savedMin = c->minimumSize();
-		savedMax = c->maximumSize();
-		c->setMinimumSize(0, 0);
-		c->setMaximumSize(0, 0);
-	} else {
-		c->setMinimumSize(savedMin);
-		c->setMaximumSize(savedMax.isValid() ? savedMax : QSize(QWIDGETSIZE_MAX, QWIDGETSIZE_MAX));
-	}
-	/* stays VISIBLE either way: a hidden center drops out of the layout and
-	   the dock areas lose their space mediator (frozen separators + drift) */
-	c->setVisible(true);
-	constrained = on;
-	divider::setActive(on);
+	c->setVisible(!on);
 	if (!on && !obs_frontend_preview_program_mode_active())
 		obs_frontend_set_preview_enabled(true);
 	/* collapsed with no visible video dock = a video-less OBS; surface ONE

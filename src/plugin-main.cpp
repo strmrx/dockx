@@ -82,7 +82,6 @@ static void on_frontend_event(enum obs_frontend_event event, void *)
 		dockx::folders::shutdown();
 		dockx::placeholders::shutdown(); /* drops always-on-top from pinned windows */
 		dockx::stats::shutdown();
-		dockx::divider::shutdown();
 		dockx::thumbs::shutdown();
 		dockx::panels::shutdown();
 		break;
