@@ -190,6 +190,18 @@ off-thesis: encoders, multi-output, NDI, VST, replay buffer.
   now also flips obs_frontend_set_preview_enabled, the same switch as Disable Preview.
   Caveat that drives the next item: a Program view is view-only, so a collapsed preview
   loses click-drag scene editing -- the editable Preview dock below is the real payoff.
+  2026-09-09, the 0.45.x divider/settling attempt (BUILT, RIG-TESTED, REVERTED same day;
+  code in git history at `301ef9f`/`4119b25`, revert `c3a4384`): hiding the central widget
+  is why the separator between OPPOSITE dock areas freezes and the layout "settles"/drifts
+  (areas only trade space through the center). v0.45.0 pinned the center to zero size
+  (visible, min=max 0x0) -- that half WORKED on the rig (settling gone) -- and bridged the
+  still-frozen between-areas boundaries with invisible drag handles via
+  QMainWindow::resizeDocks, which PROVED to silently refuse cross-area trades. v0.45.1
+  swapped the drag to pinning the dock's min=max each mouse move; the rig got display
+  abnormalities, a snap-back on release, and a d3d11 graphics-thread crash (no dockx
+  frames; suspect: per-move relayouts resizing every video dock's obs_display). Reverted
+  to 0.44.0. Next try lives in handoff.md "LESSONS": ship the zero-size-center half alone
+  first; any drag mechanism must throttle relayouts and make sizes stick.
 - **Fully interactive (editable) Preview dock** (Joey 2026-08-07) -- FIRST SLICE SHIPPED
   v0.22.0, SECOND SLICE (resize + rotate + snap-to-sources) SHIPPED v0.23.0, THIRD SLICE
   (multi-item group resize + Alt-drag edge crop) SHIPPED v0.24.0 (2026-08-28).
