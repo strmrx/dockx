@@ -17,9 +17,11 @@ GPL v2, see plugin-main.cpp for the full notice.
 #include <util/platform.h>
 #include <util/config-file.h>
 
+#include <QDockWidget>
 #include <QGridLayout>
 #include <QHBoxLayout>
 #include <QLabel>
+#include <QMainWindow>
 #include <QPointer>
 #include <QPushButton>
 #include <QResizeEvent>
@@ -55,7 +57,7 @@ struct Row {
 
 class StatsPanel : public QWidget {
 public:
-	enum { R_FPS = 0, R_CPU, R_MEM, R_DISK, R_RENDER, R_RLAG, R_ELAG, R_STREAM, R_REC, R_COUNT };
+	enum { R_FPS = 0, R_CPU, R_MEM, R_DISK, R_RENDER, R_RLAG, R_ELAG, R_NETDROP, R_STREAM, R_REC, R_COUNT };
 
 	std::vector<Row> rows;
 	QWidget *content = nullptr;
@@ -118,7 +120,9 @@ public:
 			{"Render time", false, "Average time to draw one frame. Under a few ms is healthy."},
 			{"Render lag", false, "Frames missed because rendering could not keep up."},
 			{"Encode lag", false, "Frames skipped because the encoder could not keep up."},
-			{"Stream", true, "Live status, bitrate, and dropped frames (network)."},
+			{"Dropped (network)", true,
+			 "Frames dropped because your connection could not keep up. Counts while streaming."},
+			{"Stream", true, "Live status and bitrate."},
 			{"Recording", true, "Recording status and bitrate."},
 		};
 		rows.resize(R_COUNT);
@@ -271,7 +275,7 @@ public:
 		const uint32_t skipTotal = video ? video_output_get_total_frames(video) - skipTotalBase : 0;
 		setRow(R_ELAG, lagText(skip, skipTotal, col), col);
 
-		/* stream: status + bitrate + dropped (network) */
+		/* stream: status + bitrate, network drops in their own row */
 		obs_output_t *so = obs_frontend_get_streaming_output();
 		if (so && obs_output_active(so)) {
 			if (!streamWasActive) { /* fresh session: counters start over */
@@ -283,17 +287,14 @@ public:
 			const uint64_t bytes = obs_output_get_total_bytes(so);
 			const double kbps = dt > 0.0 ? (double)(bytes - streamBytes) * 8.0 / dt / 1000.0 : 0.0;
 			streamBytes = bytes;
-			const int dropped = obs_output_get_frames_dropped(so) - streamDropBase;
-			const int total = obs_output_get_total_frames(so) - streamTotalBase;
-			const double pct = total > 0 ? 100.0 * (double)dropped / (double)total : 0.0;
-			const char *sCol = pct >= 5.0 ? COL_BAD : (pct >= 1.0 ? COL_WARN : nullptr);
-			setRow(R_STREAM,
-			       QString("Live · %1 kb/s · %2% dropped")
-				       .arg(QString::number(kbps, 'f', 0), QString::number(pct, 'f', 1)),
-			       sCol);
+			setRow(R_STREAM, QString("Live · %1 kb/s").arg(QString::number(kbps, 'f', 0)), nullptr);
+			const uint32_t dropped = (uint32_t)qMax(0, obs_output_get_frames_dropped(so) - streamDropBase);
+			const uint32_t total = (uint32_t)qMax(0, obs_output_get_total_frames(so) - streamTotalBase);
+			setRow(R_NETDROP, lagText(dropped, total, col), col);
 		} else {
 			streamWasActive = false;
 			setRow(R_STREAM, "Inactive", nullptr);
+			setRow(R_NETDROP, "-", nullptr);
 		}
 		obs_output_release(so);
 
@@ -329,6 +330,16 @@ void createDock()
 		return;
 	}
 	g_panel = panel;
+}
+
+void showDock()
+{
+	QMainWindow *m = static_cast<QMainWindow *>(obs_frontend_get_main_window());
+	QDockWidget *d = m ? m->findChild<QDockWidget *>("dockx_stats") : nullptr;
+	if (!d)
+		return;
+	d->setVisible(true);
+	d->raise();
 }
 
 void shutdown()

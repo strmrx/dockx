@@ -108,7 +108,10 @@ off-thesis: encoders, multi-output, NDI, VST, replay buffer.
   Recording); minimum width 120px with a scroll fallback. Values color amber/red at
   warning/trouble thresholds (lag or drops over 1%/5%, disk under 10GB/1GB, FPS under
   95%/80% of target). Reset button restarts the counters. "A stats panel that actually
-  fits in a corner."
+  fits in a corner." v0.44.0 (same day): "Dropped (network)" became its own essential
+  row with the full count ("12 / 4000 (0.3%)", "-" while not streaming), and the Video
+  docks tab gained a "Stream health" box with an "Open DockX Stats" button so the dock
+  is discoverable from Tools > DockX, not just the Docks menu.
 - **Resize blocker hint** (Joey 2026-09-09: "cool idea... love it"): when a dock
   divider drag hits a wall, tell the user WHICH dock's minimum size is blocking (e.g.
   a toast or a brief highlight on the stubborn dock). Docks can only shrink to the

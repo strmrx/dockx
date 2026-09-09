@@ -2128,6 +2128,17 @@ void showDialog(const QString &initialTab)
 	pgV->addStretch(1);
 	sdAddRow->addWidget(progBox, 2);
 
+	QGroupBox *stBox = new QGroupBox("Stream health", sdTab);
+	QVBoxLayout *stV = new QVBoxLayout(stBox);
+	QPushButton *statsBtn = new QPushButton("Open DockX Stats", stBox);
+	QObject::connect(statsBtn, &QPushButton::clicked, sdTab, []() { stats::showDock(); });
+	stV->addWidget(statsBtn);
+	stV->addWidget(groupSub("FPS, CPU, bitrate and dropped frames in a dock that shrinks to fit any "
+				"corner (OBS's own Stats panel can't). Also in the Docks menu.",
+				stBox));
+	stV->addStretch(1);
+	sdAddRow->addWidget(stBox, 2);
+
 	sdv->addLayout(sdAddRow);
 
 	QObject::connect(addSceneBtn, &QPushButton::clicked, sdTab, [addNamed, sceneCombo]() { addNamed(sceneCombo); });

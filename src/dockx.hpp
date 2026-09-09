@@ -277,6 +277,7 @@ void shutdown();
    opened from the Docks menu */
 namespace stats {
 void createDock();
+void showDock(); /* open + raise it (the dialog's discovery button) */
 void shutdown(); /* stops the poll timer at EXIT */
 } // namespace stats
 
