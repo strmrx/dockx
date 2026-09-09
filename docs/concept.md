@@ -260,6 +260,15 @@ off-thesis: encoders, multi-output, NDI, VST, replay buffer.
   minimum the app provably dropped -- the old blind 15s forget made the whole layout visibly
   breathe (shrink/regrow) after applying a layout that squeezed the dock below the window's
   real minimum (Joey's shifting-layout report, 2026-09-09).
+- **Colors expansion + more tab consolidation** (Joey 2026-09-09) -- SHIPPED v0.33.0.
+  Loadouts folded into the Layouts tab (two columns; copy now spells out layouts = your
+  PANELS around the screen vs loadouts = your SOURCES inside the scenes -- Joey found the
+  split confusing). Scene colors + Dock colors merged into ONE "Colors" tab and expanded
+  ("flashy customization gets people talking"): per-dock content BACKGROUND tint
+  (`dock_bg_map`), per-dock title FADE into a second color (`dock_grad_map`), and five
+  ONE-CLICK LOOKS (Synthwave, Midnight ice, Sunset, Forest, Candy) that cycle a palette
+  across every open dock + tint separators, with "Back to theme" to wipe it all. Tab count
+  17 -> 12 across the day; Joey wants further consolidation in later rounds.
 - **Tools dialog UX pass** (Joey 2026-09-09) -- SHIPPED v0.32.0. (1) The dialog is now
   NON-MODAL: OBS stays fully clickable while it is open, and windows it spawns (Properties)
   come to the front instead of popping up behind it (Joey's Find tab complaint). One window,

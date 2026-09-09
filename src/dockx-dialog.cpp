@@ -569,11 +569,17 @@ void showDialog(const QString &initialTab)
 
 	/* ---------- Layouts tab ---------- */
 	QWidget *layoutsTab = new QWidget();
-	QVBoxLayout *lv = new QVBoxLayout(layoutsTab);
+	QHBoxLayout *lcols = new QHBoxLayout(layoutsTab);
+	QVBoxLayout *lv = new QVBoxLayout();  /* left: dock layouts + templates */
+	QVBoxLayout *lvR = new QVBoxLayout(); /* right: source loadouts + auto switch */
+	lcols->addLayout(lv, 1);
+	lcols->addLayout(lvR, 1);
 
-	/* everything layout shaped lives on this one tab: saved layouts,
-	   starter templates, scene auto switch (separate tabs read as noise) */
-	QGroupBox *savedBox = new QGroupBox("Saved layouts", layoutsTab);
+	/* everything arrangement shaped lives on this one tab: dock layouts,
+	   starter templates, source loadouts, scene auto switch. Joey: separate
+	   tabs were noise, and layouts vs loadouts MUST be spelled out (he
+	   found the split confusing and he built it) */
+	QGroupBox *savedBox = new QGroupBox("Dock layouts (your panels)", layoutsTab);
 	QVBoxLayout *slv = new QVBoxLayout(savedBox);
 
 	QListWidget *layoutList = new QListWidget(savedBox);
@@ -617,9 +623,10 @@ void showDialog(const QString &initialTab)
 	lb2->addStretch(1);
 	slv->addLayout(lb2);
 
-	QLabel *hint = new QLabel("Set hotkey binds a key right here. A Stream Deck can press "
-				  "that key for one tap layout changes. Applying a layout always "
-				  "keeps an undo.",
+	QLabel *hint = new QLabel("A dock layout remembers your PANELS: which docks are open and "
+				  "where they sit around your screen. Save one per way you stream. "
+				  "Set hotkey binds a key right here; a Stream Deck can press that "
+				  "key for one tap changes. Applying always keeps an undo.",
 				  savedBox);
 	hint->setWordWrap(true);
 	slv->addWidget(hint);
@@ -768,8 +775,8 @@ void showDialog(const QString &initialTab)
 
 	tabs->addTab(layoutsTab, "Layouts");
 
-	/* ---------- Loadouts tab (source positions, LoadoutX ported) ---------- */
-	QWidget *loTab = new QWidget();
+	/* ---------- source loadouts (source positions, LoadoutX ported) ---------- */
+	QGroupBox *loTab = new QGroupBox("Source loadouts (inside your scenes)", layoutsTab);
 	QVBoxLayout *lov = new QVBoxLayout(loTab);
 
 	QListWidget *loList = new QListWidget(loTab);
@@ -852,11 +859,13 @@ void showDialog(const QString &initialTab)
 	lob2->addStretch(1);
 	lov->addLayout(lob2);
 
-	QLabel *loHint = new QLabel("A loadout remembers where every source sits: position, size, rotation, "
-				    "crop, visibility, and lock. Restore snaps them all back. Restoring "
-				    "always keeps an undo; pressing Undo restore twice flips back again. "
-				    "Back up to file saves your loadouts as a JSON file you can move to "
-				    "another PC or share; Import adds them back without overwriting anything.",
+	QLabel *loHint = new QLabel("Dock layouts (left) are your panels; a LOADOUT is your sources: where "
+				    "everything sits INSIDE your scenes (position, size, rotation, crop, "
+				    "visibility, lock). Save one when a scene looks perfect; if things get "
+				    "nudged mid stream, Restore snaps them all back. Restoring keeps an "
+				    "undo (press Undo restore twice to flip back again). Back up to file "
+				    "moves loadouts to another PC or shares them; Import adds them without "
+				    "overwriting anything.",
 				    loTab);
 	loHint->setWordWrap(true);
 	lov->addWidget(loHint);
@@ -967,7 +976,7 @@ void showDialog(const QString &initialTab)
 						 .arg(n));
 	});
 
-	tabs->addTab(loTab, "Loadouts");
+	lvR->addWidget(loTab, 2);
 
 	/* ---------- Locks tab ---------- */
 	QWidget *lockTab = new QWidget();
@@ -1219,7 +1228,7 @@ void showDialog(const QString &initialTab)
 	ahint->setWordWrap(true);
 	av->addWidget(ahint);
 
-	lv->addWidget(autoTab, 2);
+	lvR->addWidget(autoTab, 1);
 
 	/* ---------- Filters tab ---------- */
 	QWidget *filtersTab = new QWidget();
@@ -1288,11 +1297,16 @@ void showDialog(const QString &initialTab)
 
 	tabs->addTab(filtersTab, "Filters");
 
-	/* ---------- Scene colors tab ---------- */
+	/* ---------- Colors tab (scene names + docks + one click looks) ---------- */
 	QWidget *colorsTab = new QWidget();
-	QVBoxLayout *cv = new QVBoxLayout(colorsTab);
+	QVBoxLayout *cvRoot = new QVBoxLayout(colorsTab);
+	QHBoxLayout *ccols = new QHBoxLayout();
+	cvRoot->addLayout(ccols, 1);
 
-	QListWidget *sceneListW = new QListWidget(colorsTab);
+	QGroupBox *sceneColBox = new QGroupBox("Scene names", colorsTab);
+	QVBoxLayout *cv = new QVBoxLayout(sceneColBox);
+
+	QListWidget *sceneListW = new QListWidget(sceneColBox);
 	sceneListW->setSelectionMode(QAbstractItemView::ExtendedSelection);
 	for (const QString &name : sceneNames()) {
 		QListWidgetItem *it = new QListWidgetItem(name, sceneListW);
@@ -1325,33 +1339,37 @@ void showDialog(const QString &initialTab)
 		panels::refreshSoon();
 	};
 
-	addPaletteRow(colorsTab, cv, &dlg, setSceneColor);
+	addPaletteRow(sceneColBox, cv, &dlg, setSceneColor);
 
 	QLabel *chint = new QLabel("Pick a scene (Ctrl click or Shift click for several at "
 				   "once), then a color. The scene name shows in that color in "
 				   "the Scenes panel. Sources already have this built into OBS: "
 				   "right click a source and pick Set Color.",
-				   colorsTab);
+				   sceneColBox);
 	chint->setWordWrap(true);
 	cv->addWidget(chint);
 
-	tabs->addTab(colorsTab, "Scene colors");
+	ccols->addWidget(sceneColBox, 1);
 
-	/* ---------- Dock colors tab ---------- */
-	QWidget *dockTab = new QWidget();
+	/* ---------- dock colors (border/title + background + title fade) ---------- */
+	QGroupBox *dockTab = new QGroupBox("Docks", colorsTab);
 	QVBoxLayout *dv = new QVBoxLayout(dockTab);
 
 	QListWidget *dockListW = new QListWidget(dockTab);
 	dockListW->setSelectionMode(QAbstractItemView::ExtendedSelection);
-	for (const panels::DockInfo &info : panels::listDocks()) {
-		QListWidgetItem *it = new QListWidgetItem(info.title, dockListW);
-		it->setData(Qt::UserRole, info.key);
-		const QString hex = state().dockColorMap.value(info.key);
-		if (!hex.isEmpty()) {
-			it->setForeground(QBrush(QColor(hex)));
-			it->setIcon(colorDot(QColor(hex)));
+	auto reloadDocks = [dockListW]() {
+		dockListW->clear();
+		for (const panels::DockInfo &info : panels::listDocks()) {
+			QListWidgetItem *it = new QListWidgetItem(info.title, dockListW);
+			it->setData(Qt::UserRole, info.key);
+			const QString hex = state().dockColorMap.value(info.key);
+			if (!hex.isEmpty()) {
+				it->setForeground(QBrush(QColor(hex)));
+				it->setIcon(colorDot(QColor(hex)));
+			}
 		}
-	}
+	};
+	reloadDocks();
 	dv->addWidget(dockListW, 1);
 
 	auto setDockColor = [dockListW, &dlg](const QString &hex) {
@@ -1378,9 +1396,86 @@ void showDialog(const QString &initialTab)
 
 	addPaletteRow(dockTab, dv, &dlg, setDockColor);
 
-	QLabel *dhint = new QLabel("Pick a dock (Ctrl click or Shift click for several at "
-				   "once), then a color. The dock gets a colored border and "
-				   "title bar so you can spot it instantly.",
+	/* flashier per dock extras: content background + a two color title fade */
+	auto selectedDockKeys = [dockListW, &dlg]() -> QStringList {
+		QStringList keys;
+		for (QListWidgetItem *it : dockListW->selectedItems())
+			keys << it->data(Qt::UserRole).toString();
+		if (keys.isEmpty())
+			QMessageBox::information(&dlg, "DockX", "Pick one or more docks first.");
+		return keys;
+	};
+	QHBoxLayout *exRow = new QHBoxLayout();
+	QPushButton *bgBtn = new QPushButton("Background color", dockTab);
+	QPushButton *bgClearBtn = new QPushButton("Clear background", dockTab);
+	QPushButton *gradBtn = new QPushButton("Fade the title", dockTab);
+	QPushButton *gradClearBtn = new QPushButton("Solid title", dockTab);
+	exRow->addWidget(bgBtn);
+	exRow->addWidget(bgClearBtn);
+	exRow->addWidget(gradBtn);
+	exRow->addWidget(gradClearBtn);
+	exRow->addStretch(1);
+	dv->addLayout(exRow);
+
+	QObject::connect(bgBtn, &QPushButton::clicked, &dlg, [&dlg, selectedDockKeys]() {
+		const QStringList keys = selectedDockKeys();
+		if (keys.isEmpty())
+			return;
+		const QColor c = QColorDialog::getColor(QColor("#1e1e2e"), &dlg, "Dock background");
+		if (!c.isValid())
+			return;
+		for (const QString &k : keys)
+			state().dockBgMap[k] = c.name();
+		stateSave();
+		panels::applyDockColors();
+	});
+	QObject::connect(bgClearBtn, &QPushButton::clicked, &dlg, [selectedDockKeys]() {
+		const QStringList keys = selectedDockKeys();
+		if (keys.isEmpty())
+			return;
+		for (const QString &k : keys)
+			state().dockBgMap.remove(k);
+		stateSave();
+		panels::applyDockColors();
+	});
+	QObject::connect(gradBtn, &QPushButton::clicked, &dlg, [&dlg, selectedDockKeys]() {
+		const QStringList keys = selectedDockKeys();
+		if (keys.isEmpty())
+			return;
+		QStringList colored;
+		for (const QString &k : keys)
+			if (!state().dockColorMap.value(k).isEmpty())
+				colored << k;
+		if (colored.isEmpty()) {
+			QMessageBox::information(&dlg, "DockX",
+						 "Give the dock a color first; the fade blends from that "
+						 "color into the one you pick next.");
+			return;
+		}
+		const QColor c = QColorDialog::getColor(QColor("#8c1eff"), &dlg, "Fade the title into this color");
+		if (!c.isValid())
+			return;
+		for (const QString &k : colored)
+			state().dockGradMap[k] = c.name();
+		stateSave();
+		panels::applyDockColors();
+	});
+	QObject::connect(gradClearBtn, &QPushButton::clicked, &dlg, [selectedDockKeys]() {
+		const QStringList keys = selectedDockKeys();
+		if (keys.isEmpty())
+			return;
+		for (const QString &k : keys)
+			state().dockGradMap.remove(k);
+		stateSave();
+		panels::applyDockColors();
+	});
+
+	QLabel *dhint = new QLabel("Pick a dock (Ctrl click or Shift click for several at once), then a "
+				   "color: the dock gets a colored border and title bar so you can spot "
+				   "it instantly. Background color tints the dock's content too (it "
+				   "won't show on video docks; if text gets hard to read, pick a darker "
+				   "tint or clear it). Fade the title blends the title bar from the "
+				   "dock's color into a second color you pick.",
 				   dockTab);
 	dhint->setWordWrap(true);
 	dv->addWidget(dhint);
@@ -1422,7 +1517,77 @@ void showDialog(const QString &initialTab)
 	sephint->setWordWrap(true);
 	dv->addWidget(sephint);
 
-	tabs->addTab(dockTab, "Dock colors");
+	ccols->addWidget(dockTab, 1);
+
+	/* ---------- one click looks: coordinated color across every dock ---------- */
+	QGroupBox *looksBox = new QGroupBox("One click looks", colorsTab);
+	QVBoxLayout *lkV = new QVBoxLayout(looksBox);
+	QHBoxLayout *lkRow = new QHBoxLayout();
+	lkV->addLayout(lkRow);
+
+	struct Look {
+		QString name;
+		QStringList cols;
+		QString sep;
+	};
+	const QList<Look> looks = {
+		{"Synthwave", {"#ff2975", "#8c1eff", "#00e5ff", "#ff6ac1", "#5561ff"}, "#8c1eff"},
+		{"Midnight ice", {"#274690", "#3e78b2", "#5aa9e6", "#4062bb", "#2b3a67"}, "#3e78b2"},
+		{"Sunset", {"#ff6d00", "#ff2d55", "#c9184a", "#ff9e00", "#e5383b"}, "#ff2d55"},
+		{"Forest", {"#2d6a4f", "#40916c", "#52b788", "#1b4332", "#74c69d"}, "#40916c"},
+		{"Candy", {"#ff6b6b", "#feca57", "#48dbfb", "#ff9ff3", "#1dd1a1"}, "#feca57"},
+	};
+	for (const Look &lk : looks) {
+		QPushButton *b = new QPushButton(lk.name, looksBox);
+		QObject::connect(b, &QPushButton::clicked, &dlg, [&dlg, lk, reloadDocks]() {
+			if (QMessageBox::question(&dlg, "DockX",
+						  QString("Color every dock in the %1 look? Your current dock "
+							  "colors are replaced (scene name colors stay).")
+							  .arg(lk.name)) != QMessageBox::Yes)
+				return;
+			state().dockColorMap.clear();
+			state().dockGradMap.clear();
+			int i = 0;
+			for (const panels::DockInfo &info : panels::listDocks())
+				state().dockColorMap[info.key] = lk.cols[i++ % lk.cols.size()];
+			state().sepColor = lk.sep;
+			if (state().sepSize < 2)
+				state().sepSize = 2;
+			stateSave();
+			panels::applyDockColors();
+			panels::applySeparators();
+			reloadDocks();
+		});
+		lkRow->addWidget(b);
+	}
+	lkRow->addStretch(1);
+	QPushButton *lkClear = new QPushButton("Back to theme", looksBox);
+	QObject::connect(lkClear, &QPushButton::clicked, &dlg, [&dlg, reloadDocks]() {
+		if (QMessageBox::question(&dlg, "DockX",
+					  "Take every DockX color off your docks (scene name colors stay)?") !=
+		    QMessageBox::Yes)
+			return;
+		state().dockColorMap.clear();
+		state().dockBgMap.clear();
+		state().dockGradMap.clear();
+		state().sepColor.clear();
+		stateSave();
+		panels::applyDockColors();
+		panels::applySeparators();
+		reloadDocks();
+	});
+	lkRow->addWidget(lkClear);
+
+	QLabel *lkHint = new QLabel("Instant color across every dock you have open, plus tinted dock "
+				    "lines. Try one live, then fine tune single docks above. Back to "
+				    "theme wipes it all off.",
+				    looksBox);
+	lkHint->setWordWrap(true);
+	lkV->addWidget(lkHint);
+
+	cvRoot->addWidget(looksBox);
+
+	tabs->addTab(colorsTab, "Colors");
 
 	/* ---------- Source docks tab ---------- */
 	QWidget *sdTab = new QWidget();

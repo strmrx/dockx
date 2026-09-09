@@ -238,6 +238,28 @@ void stateLoad()
 		obs_data_release(dockColors);
 	}
 
+	obs_data_t *dockBgs = obs_data_get_obj(d, "dock_bg_map");
+	if (dockBgs) {
+		for (obs_data_item_t *item = obs_data_first(dockBgs); item; obs_data_item_next(&item)) {
+			const char *key = obs_data_item_get_name(item);
+			const char *hex = obs_data_item_get_string(item);
+			if (key && hex && *hex)
+				g_state.dockBgMap[QString::fromUtf8(key)] = QString::fromUtf8(hex);
+		}
+		obs_data_release(dockBgs);
+	}
+
+	obs_data_t *dockGrads = obs_data_get_obj(d, "dock_grad_map");
+	if (dockGrads) {
+		for (obs_data_item_t *item = obs_data_first(dockGrads); item; obs_data_item_next(&item)) {
+			const char *key = obs_data_item_get_name(item);
+			const char *hex = obs_data_item_get_string(item);
+			if (key && hex && *hex)
+				g_state.dockGradMap[QString::fromUtf8(key)] = QString::fromUtf8(hex);
+		}
+		obs_data_release(dockGrads);
+	}
+
 	obs_data_t *autoRules = obs_data_get_obj(d, "scene_layouts");
 	if (autoRules) {
 		for (obs_data_item_t *item = obs_data_first(autoRules); item; obs_data_item_next(&item)) {
@@ -419,6 +441,18 @@ void stateSave()
 		obs_data_set_string(dockColors, it.key().toUtf8().constData(), it.value().toUtf8().constData());
 	obs_data_set_obj(d, "dock_color_map", dockColors);
 	obs_data_release(dockColors);
+
+	obs_data_t *dockBgs = obs_data_create();
+	for (auto it = g_state.dockBgMap.constBegin(); it != g_state.dockBgMap.constEnd(); ++it)
+		obs_data_set_string(dockBgs, it.key().toUtf8().constData(), it.value().toUtf8().constData());
+	obs_data_set_obj(d, "dock_bg_map", dockBgs);
+	obs_data_release(dockBgs);
+
+	obs_data_t *dockGrads = obs_data_create();
+	for (auto it = g_state.dockGradMap.constBegin(); it != g_state.dockGradMap.constEnd(); ++it)
+		obs_data_set_string(dockGrads, it.key().toUtf8().constData(), it.value().toUtf8().constData());
+	obs_data_set_obj(d, "dock_grad_map", dockGrads);
+	obs_data_release(dockGrads);
 
 	obs_data_t *autoRules = obs_data_create();
 	for (auto it = g_state.sceneLayouts.constBegin(); it != g_state.sceneLayouts.constEnd(); ++it)
@@ -671,9 +705,13 @@ static void applyDockColorsNow()
 		return;
 	const QList<QDockWidget *> docks = m->findChildren<QDockWidget *>();
 	for (QDockWidget *d : docks) {
-		const QString hex = state().dockColors ? state().dockColorMap.value(dockKey(d)) : QString();
+		const bool on = state().dockColors;
+		const QString key = dockKey(d);
+		const QString hex = on ? state().dockColorMap.value(key) : QString();
+		const QString bg = on ? state().dockBgMap.value(key) : QString();
+		const QString grad = on ? state().dockGradMap.value(key) : QString();
 		const QString current = d->styleSheet();
-		if (hex.isEmpty()) {
+		if (hex.isEmpty() && bg.isEmpty()) {
 			/* only remove styles we put there ourselves */
 			if (current.startsWith(DOCK_QSS_MARK))
 				d->setStyleSheet(QString());
@@ -682,10 +720,27 @@ static void applyDockColorsNow()
 		/* if someone else styled this dock, leave it alone */
 		if (!current.isEmpty() && !current.startsWith(DOCK_QSS_MARK))
 			continue;
-		const QColor c(hex);
-		const QString qss = QString("%1 QDockWidget { border: 2px solid %2; color: %3; } "
-					    "QDockWidget::title { background: %2; }")
-					    .arg(DOCK_QSS_MARK, hex, contrastText(c));
+		QString qss = DOCK_QSS_MARK;
+		if (!hex.isEmpty()) {
+			const QColor c(hex);
+			/* a second color fades the title bar left to right */
+			const QString titleBg =
+				grad.isEmpty()
+					? hex
+					: QString("qlineargradient(x1:0, y1:0, x2:1, y2:0, stop:0 %1, stop:1 %2)")
+						  .arg(hex, grad);
+			qss += QString(" QDockWidget { border: 2px solid %1; color: %2; } "
+				       "QDockWidget::title { background: %3; }")
+				       .arg(hex, contrastText(c), titleBg);
+		}
+		if (!bg.isEmpty()) {
+			/* tint the content: the dock's direct child (its content
+			   widget) plus list/tree areas inside. Video/GL surfaces
+			   paint over this, so it is harmless on video docks */
+			qss += QString(" QDockWidget > QWidget { background-color: %1; } "
+				       "QDockWidget QAbstractItemView { background-color: %1; }")
+				       .arg(bg);
+		}
 		if (current != qss)
 			d->setStyleSheet(qss);
 	}
