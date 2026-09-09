@@ -34,6 +34,8 @@ GPL v2, see plugin-main.cpp for the full notice.
 #include <QMainWindow>
 #include <QMenu>
 #include <QMessageBox>
+#include <QFileInfo>
+#include <QPointer>
 #include <QPushButton>
 #include <QSpinBox>
 #include <QTabWidget>
@@ -313,10 +315,29 @@ static int promptHotkey(QWidget *parent, const QString &title, QKeySequence &seq
 
 void showDialog(const QString &initialTab)
 {
+	/* ONE non-modal window: OBS stays fully clickable while it is open, and
+	   windows it spawns (Properties, pin pickers) come to the front instead
+	   of popping up stuck behind a modal dialog (Joey's Find tab feedback) */
+	static QPointer<QDialog> openDlg;
+	if (openDlg) {
+		if (!initialTab.isEmpty()) {
+			if (QTabWidget *t = openDlg->findChild<QTabWidget *>())
+				for (int i = 0; i < t->count(); i++)
+					if (t->tabText(i) == initialTab)
+						t->setCurrentIndex(i);
+		}
+		openDlg->show();
+		openDlg->raise();
+		openDlg->activateWindow();
+		return;
+	}
+
 	QMainWindow *main = mainWindow();
-	QDialog dlg(main);
+	QDialog &dlg = *new QDialog(main);
+	dlg.setAttribute(Qt::WA_DeleteOnClose);
+	openDlg = &dlg;
 	dlg.setWindowTitle("DockX");
-	dlg.setMinimumSize(980, 520); /* floor; widened below to fit the tab row */
+	dlg.setMinimumSize(980, 600); /* floor; widened below to fit the tab row */
 
 	QVBoxLayout *root = new QVBoxLayout(&dlg);
 	QTabWidget *tabs = new QTabWidget(&dlg);
@@ -521,6 +542,19 @@ void showDialog(const QString &initialTab)
 	QObject::connect(revealBtn, &QPushButton::clicked, findTab, [goToOrInspect]() { goToOrInspect(); });
 	QObject::connect(refreshBtn, &QPushButton::clicked, findTab, [rescan]() { rescan(); });
 
+	/* an unused source has no scene to jump to, so the same button opens its
+	   Properties instead -- SAY so, or the click reads as "nothing happened" */
+	QObject::connect(findTree, &QTreeWidget::currentItemChanged, findTab,
+			 [revealBtn](QTreeWidgetItem *cur, QTreeWidgetItem *) {
+				 const bool unusedSel = cur && cur->data(0, Qt::UserRole).toString().isEmpty();
+				 revealBtn->setText(unusedSel ? "Open properties (in no scene)" : "Go to source");
+				 revealBtn->setToolTip(unusedSel ? "This source is loaded in your project but not "
+								   "placed in any scene, so there is nowhere to "
+								   "jump to. This opens its Properties so you can "
+								   "see what it is."
+								 : QString());
+			 });
+
 	QLabel *findHint = new QLabel("Search every scene in this collection at once. Double-click a "
 				      "result to jump to that scene and select it. Right-click any "
 				      "result for more: open its Properties, remove it from just that "
@@ -537,8 +571,13 @@ void showDialog(const QString &initialTab)
 	QWidget *layoutsTab = new QWidget();
 	QVBoxLayout *lv = new QVBoxLayout(layoutsTab);
 
-	QListWidget *layoutList = new QListWidget(layoutsTab);
-	lv->addWidget(layoutList, 1);
+	/* everything layout shaped lives on this one tab: saved layouts,
+	   starter templates, scene auto switch (separate tabs read as noise) */
+	QGroupBox *savedBox = new QGroupBox("Saved layouts", layoutsTab);
+	QVBoxLayout *slv = new QVBoxLayout(savedBox);
+
+	QListWidget *layoutList = new QListWidget(savedBox);
+	slv->addWidget(layoutList, 1);
 
 	auto reloadLayouts = [layoutList]() {
 		layoutList->clear();
@@ -564,7 +603,7 @@ void showDialog(const QString &initialTab)
 	lb->addWidget(saveBtn);
 	lb->addWidget(applyBtn);
 	lb->addWidget(undoBtn);
-	lv->addLayout(lb);
+	slv->addLayout(lb);
 
 	QHBoxLayout *lb2 = new QHBoxLayout();
 	QPushButton *hotkeyBtn = new QPushButton("Set hotkey", layoutsTab);
@@ -576,14 +615,14 @@ void showDialog(const QString &initialTab)
 	lb2->addWidget(renameBtn);
 	lb2->addWidget(deleteBtn);
 	lb2->addStretch(1);
-	lv->addLayout(lb2);
+	slv->addLayout(lb2);
 
 	QLabel *hint = new QLabel("Set hotkey binds a key right here. A Stream Deck can press "
 				  "that key for one tap layout changes. Applying a layout always "
 				  "keeps an undo.",
-				  layoutsTab);
+				  savedBox);
 	hint->setWordWrap(true);
-	lv->addWidget(hint);
+	slv->addWidget(hint);
 
 	QObject::connect(saveBtn, &QPushButton::clicked, &dlg, [&dlg, reloadLayouts]() {
 		QMainWindow *m = mainWindow();
@@ -670,10 +709,10 @@ void showDialog(const QString &initialTab)
 		reloadLayouts();
 	});
 
-	tabs->addTab(layoutsTab, "Layouts");
+	lv->addWidget(savedBox, 3);
 
-	/* ---------- Templates tab (one-click starter layouts) ---------- */
-	QWidget *tplTab = new QWidget();
+	/* ---------- starter templates (one-click starting points) ---------- */
+	QGroupBox *tplTab = new QGroupBox("Starter templates", layoutsTab);
 	QVBoxLayout *tplV = new QVBoxLayout(tplTab);
 
 	QListWidget *tplList = new QListWidget(tplTab);
@@ -682,7 +721,8 @@ void showDialog(const QString &initialTab)
 		it->setData(Qt::UserRole, t.id);
 		it->setData(Qt::UserRole + 1, t.desc);
 	}
-	tplV->addWidget(tplList, 1);
+	tplList->setMaximumHeight(96);
+	tplV->addWidget(tplList);
 
 	QLabel *tplDesc = new QLabel("Pick a starting point, then make it yours. Applying a template "
 				     "hides OBS's fixed preview, adds a DockX Preview, and arranges your "
@@ -724,7 +764,9 @@ void showDialog(const QString &initialTab)
 			QMessageBox::information(&dlg, "DockX", "Nothing to undo yet.");
 	});
 
-	tabs->addTab(tplTab, "Templates");
+	lv->addWidget(tplTab, 1);
+
+	tabs->addTab(layoutsTab, "Layouts");
 
 	/* ---------- Loadouts tab (source positions, LoadoutX ported) ---------- */
 	QWidget *loTab = new QWidget();
@@ -1092,7 +1134,7 @@ void showDialog(const QString &initialTab)
 	tabs->addTab(lockTab, "Locks");
 
 	/* ---------- Auto switch tab ---------- */
-	QWidget *autoTab = new QWidget();
+	QGroupBox *autoTab = new QGroupBox("Auto switch by scene", layoutsTab);
 	QVBoxLayout *av = new QVBoxLayout(autoTab);
 
 	QLabel *aintro = new QLabel("Pair a scene with a layout. When OBS switches to that "
@@ -1177,7 +1219,7 @@ void showDialog(const QString &initialTab)
 	ahint->setWordWrap(true);
 	av->addWidget(ahint);
 
-	tabs->addTab(autoTab, "Auto switch");
+	lv->addWidget(autoTab, 2);
 
 	/* ---------- Filters tab ---------- */
 	QWidget *filtersTab = new QWidget();
@@ -1528,7 +1570,9 @@ void showDialog(const QString &initialTab)
 			   "can't own, like a TikTok Live Studio chat. Give it a label and a color, then float "
 			   "the real window over it. On Windows you can go further: pin the window, and DockX "
 			   "keeps it on top of OBS, sized exactly over the placeholder, following it through dock "
-			   "drags, layout switches and restarts.",
+			   "drags, layout switches and restarts. A placeholder can also show a local image, GIF, "
+			   "or looping video instead: your logo, brand art, any set dressing you want living in "
+			   "your layout.",
 			   phTab);
 	phIntro->setWordWrap(true);
 	phv->addWidget(phIntro);
@@ -1538,6 +1582,8 @@ void showDialog(const QString &initialTab)
 		QString t = e.label.isEmpty() ? QString("Placeholder") : e.label;
 		if (!e.pinTitle.isEmpty())
 			t += QString(" · pinned: %1").arg(e.pinTitle);
+		if (!e.mediaPath.isEmpty())
+			t += QString(" · showing: %1").arg(QFileInfo(e.mediaPath).fileName());
 		if (e.seamless)
 			t += " · seamless";
 		return t;
@@ -1566,6 +1612,8 @@ void showDialog(const QString &initialTab)
 	QPushButton *phPinBtn = new QPushButton("Pin a window", phTab);
 	QPushButton *phUnpinBtn = new QPushButton("Unpin", phTab);
 	QPushButton *phSeamBtn = new QPushButton("Seamless on/off", phTab);
+	QPushButton *phMediaBtn = new QPushButton("Show image/video", phTab);
+	QPushButton *phMediaClearBtn = new QPushButton("Clear image/video", phTab);
 	QPushButton *phRemoveBtn = new QPushButton("Remove", phTab);
 	phBtns->addWidget(phAdd);
 	phBtns->addWidget(phLabelBtn);
@@ -1579,6 +1627,8 @@ void showDialog(const QString &initialTab)
 		phUnpinBtn->hide();
 		phSeamBtn->hide();
 	}
+	phBtns->addWidget(phMediaBtn);
+	phBtns->addWidget(phMediaClearBtn);
 	phBtns->addWidget(phRemoveBtn);
 	phBtns->addStretch(1);
 	phv->addLayout(phBtns);
@@ -1648,6 +1698,20 @@ void showDialog(const QString &initialTab)
 		}
 		phReload();
 	});
+	QObject::connect(phMediaBtn, &QPushButton::clicked, phTab, [phTab, phSelected, phReload]() {
+		const int id = phSelected();
+		if (!id)
+			return;
+		placeholders::chooseMedia(id, phTab);
+		phReload();
+	});
+	QObject::connect(phMediaClearBtn, &QPushButton::clicked, phTab, [phSelected, phReload]() {
+		const int id = phSelected();
+		if (!id)
+			return;
+		placeholders::clearMedia(id);
+		phReload();
+	});
 	QObject::connect(phRemoveBtn, &QPushButton::clicked, phTab, [phSelected, phReload]() {
 		const int id = phSelected();
 		if (!id)
@@ -1682,7 +1746,11 @@ void showDialog(const QString &initialTab)
 			   "again.\n"
 			   "•  Seamless hides the pinned window's own title bar and border so it reads as "
 			   "pure content living in OBS; turning it off or unpinning brings the frame right back "
-			   "(so does restarting that app).",
+			   "(so does restarting that app).\n"
+			   "•  Showing an image, GIF, or video: right click the placeholder, Show an image or "
+			   "video. Videos loop with the sound off. The same right click menu picks how it fills "
+			   "the spot: Fit shows all of it, Fill covers the spot and crops the edges, Tile "
+			   "repeats it. A spot shows a file or holds a pinned window, not both at once.",
 			   phTab);
 	phHint->setWordWrap(true);
 	phv->addWidget(phHint);
@@ -2166,7 +2234,9 @@ void showDialog(const QString &initialTab)
 	if (wantWidth > dlg.minimumWidth())
 		dlg.setMinimumWidth(wantWidth);
 
-	dlg.exec();
+	dlg.show();
+	dlg.raise();
+	dlg.activateWindow();
 }
 
 } // namespace dockx

@@ -86,6 +86,9 @@ struct PlaceholderEntry {
 	                          share a title (0 = pinned before this was stored) */
 	int pinH = 0;
 	bool seamless = false; /* strip the pinned window's title bar + border while pinned */
+	QString mediaPath;     /* local image/GIF/video shown in the spot; empty = none.
+	                           Mutually exclusive with a pinned window */
+	QString mediaMode;     /* how the media fills the spot: "fit" (default), "fill", "tile" */
 };
 
 /* one captured source state inside a loadout (LoadoutX ported natively) */
@@ -281,7 +284,10 @@ void setColor(int id, const QString &color); /* "#rrggbb" or empty = theme defau
 bool pinningSupported();                     /* true on Windows */
 void pinWindow(int id, QWidget *parent);     /* pick a running window to pin */
 void unpinWindow(int id);
-void setSeamless(int id, bool on); /* hide/restore the pinned window's own frame */
+void setSeamless(int id, bool on);         /* hide/restore the pinned window's own frame */
+void chooseMedia(int id, QWidget *parent); /* pick a local image/GIF/video to show in the spot */
+void clearMedia(int id);
+void setMediaMode(int id, const QString &mode); /* "fit" | "fill" | "tile" */
 void shutdown();
 } // namespace placeholders
 

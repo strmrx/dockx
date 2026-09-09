@@ -4,7 +4,9 @@ GPL v2, see plugin-main.cpp for the full notice.
 
 An empty labeled dock that reserves a spot in the layout for a window OBS
 cannot host (TikTok Live Studio chat, a music player, any app floated over
-OBS). On Windows that window can be PINNED: it becomes an OWNED window of
+OBS). A spot can also SHOW A LOCAL FILE instead -- an image, a GIF, or a
+looping muted video (branding, logos, set dressing), on every platform.
+On Windows a real window can be PINNED: it becomes an OWNED window of
 the OBS main window, so the shell stacks it as part of OBS (just above OBS,
 under whatever app the user selects, hidden when OBS minimizes), while a
 timer moves + sizes it to sit exactly over the placeholder through dock
@@ -27,18 +29,23 @@ whole stream down with it.
 #include <QDialog>
 #include <QDialogButtonBox>
 #include <QDockWidget>
+#include <QFileDialog>
+#include <QFileInfo>
 #include <QInputDialog>
 #include <QLabel>
 #include <QLineEdit>
 #include <QListWidget>
 #include <QMainWindow>
 #include <QMenu>
+#include <QMovie>
 #include <QPainter>
+#include <QPixmap>
 #include <QPushButton>
 #include <QTimer>
 #include <QVBoxLayout>
 #include <QWidget>
 
+#include <atomic>
 #include <cmath>
 #include <cstdlib>
 
@@ -208,6 +215,161 @@ static QList<QPair<QString, quintptr>> listWindows()
 
 #endif /* _WIN32 */
 
+/* ---------- media in a spot (image / GIF / looping video) ---------- */
+
+enum class MediaKind { Image, Anim, Video };
+
+static MediaKind mediaKindFor(const QString &path)
+{
+	const QString ext = QFileInfo(path).suffix().toLower();
+	if (ext == QLatin1String("gif") || ext == QLatin1String("apng"))
+		return MediaKind::Anim;
+	static const QStringList still = {"png", "jpg", "jpeg", "bmp", "webp", "svg", "tif", "tiff", "ico"};
+	if (still.contains(ext))
+		return MediaKind::Image;
+	return MediaKind::Video;
+}
+
+/* video plays through a private OBS media source rendered straight into the
+   dock (same display pattern as the source docks) -- OBS is already a great
+   video player, so reuse it. Private = it never appears in the user's scenes
+   or mixer, and it is muted: this is set dressing, not program audio */
+class MediaVideoWidget : public QWidget {
+public:
+	MediaVideoWidget(const QString &path, const QString &mode, QWidget *parent) : QWidget(parent)
+	{
+		setAttribute(Qt::WA_PaintOnScreen);
+		setAttribute(Qt::WA_StaticContents);
+		setAttribute(Qt::WA_NoSystemBackground);
+		setAttribute(Qt::WA_OpaquePaintEvent);
+		setAttribute(Qt::WA_DontCreateNativeAncestors);
+		setAttribute(Qt::WA_NativeWindow);
+		/* clicks fall through so the placeholder keeps its right click menu */
+		setAttribute(Qt::WA_TransparentForMouseEvents);
+		setMode(mode);
+		obs_data_t *s = obs_data_create();
+		obs_data_set_string(s, "local_file", path.toUtf8().constData());
+		obs_data_set_bool(s, "looping", true);
+		obs_data_set_bool(s, "restart_on_activate", false);
+		obs_data_set_bool(s, "close_when_inactive", false);
+		obs_data_set_bool(s, "hw_decode", true);
+		source = obs_source_create_private("ffmpeg_source", "dockx_placeholder_media", s);
+		obs_data_release(s);
+		if (source)
+			obs_source_set_muted(source, true);
+		else
+			obs_log(LOG_WARNING, "placeholder media: could not create a player for \"%s\"",
+				path.toUtf8().constData());
+	}
+
+	~MediaVideoWidget() override { releasePlayer(); }
+
+	QPaintEngine *paintEngine() const override { return nullptr; }
+
+	void setMode(const QString &m) { fillMode.store(m == QLatin1String("fill")); }
+
+	/* tear down while OBS is still up; safe to call twice */
+	void releasePlayer()
+	{
+		if (display) {
+			obs_display_remove_draw_callback(display, &MediaVideoWidget::drawCb, this);
+			obs_display_destroy(display);
+			display = nullptr;
+		}
+		if (source) {
+			if (shown)
+				obs_source_dec_showing(source);
+			shown = false;
+			obs_source_release(source);
+			source = nullptr;
+		}
+	}
+
+protected:
+	void showEvent(QShowEvent *ev) override
+	{
+		QWidget::showEvent(ev);
+		ensureDisplay();
+		if (display)
+			obs_display_set_enabled(display, true);
+		if (source && !shown) {
+			obs_source_inc_showing(source);
+			shown = true;
+		}
+	}
+
+	void hideEvent(QHideEvent *ev) override
+	{
+		QWidget::hideEvent(ev);
+		if (display)
+			obs_display_set_enabled(display, false); /* no GPU work while hidden */
+		if (source && shown) {
+			obs_source_dec_showing(source);
+			shown = false;
+		}
+	}
+
+	void resizeEvent(QResizeEvent *ev) override
+	{
+		QWidget::resizeEvent(ev);
+		if (display) {
+			const qreal dpr = devicePixelRatioF();
+			obs_display_resize(display, (uint32_t)(width() * dpr), (uint32_t)(height() * dpr));
+		}
+	}
+
+private:
+	obs_display_t *display = nullptr;
+	obs_source_t *source = nullptr;
+	bool shown = false;
+	std::atomic<bool> fillMode{false};
+
+	void ensureDisplay()
+	{
+		if (display || !source)
+			return;
+		const qreal dpr = devicePixelRatioF();
+		gs_init_data info = {};
+		info.cx = (uint32_t)(width() > 0 ? width() * dpr : 8);
+		info.cy = (uint32_t)(height() > 0 ? height() * dpr : 8);
+		info.format = GS_BGRA;
+		info.zsformat = GS_ZS_NONE;
+		if (!wireDisplayWindow(info, (quintptr)winId())) {
+			obs_log(LOG_WARNING, "placeholder media: display unsupported on this platform");
+			return;
+		}
+		display = obs_display_create(&info, 0x151515);
+		if (display)
+			obs_display_add_draw_callback(display, &MediaVideoWidget::drawCb, this);
+		else
+			obs_log(LOG_WARNING, "placeholder media: display create failed");
+	}
+
+	/* graphics thread: libobs calls only. The source pointer is fixed for
+	   the widget's life and the callback is removed before it is released */
+	static void drawCb(void *param, uint32_t cx, uint32_t cy)
+	{
+		MediaVideoWidget *v = static_cast<MediaVideoWidget *>(param);
+		obs_source_t *src = v->source;
+		if (!src)
+			return;
+		const uint32_t w = obs_source_get_width(src), h = obs_source_get_height(src);
+		if (!w || !h)
+			return;
+		const float sx = (float)cx / (float)w, sy = (float)cy / (float)h;
+		const float scale = v->fillMode.load() ? qMax(sx, sy) : qMin(sx, sy);
+		const int vw = (int)(scale * (float)w), vh = (int)(scale * (float)h);
+		const int vx = ((int)cx - vw) / 2, vy = ((int)cy - vh) / 2;
+		gs_viewport_push();
+		gs_projection_push();
+		gs_ortho(0.0f, (float)w, 0.0f, (float)h, -100.0f, 100.0f);
+		gs_set_viewport(vx, vy, vw, vh);
+		obs_source_video_render(src);
+		gs_projection_pop();
+		gs_viewport_pop();
+	}
+};
+
 /* ---------- the dock widget ---------- */
 
 class PlaceholderPanel : public QWidget {
@@ -228,9 +390,81 @@ public:
 		QObject::connect(timer, &QTimer::timeout, this, [this]() { tick(); });
 		timer->start();
 #endif
+		refreshMedia();
 	}
 
-	~PlaceholderPanel() override { releaseTarget(); }
+	~PlaceholderPanel() override
+	{
+		releaseTarget();
+		releaseMedia();
+	}
+
+	/* (re)build the media members from the entry; cheap when unchanged */
+	void refreshMedia()
+	{
+		const PlaceholderEntry *e = entryFor(id);
+		const QString path = e ? e->mediaPath : QString();
+		const QString mode = e ? e->mediaMode : QString();
+		if (path == mediaLoaded) {
+			if (mediaVideo)
+				mediaVideo->setMode(mode);
+			update();
+			return;
+		}
+		releaseMedia();
+		mediaLoaded = path;
+		if (path.isEmpty()) {
+			update();
+			return;
+		}
+		if (!QFileInfo::exists(path)) {
+			mediaFailed = true;
+			update();
+			return;
+		}
+		switch (mediaKindFor(path)) {
+		case MediaKind::Anim:
+			mediaMovie = new QMovie(path, QByteArray(), this);
+			if (!mediaMovie->isValid()) {
+				delete mediaMovie;
+				mediaMovie = nullptr;
+				mediaFailed = true;
+				break;
+			}
+			QObject::connect(mediaMovie, &QMovie::frameChanged, this, [this](int) { update(); });
+			mediaMovie->start();
+			if (!isVisible())
+				mediaMovie->setPaused(true);
+			break;
+		case MediaKind::Image:
+			if (!mediaPixmap.load(path))
+				mediaFailed = true;
+			break;
+		case MediaKind::Video:
+			mediaVideo = new MediaVideoWidget(path, mode, this);
+			mediaVideo->setGeometry(rect());
+			mediaVideo->show();
+			break;
+		}
+		update();
+	}
+
+	void releaseMedia()
+	{
+		if (mediaMovie) {
+			mediaMovie->stop();
+			delete mediaMovie;
+			mediaMovie = nullptr;
+		}
+		if (mediaVideo) {
+			mediaVideo->releasePlayer();
+			delete mediaVideo;
+			mediaVideo = nullptr;
+		}
+		mediaPixmap = QPixmap();
+		mediaLoaded.clear();
+		mediaFailed = false;
+	}
 
 	void releaseTarget()
 	{
@@ -281,6 +515,18 @@ protected:
 		}
 		p.fillRect(rect(), bg);
 
+		/* media replaces the label + dashed border: the spot IS the content */
+		const bool hasMedia = e && !e->mediaPath.isEmpty();
+		if (hasMedia && !mediaFailed) {
+			if (mediaVideo)
+				return; /* the video child covers the spot */
+			const QPixmap frame = mediaMovie ? mediaMovie->currentPixmap() : mediaPixmap;
+			if (!frame.isNull()) {
+				drawMedia(p, frame, e->mediaMode);
+				return;
+			}
+		}
+
 		const bool lightBg = bg.lightness() > 128;
 		QColor line = lightBg ? QColor(0, 0, 0, 70) : QColor(255, 255, 255, 60);
 		QPen pen(line, 1, Qt::DashLine);
@@ -303,7 +549,9 @@ protected:
 		p.setFont(font());
 		QString hint;
 		const bool pinned = e && !e->pinTitle.isEmpty();
-		if (pinned) {
+		if (hasMedia && mediaFailed) {
+			hint = QString("Could not load: %1").arg(QFileInfo(e->mediaPath).fileName());
+		} else if (pinned) {
 			hint = QString("Pinned: %1").arg(e->pinTitle);
 #ifdef _WIN32
 			/* tell the user WHY the spot is empty: the window does
@@ -372,13 +620,85 @@ protected:
 		}
 
 		menu.addSeparator();
+		QObject::connect(menu.addAction("Show an image or video here..."), &QAction::triggered, this,
+				 [this]() { chooseMedia(id, this); });
+		if (!e->mediaPath.isEmpty()) {
+			const bool isVideo = mediaKindFor(e->mediaPath) == MediaKind::Video;
+			const QString cur = e->mediaMode.isEmpty() ? QString("fit") : e->mediaMode;
+			QMenu *fitMenu = menu.addMenu("How it fills the spot");
+			auto addMode = [this, fitMenu, cur](const QString &label, const QString &mode, bool enabled) {
+				QAction *a = fitMenu->addAction(label);
+				a->setCheckable(true);
+				a->setChecked(cur == mode);
+				a->setEnabled(enabled);
+				QObject::connect(a, &QAction::triggered, this,
+						 [this, mode]() { setMediaMode(id, mode); });
+			};
+			addMode("Fit (show all of it)", "fit", true);
+			addMode("Fill (cover the spot, crop the edges)", "fill", true);
+			addMode("Tile (repeat it)", "tile", !isVideo);
+			QObject::connect(
+				menu.addAction(QString("Clear \"%1\"").arg(QFileInfo(e->mediaPath).fileName())),
+				&QAction::triggered, this, [this]() { clearMedia(id); });
+		}
+
+		menu.addSeparator();
 		QObject::connect(menu.addAction("Remove this placeholder"), &QAction::triggered, this,
 				 [this]() { QTimer::singleShot(0, [pid = id]() { removeDock(pid); }); });
 
 		menu.exec(ev->globalPos());
 	}
 
+	void resizeEvent(QResizeEvent *ev) override
+	{
+		QWidget::resizeEvent(ev);
+		if (mediaVideo)
+			mediaVideo->setGeometry(rect());
+	}
+
+	void showEvent(QShowEvent *ev) override
+	{
+		QWidget::showEvent(ev);
+		if (mediaMovie)
+			mediaMovie->setPaused(false);
+	}
+
+	void hideEvent(QHideEvent *ev) override
+	{
+		QWidget::hideEvent(ev);
+		if (mediaMovie)
+			mediaMovie->setPaused(true); /* no decode work while hidden */
+	}
+
 private:
+	QPixmap mediaPixmap;
+	QMovie *mediaMovie = nullptr;
+	MediaVideoWidget *mediaVideo = nullptr;
+	QString mediaLoaded; /* the path the members above were built from */
+	bool mediaFailed = false;
+
+	void drawMedia(QPainter &p, const QPixmap &pix, const QString &mode)
+	{
+		if (pix.width() < 1 || pix.height() < 1)
+			return;
+		p.setRenderHint(QPainter::SmoothPixmapTransform, true);
+		if (mode == QLatin1String("tile")) {
+			p.drawTiledPixmap(rect(), pix);
+			return;
+		}
+		if (mode == QLatin1String("fill")) {
+			/* cover the whole spot, cropping the overflow evenly */
+			const qreal s = qMax((qreal)width() / pix.width(), (qreal)height() / pix.height());
+			const qreal sw = width() / s, sh = height() / s;
+			p.drawPixmap(rect(), pix, QRectF((pix.width() - sw) / 2.0, (pix.height() - sh) / 2.0, sw, sh));
+			return;
+		}
+		/* fit: the whole picture, centered */
+		const QSize target = pix.size().scaled(size(), Qt::KeepAspectRatio);
+		p.drawPixmap(QRect(QPoint((width() - target.width()) / 2, (height() - target.height()) / 2), target),
+			     pix);
+	}
+
 #ifdef _WIN32
 	QTimer *timer = nullptr;
 	HWND hwnd = nullptr;
@@ -524,14 +844,33 @@ private:
 
 		/* a learned minimum must not outlive its reason: the app's own
 		   minimum SHRINKS when the user trims panels inside it (Joey's
-		   TikTok gift panel stuck the dock large). Forget it every ~15s;
-		   if it is still real, the next too-small resize attempt
-		   relearns it within a tick. Forgetting never resizes anything
-		   by itself, it only re-allows dragging the dock smaller */
+		   TikTok gift panel stuck the dock large). Every ~15s PROBE it:
+		   nudge the window 2px smaller and put it right back. If it
+		   obeyed, the old minimum is stale -- forget it; if it refused,
+		   the minimum is still real -- keep it. The earlier version
+		   forgot blindly, and when a layout squeezed this dock below
+		   the real minimum Qt shrank the dock on every forget and the
+		   relearn grew it again, so the whole layout visibly breathed
+		   every 15s until it settled (Joey's shifting-layout report) */
 		if (++minForgetTicks >= 60) {
 			minForgetTicks = 0;
-			if (minimumWidth() > 80 || minimumHeight() > 60)
-				setMinimumSize(80, 60);
+			if (minimumWidth() > 80 || minimumHeight() > 60) {
+				RECT cw = {};
+				if (GetWindowRect(hwnd, &cw)) {
+					const int curW = (int)(cw.right - cw.left);
+					const int curH = (int)(cw.bottom - cw.top);
+					SetWindowPos(hwnd, nullptr, 0, 0, curW - 2, curH - 2,
+						     SWP_NOMOVE | SWP_NOZORDER | SWP_NOACTIVATE);
+					RECT probe = {};
+					GetWindowRect(hwnd, &probe);
+					const bool obeyed = (int)(probe.right - probe.left) < curW ||
+							    (int)(probe.bottom - probe.top) < curH;
+					SetWindowPos(hwnd, nullptr, 0, 0, curW, curH,
+						     SWP_NOMOVE | SWP_NOZORDER | SWP_NOACTIVATE);
+					if (obeyed)
+						setMinimumSize(80, 60);
+				}
+			}
 		}
 
 		/* the spot is visible: the window belongs in it, even if
@@ -804,6 +1143,11 @@ void pinWindow(int id, QWidget *parent)
 		e->pinW = (int)(pr.right - pr.left);
 		e->pinH = (int)(pr.bottom - pr.top);
 	}
+	if (!e->mediaPath.isEmpty()) {
+		e->mediaPath.clear(); /* one spot, one occupant */
+		if (PlaceholderPanel *p = panelFor(id))
+			p->refreshMedia();
+	}
 	stateSave();
 	if (PlaceholderPanel *p = panelFor(id)) {
 		p->adoptTarget((quintptr)it->data(Qt::UserRole).toULongLong());
@@ -843,10 +1187,59 @@ void unpinWindow(int id)
 	}
 }
 
+void chooseMedia(int id, QWidget *parent)
+{
+	PlaceholderEntry *e = entryFor(id);
+	if (!e)
+		return;
+	const QString path = QFileDialog::getOpenFileName(
+		parent ? parent->window() : mainWindow(), "Show an image or video in this spot", QString(),
+		"Images and videos (*.png *.jpg *.jpeg *.bmp *.webp *.svg *.gif *.mp4 *.mov *.mkv *.webm *.avi "
+		"*.m4v);;All files (*)");
+	if (path.isEmpty())
+		return;
+	if (!e->pinTitle.isEmpty())
+		unpinWindow(id); /* one spot, one occupant */
+	e = entryFor(id);
+	if (!e)
+		return;
+	e->mediaPath = path;
+	if (e->mediaMode.isEmpty())
+		e->mediaMode = QStringLiteral("fit");
+	stateSave();
+	if (PlaceholderPanel *p = panelFor(id))
+		p->refreshMedia();
+	obs_log(LOG_INFO, "placeholder %d shows \"%s\"", id, path.toUtf8().constData());
+}
+
+void clearMedia(int id)
+{
+	PlaceholderEntry *e = entryFor(id);
+	if (!e)
+		return;
+	e->mediaPath.clear();
+	stateSave();
+	if (PlaceholderPanel *p = panelFor(id))
+		p->refreshMedia();
+}
+
+void setMediaMode(int id, const QString &mode)
+{
+	PlaceholderEntry *e = entryFor(id);
+	if (!e)
+		return;
+	e->mediaMode = mode;
+	stateSave();
+	if (PlaceholderPanel *p = panelFor(id))
+		p->refreshMedia();
+}
+
 void shutdown()
 {
-	for (PlaceholderPanel *p : g_panels)
+	for (PlaceholderPanel *p : g_panels) {
 		p->releaseTarget();
+		p->releaseMedia(); /* displays + the private player die while OBS is still up */
+	}
 	g_panels.clear();
 }
 

@@ -249,6 +249,25 @@ off-thesis: encoders, multi-output, NDI, VST, replay buffer.
   shrink it further), and DockX can't pop a re-docked panel back out (one manual click per
   app restart). A window truly identical to another in title, program AND size stays
   ambiguous by nature -- DockX picks the closest match; a wrong grab is fixed by re-pinning.
+  v0.32.0 (2026-09-09) adds **MEDIA IN A SPOT** (Joey ask: branding when showing your OBS):
+  a placeholder can show a local image, GIF, or looping muted video instead of a pinned
+  window (right click > "Show an image or video here", fit/fill/tile modes, persisted as
+  `media_path`/`media_mode`). Images/GIFs paint natively; video reuses the source-dock
+  obs_display pattern with a PRIVATE `ffmpeg_source` (never in the user's scenes or mixer,
+  always muted). Works on every platform, giving Mac/Linux placeholders a purpose pre-pinning.
+  One spot = one occupant: setting media unpins and vice versa. Same version fixes the
+  smart-minimum auto-forget: it now PROBES the pinned window (2px nudge) and only forgets a
+  minimum the app provably dropped -- the old blind 15s forget made the whole layout visibly
+  breathe (shrink/regrow) after applying a layout that squeezed the dock below the window's
+  real minimum (Joey's shifting-layout report, 2026-09-09).
+- **Tools dialog UX pass** (Joey 2026-09-09) -- SHIPPED v0.32.0. (1) The dialog is now
+  NON-MODAL: OBS stays fully clickable while it is open, and windows it spawns (Properties)
+  come to the front instead of popping up behind it (Joey's Find tab complaint). One window,
+  reused if reopened. (2) Templates and Auto switch are no longer separate tabs: both folded
+  into the Layouts tab as "Starter templates" and "Auto switch by scene" sections (Joey:
+  separate tabs were noise). (3) The Find tab's "Go to source" button becomes "Open
+  properties (in no scene)" when an unused source is selected, so the fallback no longer
+  reads as "nothing happened".
 - **Tools menu slimmed to ONE entry** (Joey 2026-09-04) -- SHIPPED v0.28.1. The Tools menu had
   grown eight "DockX: ..." lines; Joey called it overwhelming/info overload and picked the
   single-entry option. Tools now shows just **"DockX"** (opens the dialog); every removed item

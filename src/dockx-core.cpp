@@ -207,6 +207,8 @@ void stateLoad()
 			e.pinW = (int)obs_data_get_int(o, "pin_w");
 			e.pinH = (int)obs_data_get_int(o, "pin_h");
 			e.seamless = obs_data_get_bool(o, "seamless");
+			e.mediaPath = QString::fromUtf8(obs_data_get_string(o, "media_path"));
+			e.mediaMode = QString::fromUtf8(obs_data_get_string(o, "media_mode"));
 			if (e.id > 0)
 				g_state.placeholders.push_back(e);
 			obs_data_release(o);
@@ -398,6 +400,8 @@ void stateSave()
 		obs_data_set_int(o, "pin_w", e.pinW);
 		obs_data_set_int(o, "pin_h", e.pinH);
 		obs_data_set_bool(o, "seamless", e.seamless);
+		obs_data_set_string(o, "media_path", e.mediaPath.toUtf8().constData());
+		obs_data_set_string(o, "media_mode", e.mediaMode.toUtf8().constData());
 		obs_data_array_push_back(phs, o);
 		obs_data_release(o);
 	}
