@@ -9,8 +9,12 @@ dock areas (a left column against a right column) has no mediator: Qt's own
 separator there freezes in both directions. This module finds exactly those
 boundaries (two visible docked docks from DIFFERENT dock areas sitting edge
 to edge), lays a thin invisible handle widget over each, and performs the
-drag itself through QMainWindow::resizeDocks -- the official programmatic
-equivalent of a separator drag -- so the columns trade space directly.
+drag itself: while the mouse is down the near-side dock's size is PINNED
+(min = max = the drag target) so the layout has no choice but to move the
+area boundary, and the pin is released the moment the drag ends. (First
+attempt used QMainWindow::resizeDocks -- proven on-rig 2026-09-09 that it
+silently refuses to trade space ACROSS dock areas; it only redistributes
+inside one. The pin is a hard constraint Qt cannot refuse.)
 
 Defensive by design: handles are plain transparent widgets on top of the
 separator gap; they intercept nothing else, never touch Qt layout internals,
@@ -49,7 +53,7 @@ static void rebuild();
 static const int MAX_GAP = 28;
 /* a handle thinner than this is unusable; grow it, centered on the gap */
 static const int MIN_GRAB = 7;
-/* never drag a dock smaller than this (resizeDocks also honors real minimums) */
+/* never drag a dock smaller than this */
 static const int MIN_DOCK = 40;
 
 /* the strip between dock a and dock b, in main window coords; invalid when
@@ -108,6 +112,13 @@ public:
 		raise();
 	}
 
+	~BoundaryHandle() override
+	{
+		/* never leave a dock pinned (expand-by-hotkey mid drag, shutdown) */
+		if (dragging)
+			unpinFirst();
+	}
+
 protected:
 	void mousePressEvent(QMouseEvent *e) override
 	{
@@ -119,6 +130,14 @@ protected:
 		pressGlobal = e->globalPosition().toPoint();
 		firstSize = sizeOf(first);
 		secondSize = sizeOf(second);
+		/* the pin overwrites these for the drag; put back exactly after */
+		if (orient == Qt::Horizontal) {
+			savedMin = first->minimumWidth();
+			savedMax = first->maximumWidth();
+		} else {
+			savedMin = first->minimumHeight();
+			savedMax = first->maximumHeight();
+		}
 		e->accept();
 	}
 
@@ -132,16 +151,21 @@ protected:
 		const QPoint g = e->globalPosition().toPoint();
 		const int delta = orient == Qt::Horizontal ? g.x() - pressGlobal.x() : g.y() - pressGlobal.y();
 		int a = firstSize + delta;
-		int b = secondSize - delta;
-		if (a < MIN_DOCK) {
-			b -= MIN_DOCK - a;
-			a = MIN_DOCK;
+		/* keep both sides usable and respect the dock content's true minimum:
+		   pinning below it would clip the content until release */
+		a = std::max(a, MIN_DOCK);
+		a = std::max(a, orient == Qt::Horizontal ? first->minimumSizeHint().width()
+							 : first->minimumSizeHint().height());
+		a = std::min(a, firstSize + secondSize - MIN_DOCK);
+		/* pin = min and max forced to the target; the top-level layout must
+		   honor it, so the area boundary moves and the far side absorbs */
+		if (orient == Qt::Horizontal) {
+			first->setMinimumWidth(a);
+			first->setMaximumWidth(a);
+		} else {
+			first->setMinimumHeight(a);
+			first->setMaximumHeight(a);
 		}
-		if (b < MIN_DOCK) {
-			a -= MIN_DOCK - b;
-			b = MIN_DOCK;
-		}
-		m->resizeDocks({first.data(), second.data()}, {a, b}, orient);
 		if (m->layout())
 			m->layout()->activate();
 		/* ride along so the cursor stays on the handle */
@@ -160,8 +184,10 @@ protected:
 			const int delta = orient == Qt::Horizontal ? g.x() - pressGlobal.x() : g.y() - pressGlobal.y();
 			if (sizeOf(first) == firstSize && std::abs(delta) > 8)
 				obs_log(LOG_WARNING,
-					"divider: drag moved nothing (resizeDocks refused; a dock at its minimum?)");
+					"divider: drag moved nothing (the neighbor at its minimum, or the pin was overridden)");
 		}
+		if (dragging)
+			unpinFirst();
 		dragging = false;
 		e->accept();
 		QTimer::singleShot(0, [] { rebuild(); });
@@ -170,8 +196,22 @@ protected:
 private:
 	int sizeOf(QDockWidget *d) const { return orient == Qt::Horizontal ? d->width() : d->height(); }
 
+	void unpinFirst()
+	{
+		if (!first)
+			return;
+		if (orient == Qt::Horizontal) {
+			first->setMinimumWidth(savedMin);
+			first->setMaximumWidth(savedMax > 0 ? savedMax : QWIDGETSIZE_MAX);
+		} else {
+			first->setMinimumHeight(savedMin);
+			first->setMaximumHeight(savedMax > 0 ? savedMax : QWIDGETSIZE_MAX);
+		}
+	}
+
 	QPoint pressGlobal;
 	int firstSize = 0, secondSize = 0;
+	int savedMin = 0, savedMax = QWIDGETSIZE_MAX;
 };
 
 static QList<QPointer<BoundaryHandle>> g_handles;

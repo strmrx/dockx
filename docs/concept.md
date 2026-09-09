@@ -203,9 +203,13 @@ off-thesis: encoders, multi-output, NDI, VST, replay buffer.
   dockx-divider.cpp: even a zero-size center has no space to give, so the between-areas
   separators stay frozen; DockX overlays thin invisible drag handles on exactly those
   boundaries (two visible docked docks from DIFFERENT areas, edge to edge; refreshed by a
-  400ms timer while collapsed) and performs the drag itself via QMainWindow::resizeDocks,
-  both directions. Same-area separators stay native and are never covered; handles tear
-  down the moment the preview expands.
+  400ms timer while collapsed) and performs the drag itself, both directions. Same-area
+  separators stay native and are never covered; handles tear down the moment the preview
+  expands. Rig test same day: settling CONFIRMED fixed; the divider half needed v0.45.1 --
+  QMainWindow::resizeDocks (the first drag mechanism) proved to silently refuse trading
+  space ACROSS dock areas, so the drag now PINS the near-side dock's size (min = max =
+  target) for the duration of the drag, a hard constraint the layout cannot refuse, and
+  releases the pin on mouse up.
 - **Fully interactive (editable) Preview dock** (Joey 2026-08-07) -- FIRST SLICE SHIPPED
   v0.22.0, SECOND SLICE (resize + rotate + snap-to-sources) SHIPPED v0.23.0, THIRD SLICE
   (multi-item group resize + Alt-drag edge crop) SHIPPED v0.24.0 (2026-08-28).
