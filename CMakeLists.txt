@@ -42,6 +42,7 @@ target_sources(
     src/dockx-align.cpp
     src/dockx-collections.cpp
     src/dockx-dialog.cpp
+    src/dockx-divider.cpp
     src/dockx-editpreview.cpp
     src/dockx-filters.cpp
     src/dockx-folders.cpp

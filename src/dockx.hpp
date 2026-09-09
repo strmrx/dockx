@@ -468,6 +468,18 @@ void toggleWithPrompt(QWidget *parent); /* the Tools menu toggle */
 void onStudioModeEnabled();             /* expand: studio mode edits need the canvas */
 } // namespace preview
 
+/* drag handles for the frozen boundaries between opposite dock areas: while
+   the preview is collapsed the central widget is pinned to zero size, so
+   Qt's own separator between (say) a left column and a right column cannot
+   trade space (areas only negotiate with the center). Thin invisible handle
+   widgets overlay exactly those boundaries and do the drag themselves via
+   QMainWindow::resizeDocks, both directions. Same-area separators stay
+   native and untouched */
+namespace divider {
+void setActive(bool on); /* driven by preview::apply(); on = build handles */
+void shutdown();
+} // namespace divider
+
 /* starter layout templates: one-click dock arrangements for new users (tall
    chat + editable preview + panels, etc). Each detects the docks it can (chat by
    name, OBS's core panels, the DockX Preview), places what it finds, and leaves a
