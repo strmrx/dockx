@@ -260,12 +260,22 @@ off-thesis: encoders, multi-output, NDI, VST, replay buffer.
   minimum the app provably dropped -- the old blind 15s forget made the whole layout visibly
   breathe (shrink/regrow) after applying a layout that squeezed the dock below the window's
   real minimum (Joey's shifting-layout report, 2026-09-09).
+- **Whole window accent** (Joey 2026-09-09: "lets do the obs chrome opt in restyle") --
+  SHIPPED v0.35.0. New "Whole window accent" group in the Colors tab: an opt-in checkbox
+  ("Accent OBS itself (experimental)", `chrome_on`, default OFF) + an accent color picker
+  (`chrome_color`, default StrmrX purple). One color layered over OBS's own controls in
+  the MAIN WINDOW ONLY: selected tabs, list/tree selections, menus, scroll bar handles,
+  slider handles, progress bars, focused fields, hovered buttons, group box titles.
+  Implementation = a marker-guarded QSS block appended to the main window stylesheet
+  (same trick as the separator tint), so the OBS theme is never replaced and unticking
+  strips only our block. Separate windows (Settings, Properties) keep the pure theme by
+  design (defensive scope). Applying a Look recolors the accent to match while it is on;
+  "Back to theme" turns it off.
 - **Glow + shimmer options** (Joey 2026-09-09) -- SHIPPED v0.34.0. Two opt-in checkboxes
   in Colors > Docks: "Glow on hover" (colored docks brighten their border under the
   mouse) and "Shimmer the title fades" (faded title bars slowly swap their two colors,
   ~9s cycle, 120ms retint timer that only runs while enabled). Both default OFF: flair is
-  the user's choice. Whole-window chrome restyling deliberately NOT built yet (fights OBS
-  themes; risk brief given to Joey, awaiting scope call).
+  the user's choice.
 - **Colors expansion + more tab consolidation** (Joey 2026-09-09) -- SHIPPED v0.33.0.
   Loadouts folded into the Layouts tab (two columns; copy now spells out layouts = your
   PANELS around the screen vs loadouts = your SOURCES inside the scenes -- Joey found the

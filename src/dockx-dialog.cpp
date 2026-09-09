@@ -1543,6 +1543,45 @@ void showDialog(const QString &initialTab)
 
 	ccols->addWidget(dockTab, 1);
 
+	/* ---------- whole window accent: tint OBS's own controls (opt in) ----------
+	   built BEFORE the looks section so the look buttons can sync its checkbox;
+	   added to the tab AFTER the looks box, so it sits below them visually */
+	QGroupBox *chromeBox = new QGroupBox("Whole window accent", colorsTab);
+	QVBoxLayout *chV = new QVBoxLayout(chromeBox);
+	QHBoxLayout *chRow = new QHBoxLayout();
+	QCheckBox *chromeCb = new QCheckBox("Accent OBS itself (experimental)", chromeBox);
+	chromeCb->setChecked(state().chromeOn);
+	QPushButton *chromeColBtn = new QPushButton("Accent color", chromeBox);
+	chRow->addWidget(chromeCb);
+	chRow->addWidget(chromeColBtn);
+	chRow->addStretch(1);
+	chV->addLayout(chRow);
+	QObject::connect(chromeCb, &QCheckBox::toggled, chromeBox, [](bool on) {
+		state().chromeOn = on;
+		stateSave();
+		panels::applyChrome();
+	});
+	QObject::connect(chromeColBtn, &QPushButton::clicked, &dlg, [&dlg, chromeCb]() {
+		const QColor c = QColorDialog::getColor(QColor(state().chromeColor), &dlg, "Whole window accent");
+		if (!c.isValid())
+			return;
+		state().chromeColor = c.name();
+		if (!chromeCb->isChecked()) {
+			chromeCb->setChecked(true); /* the toggle handler saves + applies */
+		} else {
+			stateSave();
+			panels::applyChrome();
+		}
+	});
+	QLabel *chHint = new QLabel("One accent color over OBS's own controls: selected tabs and list rows, "
+				    "menus, sliders, scroll bars, focused fields. It layers on top of your "
+				    "OBS theme and only touches the main window; untick it and the theme "
+				    "comes straight back. While it is on, applying a Look above recolors "
+				    "the accent to match.",
+				    chromeBox);
+	chHint->setWordWrap(true);
+	chV->addWidget(chHint);
+
 	/* ---------- one click looks: coordinated color across every dock ---------- */
 	QGroupBox *looksBox = new QGroupBox("One click looks", colorsTab);
 	QVBoxLayout *lkV = new QVBoxLayout(looksBox);
@@ -1577,27 +1616,33 @@ void showDialog(const QString &initialTab)
 			state().sepColor = lk.sep;
 			if (state().sepSize < 2)
 				state().sepSize = 2;
+			if (state().chromeOn)
+				state().chromeColor = lk.sep;
 			stateSave();
 			panels::applyDockColors();
 			panels::applySeparators();
+			panels::applyChrome();
 			reloadDocks();
 		});
 		lkRow->addWidget(b);
 	}
 	lkRow->addStretch(1);
 	QPushButton *lkClear = new QPushButton("Back to theme", looksBox);
-	QObject::connect(lkClear, &QPushButton::clicked, &dlg, [&dlg, reloadDocks]() {
+	QObject::connect(lkClear, &QPushButton::clicked, &dlg, [&dlg, reloadDocks, chromeCb]() {
 		if (QMessageBox::question(&dlg, "DockX",
-					  "Take every DockX color off your docks (scene name colors stay)?") !=
-		    QMessageBox::Yes)
+					  "Take every DockX color off your docks and turn off the window "
+					  "accent (scene name colors stay)?") != QMessageBox::Yes)
 			return;
 		state().dockColorMap.clear();
 		state().dockBgMap.clear();
 		state().dockGradMap.clear();
 		state().sepColor.clear();
+		state().chromeOn = false;
 		stateSave();
 		panels::applyDockColors();
 		panels::applySeparators();
+		panels::applyChrome();
+		chromeCb->setChecked(false);
 		reloadDocks();
 	});
 	lkRow->addWidget(lkClear);
@@ -1610,6 +1655,7 @@ void showDialog(const QString &initialTab)
 	lkV->addWidget(lkHint);
 
 	cvRoot->addWidget(looksBox);
+	cvRoot->addWidget(chromeBox);
 
 	tabs->addTab(colorsTab, "Colors");
 

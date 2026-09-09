@@ -154,6 +154,8 @@ struct State {
 	QHash<QString, QString> dockGradMap;  /* dock key -> second title color (fade) */
 	bool dockGlow = false;                /* colored docks brighten their border on hover */
 	bool gradAnimate = false;             /* title fades shimmer slowly (opt in, flashy) */
+	bool chromeOn = false;                /* accent OBS's own controls (opt in, experimental) */
+	QString chromeColor = "#8c1eff";      /* the whole window accent color */
 	QHash<QString, int> sceneLayouts;     /* scene name -> layout id (auto switch) */
 	int sepSize = 0;                      /* px between docks; 0 = theme default */
 	QString sepColor;                     /* separator tint; empty = theme default */
@@ -196,6 +198,7 @@ void applySearchBars(); /* create/show/hide the injected search boxes */
 void refreshSoon();     /* debounced: reapply colors + active filters */
 void applyDockColors(); /* colored border + title bar per tagged dock */
 void applySeparators(); /* thickness/tint of the lines between docks */
+void applyChrome();     /* opt in accent color over OBS's own controls */
 void autoSceneLayout(); /* apply the layout mapped to the current scene, if any */
 bool applyLayout(int id);
 bool undoLayout();
