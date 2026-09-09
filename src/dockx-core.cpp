@@ -32,6 +32,7 @@ if the UI does not look the way we expect, do NOTHING. Never crash OBS.
 #include <QTimer>
 
 #include <algorithm>
+#include <cmath>
 
 namespace dockx {
 
@@ -123,6 +124,8 @@ void stateLoad()
 	g_state.sourceSearch = obs_data_get_bool(d, "source_search");
 	g_state.sceneColors = obs_data_get_bool(d, "scene_colors");
 	g_state.dockColors = obs_data_get_bool(d, "dock_colors");
+	g_state.dockGlow = obs_data_get_bool(d, "dock_glow");
+	g_state.gradAnimate = obs_data_get_bool(d, "grad_animate");
 	g_state.filterHotkeys = obs_data_get_bool(d, "filter_hotkeys");
 	g_state.folderNewButton = obs_data_get_bool(d, "folder_new_button");
 	g_state.folderNesting = obs_data_get_bool(d, "folder_nesting");
@@ -354,6 +357,8 @@ void stateSave()
 	obs_data_set_bool(d, "source_search", g_state.sourceSearch);
 	obs_data_set_bool(d, "scene_colors", g_state.sceneColors);
 	obs_data_set_bool(d, "dock_colors", g_state.dockColors);
+	obs_data_set_bool(d, "dock_glow", g_state.dockGlow);
+	obs_data_set_bool(d, "grad_animate", g_state.gradAnimate);
 	obs_data_set_bool(d, "filter_hotkeys", g_state.filterHotkeys);
 	obs_data_set_bool(d, "folder_new_button", g_state.folderNewButton);
 	obs_data_set_bool(d, "folder_nesting", g_state.folderNesting);
@@ -698,6 +703,43 @@ QList<DockInfo> listDocks()
 	return out;
 }
 
+/* slow shimmer for animated title fades: a timer nudges the phase and
+   re-tints only docks that have a fade; everything else early-outs on the
+   qss compare. ~8 ticks/second, full swing ~9s -- set dressing, not a rave */
+static qreal g_gradPhase = 0.0;
+static QTimer *g_gradTimer = nullptr;
+
+static QColor lerpColor(const QColor &a, const QColor &b, qreal t)
+{
+	return QColor(a.red() + (int)((b.red() - a.red()) * t), a.green() + (int)((b.green() - a.green()) * t),
+		      a.blue() + (int)((b.blue() - a.blue()) * t));
+}
+
+static void applyDockColorsNow();
+
+static void syncGradTimer()
+{
+	const bool want = state().dockColors && state().gradAnimate && !state().dockGradMap.isEmpty();
+	if (want && !g_gradTimer) {
+		QMainWindow *m = mainWindow();
+		if (!m)
+			return;
+		g_gradTimer = new QTimer(m);
+		g_gradTimer->setInterval(120);
+		QObject::connect(g_gradTimer, &QTimer::timeout, m, []() {
+			g_gradPhase += 0.085;
+			if (g_gradPhase > 6.283185)
+				g_gradPhase -= 6.283185;
+			applyDockColorsNow();
+		});
+		g_gradTimer->start();
+	} else if (!want && g_gradTimer) {
+		g_gradTimer->stop();
+		g_gradTimer->deleteLater();
+		g_gradTimer = nullptr;
+	}
+}
+
 static void applyDockColorsNow()
 {
 	QMainWindow *m = mainWindow();
@@ -723,15 +765,26 @@ static void applyDockColorsNow()
 		QString qss = DOCK_QSS_MARK;
 		if (!hex.isEmpty()) {
 			const QColor c(hex);
-			/* a second color fades the title bar left to right */
-			const QString titleBg =
-				grad.isEmpty()
-					? hex
-					: QString("qlineargradient(x1:0, y1:0, x2:1, y2:0, stop:0 %1, stop:1 %2)")
-						  .arg(hex, grad);
+			/* a second color fades the title bar left to right; when the
+			   shimmer is on the two ends slowly trade places (phase-blended
+			   colors, retinted a few times a second by the timer below) */
+			QString titleBg = hex;
+			if (!grad.isEmpty()) {
+				QColor a(hex), b(grad);
+				if (state().gradAnimate) {
+					const qreal t = 0.5 + 0.5 * std::sin(g_gradPhase);
+					a = lerpColor(QColor(hex), QColor(grad), t);
+					b = lerpColor(QColor(grad), QColor(hex), t);
+				}
+				titleBg = QString("qlineargradient(x1:0, y1:0, x2:1, y2:0, stop:0 %1, stop:1 %2)")
+						  .arg(a.name(), b.name());
+			}
 			qss += QString(" QDockWidget { border: 2px solid %1; color: %2; } "
 				       "QDockWidget::title { background: %3; }")
 				       .arg(hex, contrastText(c), titleBg);
+			if (state().dockGlow)
+				qss += QString(" QDockWidget:hover { border: 2px solid %1; }")
+					       .arg(QColor(hex).lighter(165).name());
 		}
 		if (!bg.isEmpty()) {
 			/* tint the content: the dock's direct child (its content
@@ -749,6 +802,7 @@ static void applyDockColorsNow()
 void applyDockColors()
 {
 	applyDockColorsNow();
+	syncGradTimer();
 }
 
 void applySeparators()

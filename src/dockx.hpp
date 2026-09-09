@@ -152,6 +152,8 @@ struct State {
 	QHash<QString, QString> dockColorMap; /* dock key -> "#rrggbb" border + title */
 	QHash<QString, QString> dockBgMap;    /* dock key -> "#rrggbb" content background tint */
 	QHash<QString, QString> dockGradMap;  /* dock key -> second title color (fade) */
+	bool dockGlow = false;                /* colored docks brighten their border on hover */
+	bool gradAnimate = false;             /* title fades shimmer slowly (opt in, flashy) */
 	QHash<QString, int> sceneLayouts;     /* scene name -> layout id (auto switch) */
 	int sepSize = 0;                      /* px between docks; 0 = theme default */
 	QString sepColor;                     /* separator tint; empty = theme default */

@@ -260,6 +260,12 @@ off-thesis: encoders, multi-output, NDI, VST, replay buffer.
   minimum the app provably dropped -- the old blind 15s forget made the whole layout visibly
   breathe (shrink/regrow) after applying a layout that squeezed the dock below the window's
   real minimum (Joey's shifting-layout report, 2026-09-09).
+- **Glow + shimmer options** (Joey 2026-09-09) -- SHIPPED v0.34.0. Two opt-in checkboxes
+  in Colors > Docks: "Glow on hover" (colored docks brighten their border under the
+  mouse) and "Shimmer the title fades" (faded title bars slowly swap their two colors,
+  ~9s cycle, 120ms retint timer that only runs while enabled). Both default OFF: flair is
+  the user's choice. Whole-window chrome restyling deliberately NOT built yet (fights OBS
+  themes; risk brief given to Joey, awaiting scope call).
 - **Colors expansion + more tab consolidation** (Joey 2026-09-09) -- SHIPPED v0.33.0.
   Loadouts folded into the Layouts tab (two columns; copy now spells out layouts = your
   PANELS around the screen vs loadouts = your SOURCES inside the scenes -- Joey found the

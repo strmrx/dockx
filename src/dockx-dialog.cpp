@@ -1470,12 +1470,36 @@ void showDialog(const QString &initialTab)
 		panels::applyDockColors();
 	});
 
+	QHBoxLayout *fxRow = new QHBoxLayout();
+	QCheckBox *glowCb = new QCheckBox("Glow on hover", dockTab);
+	glowCb->setChecked(state().dockGlow);
+	glowCb->setToolTip("A colored dock brightens its border while your mouse is over it.");
+	QObject::connect(glowCb, &QCheckBox::toggled, dockTab, [](bool on) {
+		state().dockGlow = on;
+		stateSave();
+		panels::applyDockColors();
+	});
+	fxRow->addWidget(glowCb);
+	QCheckBox *animCb = new QCheckBox("Shimmer the title fades", dockTab);
+	animCb->setChecked(state().gradAnimate);
+	animCb->setToolTip("Faded title bars slowly swap their two colors back and forth. "
+			   "Pure flair; turn it off any time.");
+	QObject::connect(animCb, &QCheckBox::toggled, dockTab, [](bool on) {
+		state().gradAnimate = on;
+		stateSave();
+		panels::applyDockColors();
+	});
+	fxRow->addWidget(animCb);
+	fxRow->addStretch(1);
+	dv->addLayout(fxRow);
+
 	QLabel *dhint = new QLabel("Pick a dock (Ctrl click or Shift click for several at once), then a "
 				   "color: the dock gets a colored border and title bar so you can spot "
 				   "it instantly. Background color tints the dock's content too (it "
 				   "won't show on video docks; if text gets hard to read, pick a darker "
 				   "tint or clear it). Fade the title blends the title bar from the "
-				   "dock's color into a second color you pick.",
+				   "dock's color into a second color you pick; Shimmer slowly animates "
+				   "that fade.",
 				   dockTab);
 	dhint->setWordWrap(true);
 	dv->addWidget(dhint);
