@@ -155,6 +155,7 @@ struct State {
 	bool dockGlow = false;                /* colored docks brighten their border on hover */
 	bool gradAnimate = false;             /* title fades shimmer slowly (opt in, flashy) */
 	bool chromeOn = false;                /* accent OBS's own controls (opt in, experimental) */
+	bool chromeEverywhere = false;        /* accent reaches every OBS window, not just the main one */
 	QString chromeColor = "#8c1eff";      /* the whole window accent color */
 	QHash<QString, int> sceneLayouts;     /* scene name -> layout id (auto switch) */
 	int sepSize = 0;                      /* px between docks; 0 = theme default */
@@ -199,6 +200,7 @@ void refreshSoon();     /* debounced: reapply colors + active filters */
 void applyDockColors(); /* colored border + title bar per tagged dock */
 void applySeparators(); /* thickness/tint of the lines between docks */
 void applyChrome();     /* opt in accent color over OBS's own controls */
+void applyChromeSoon(); /* delayed reapply, for right after OBS swaps its theme */
 void autoSceneLayout(); /* apply the layout mapped to the current scene, if any */
 bool applyLayout(int id);
 bool undoLayout();

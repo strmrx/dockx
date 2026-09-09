@@ -69,6 +69,10 @@ static void on_frontend_event(enum obs_frontend_event event, void *)
 		dockx::sourcedocks::refreshAll();
 		dockx::editpreview::refreshAll();
 		break;
+	case OBS_FRONTEND_EVENT_THEME_CHANGED:
+		/* OBS just replaced the app stylesheet; re-add the accent block */
+		dockx::panels::applyChromeSoon();
+		break;
 	case OBS_FRONTEND_EVENT_EXIT:
 		dockx::stateSave();
 		dockx::locks::unregisterHotkeys();

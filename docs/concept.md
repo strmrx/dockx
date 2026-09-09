@@ -260,6 +260,19 @@ off-thesis: encoders, multi-output, NDI, VST, replay buffer.
   minimum the app provably dropped -- the old blind 15s forget made the whole layout visibly
   breathe (shrink/regrow) after applying a layout that squeezed the dock below the window's
   real minimum (Joey's shifting-layout report, 2026-09-09).
+- **Bold accent + everywhere toggle** (Joey 2026-09-09 taste-test: "The changes that are
+  happenning are cool, but its very little") -- SHIPPED v0.37.0. The accent went from a
+  light touch to the standard look: every button wears a dim accent tint (full accent on
+  hover/press/checked), selected tab = full accent, filled slider tracks (sub-page),
+  ticked checkboxes/radios, list row hover wash, dock title tint, tool buttons. New
+  "Spread to every OBS window" checkbox (`chrome_everywhere`, default OFF, confirm
+  dialog warns first): moves the accent block from the main window stylesheet onto the
+  APP stylesheet so Settings/Properties/Filters get it too; OBS theme switches replace
+  the app stylesheet, so OBS_FRONTEND_EVENT_THEME_CHANGED triggers a delayed reapply
+  (`applyChromeSoon`, 200ms). Told Joey why some scroll bars can never change: browser
+  docks (chat) draw their own scroll bars inside the web page; the Windows title bar
+  belongs to Windows. Same version: the "Lines between docks" controls in Colors > Docks
+  got their own divider + bold heading (they blended into the dock color pile).
 - **Layouts tab de-wording pass** (Joey 2026-09-09: "this is a scary page... a LOT of
   words, small print, not a great UX") -- SHIPPED v0.36.0, the MODEL for restyling the
   other tabs. The recipe: (1) empty lists explain themselves (new `HintList` widget

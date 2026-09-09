@@ -46,6 +46,7 @@ GPL v2, see plugin-main.cpp for the full notice.
 #include <QTreeWidget>
 #include <QVBoxLayout>
 #include <QPainter>
+#include <QFrame>
 
 #include <functional>
 #include <memory>
@@ -1589,8 +1590,21 @@ void showDialog(const QString &initialTab)
 	dhint->setWordWrap(true);
 	dv->addWidget(dhint);
 
+	/* the separator controls get their own moment: divider + heading, so
+	   they stop blending into the dock color pile above (Joey 2026-09-09) */
+	dv->addSpacing(8);
+	QFrame *sepDivider = new QFrame(dockTab);
+	sepDivider->setFrameShape(QFrame::HLine);
+	sepDivider->setFrameShadow(QFrame::Sunken);
+	dv->addWidget(sepDivider);
+	QLabel *sepHead = new QLabel("Lines between docks", dockTab);
+	QFont sepHeadFont = sepHead->font();
+	sepHeadFont.setBold(true);
+	sepHead->setFont(sepHeadFont);
+	dv->addWidget(sepHead);
+
 	QHBoxLayout *sepRow = new QHBoxLayout();
-	sepRow->addWidget(new QLabel("Lines between docks:", dockTab));
+	sepRow->addWidget(new QLabel("Thickness:", dockTab));
 	QSpinBox *sepSpin = new QSpinBox(dockTab);
 	sepSpin->setRange(0, 12);
 	sepSpin->setSpecialValueText("Theme default");
@@ -1622,9 +1636,7 @@ void showDialog(const QString &initialTab)
 	sepRow->addStretch(1);
 	dv->addLayout(sepRow);
 
-	QLabel *sephint = new QLabel("Thicker lines make dock edges easier to see and grab.", dockTab);
-	sephint->setWordWrap(true);
-	dv->addWidget(sephint);
+	dv->addWidget(groupSub("Thicker lines make dock edges easier to see and grab.", dockTab));
 
 	ccols->addWidget(dockTab, 1);
 
@@ -1636,13 +1648,38 @@ void showDialog(const QString &initialTab)
 	QHBoxLayout *chRow = new QHBoxLayout();
 	QCheckBox *chromeCb = new QCheckBox("Accent OBS itself (experimental)", chromeBox);
 	chromeCb->setChecked(state().chromeOn);
+	chromeCb->setToolTip("Buttons, tabs, list rows, menus, sliders, scroll bars, dock titles: "
+			     "one accent color over all of it. Your OBS theme stays underneath; "
+			     "untick and it comes straight back.");
 	QPushButton *chromeColBtn = new QPushButton("Accent color", chromeBox);
+	QCheckBox *chromeAllCb = new QCheckBox("Spread to every OBS window", chromeBox);
+	chromeAllCb->setChecked(state().chromeEverywhere);
+	chromeAllCb->setEnabled(state().chromeOn);
+	chromeAllCb->setToolTip("Also accents Settings, Properties, Filters and every other OBS "
+				"window, not just the main one.");
 	chRow->addWidget(chromeCb);
 	chRow->addWidget(chromeColBtn);
+	chRow->addWidget(chromeAllCb);
 	chRow->addStretch(1);
 	chV->addLayout(chRow);
-	QObject::connect(chromeCb, &QCheckBox::toggled, chromeBox, [](bool on) {
+	QObject::connect(chromeCb, &QCheckBox::toggled, chromeBox, [chromeAllCb](bool on) {
 		state().chromeOn = on;
+		chromeAllCb->setEnabled(on);
+		stateSave();
+		panels::applyChrome();
+	});
+	QObject::connect(chromeAllCb, &QCheckBox::toggled, &dlg, [&dlg, chromeAllCb](bool on) {
+		if (on && QMessageBox::question(&dlg, "DockX",
+						"This puts the accent on every OBS window, including Settings, "
+						"Properties, and Filters. Some corners of some windows may look "
+						"odd with a loud color, and you can untick this any time. "
+						"Spread it?") != QMessageBox::Yes) {
+			chromeAllCb->blockSignals(true);
+			chromeAllCb->setChecked(false);
+			chromeAllCb->blockSignals(false);
+			return;
+		}
+		state().chromeEverywhere = on;
 		stateSave();
 		panels::applyChrome();
 	});
@@ -1658,14 +1695,10 @@ void showDialog(const QString &initialTab)
 			panels::applyChrome();
 		}
 	});
-	QLabel *chHint = new QLabel("One accent color over OBS's own controls: selected tabs and list rows, "
-				    "menus, sliders, scroll bars, focused fields. It layers on top of your "
-				    "OBS theme and only touches the main window; untick it and the theme "
-				    "comes straight back. While it is on, applying a Look above recolors "
-				    "the accent to match.",
-				    chromeBox);
-	chHint->setWordWrap(true);
-	chV->addWidget(chHint);
+	chV->addWidget(groupSub("One accent color over OBS's own controls. Applying a Look above recolors "
+				"the accent to match. Chat and browser docks draw their own scroll bars "
+				"(that is the website, not OBS), so those never change.",
+				chromeBox));
 
 	/* ---------- one click looks: coordinated color across every dock ---------- */
 	QGroupBox *looksBox = new QGroupBox("One click looks", colorsTab);

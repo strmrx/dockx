@@ -14,6 +14,7 @@ if the UI does not look the way we expect, do NOTHING. Never crash OBS.
 #include <plugin-support.h>
 
 #include <QAbstractItemModel>
+#include <QApplication>
 #include <QBoxLayout>
 #include <QBrush>
 #include <QColor>
@@ -127,6 +128,7 @@ void stateLoad()
 	g_state.dockGlow = obs_data_get_bool(d, "dock_glow");
 	g_state.gradAnimate = obs_data_get_bool(d, "grad_animate");
 	g_state.chromeOn = obs_data_get_bool(d, "chrome_on");
+	g_state.chromeEverywhere = obs_data_get_bool(d, "chrome_everywhere");
 	const QString savedChrome = QString::fromUtf8(obs_data_get_string(d, "chrome_color"));
 	if (!savedChrome.isEmpty())
 		g_state.chromeColor = savedChrome;
@@ -364,6 +366,7 @@ void stateSave()
 	obs_data_set_bool(d, "dock_glow", g_state.dockGlow);
 	obs_data_set_bool(d, "grad_animate", g_state.gradAnimate);
 	obs_data_set_bool(d, "chrome_on", g_state.chromeOn);
+	obs_data_set_bool(d, "chrome_everywhere", g_state.chromeEverywhere);
 	obs_data_set_string(d, "chrome_color", g_state.chromeColor.toUtf8().constData());
 	obs_data_set_bool(d, "filter_hotkeys", g_state.filterHotkeys);
 	obs_data_set_bool(d, "folder_new_button", g_state.folderNewButton);
@@ -843,48 +846,89 @@ void applySeparators()
 	m->setStyleSheet(qss);
 }
 
-/* opt in whole window accent: one color layered over OBS's own controls.
-   Same marker guarded block trick as the separators, on the main window
-   stylesheet: the theme is never replaced, our block merges on top and
-   toggling off strips ONLY our block so the theme wins again instantly.
-   Scope is deliberately the MAIN WINDOW ONLY (docks, lists, menus, tabs);
-   separate windows like Settings or source Properties keep the pure theme */
+/* opt in whole window accent: one BOLD color layered over OBS's own controls
+   (buttons wear it all the time, full accent tabs and selections, filled
+   slider tracks, ticked boxes, menus, scroll bars, dock title tint). Same
+   marker guarded block trick as the separators: the theme is never replaced,
+   our block merges on top and toggling off strips ONLY our block so the
+   theme wins again instantly. Default scope = the MAIN WINDOW; the
+   chromeEverywhere toggle moves the block onto the APP stylesheet instead,
+   which reaches Settings/Properties/every OBS window. Browser docks draw
+   their own scroll bars inside the web page, so those can never change */
+static QString chromeBlock(const QColor &c)
+{
+	const QString hex = c.name();
+	const QString onAccent = contrastText(c);
+	auto tint = [&c](int alpha) {
+		return QString("rgba(%1,%2,%3,%4)").arg(c.red()).arg(c.green()).arg(c.blue()).arg(alpha);
+	};
+	return QString(CHROME_MARK_BEGIN) +
+	       QString(" QPushButton { background-color: %3; border: 1px solid %4; }"
+		       " QPushButton:hover { background-color: %1; color: %2; }"
+		       " QPushButton:pressed { background-color: %5; color: %2; }"
+		       " QPushButton:checked { background-color: %1; color: %2; }"
+		       " QPushButton:disabled { background-color: %6; }"
+		       " QToolButton:hover { background-color: %3; border: 1px solid %1; }"
+		       " QToolButton:checked { background-color: %1; color: %2; }"
+		       " QTabBar::tab:selected { background-color: %1; color: %2; }"
+		       " QAbstractItemView { selection-background-color: %1; selection-color: %2; }"
+		       " QAbstractItemView::item:hover { background-color: %6; }"
+		       " QMenu::item:selected { background-color: %1; color: %2; }"
+		       " QMenuBar::item:selected { background-color: %1; color: %2; }"
+		       " QCheckBox::indicator:checked, QRadioButton::indicator:checked"
+		       " { background-color: %1; border: 1px solid %1; }"
+		       " QSlider::handle:horizontal, QSlider::handle:vertical { background: %1; }"
+		       " QSlider::sub-page:horizontal { background: %1; }"
+		       " QScrollBar::handle { background: %4; }"
+		       " QScrollBar::handle:hover { background: %1; }"
+		       " QProgressBar::chunk { background-color: %1; }"
+		       " QLineEdit:focus, QSpinBox:focus, QDoubleSpinBox:focus, QComboBox:focus"
+		       " { border: 1px solid %1; }"
+		       " QGroupBox::title { color: %1; }"
+		       " QDockWidget::title { background-color: %6; } ")
+		       .arg(hex, onAccent, tint(60), tint(140), c.darker(120).name(), tint(35)) +
+	       CHROME_MARK_END;
+}
+
 void applyChrome()
 {
 	QMainWindow *m = mainWindow();
 	if (!m)
 		return;
-	QString qss = m->styleSheet();
-	int b = qss.indexOf(CHROME_MARK_BEGIN);
-	if (b >= 0) {
-		int e = qss.indexOf(CHROME_MARK_END);
-		if (e >= 0)
-			qss.remove(b, e + (int)strlen(CHROME_MARK_END) - b);
-		else
-			qss.truncate(b);
-	}
+	auto stripBlock = [](QString qss) {
+		int b = qss.indexOf(CHROME_MARK_BEGIN);
+		if (b >= 0) {
+			int e = qss.indexOf(CHROME_MARK_END);
+			if (e >= 0)
+				qss.remove(b, e + (int)strlen(CHROME_MARK_END) - b);
+			else
+				qss.truncate(b);
+		}
+		return qss;
+	};
+	QString winQss = stripBlock(m->styleSheet());
+	QString appQss = stripBlock(qApp->styleSheet());
 	const QColor c(state().chromeColor);
 	if (state().chromeOn && c.isValid()) {
-		const QString hex = c.name();
-		const QString onAccent = contrastText(c);
-		const QString dim = QString("rgba(%1,%2,%3,110)").arg(c.red()).arg(c.green()).arg(c.blue());
-		QString block = QString(CHROME_MARK_BEGIN) +
-				QString(" QTabBar::tab:selected { border-bottom: 2px solid %1; }"
-					" QAbstractItemView { selection-background-color: %1; selection-color: %2; }"
-					" QMenu::item:selected { background-color: %1; color: %2; }"
-					" QMenuBar::item:selected { background-color: %1; color: %2; }"
-					" QPushButton:hover { border: 1px solid %1; }"
-					" QLineEdit:focus, QSpinBox:focus, QDoubleSpinBox:focus, QComboBox:focus"
-					" { border: 1px solid %1; }"
-					" QScrollBar::handle { background: %3; }"
-					" QScrollBar::handle:hover { background: %1; }"
-					" QSlider::handle:horizontal, QSlider::handle:vertical { background: %1; }"
-					" QProgressBar::chunk { background-color: %1; }"
-					" QGroupBox::title { color: %1; } ")
-					.arg(hex, onAccent, dim);
-		qss += block + CHROME_MARK_END;
+		if (state().chromeEverywhere)
+			appQss += chromeBlock(c);
+		else
+			winQss += chromeBlock(c);
 	}
-	m->setStyleSheet(qss);
+	if (m->styleSheet() != winQss)
+		m->setStyleSheet(winQss);
+	if (qApp->styleSheet() != appQss)
+		qApp->setStyleSheet(appQss);
+}
+
+/* switching the OBS theme replaces the app stylesheet, wiping our block if
+   the accent lives there; reapply once the new theme has settled */
+void applyChromeSoon()
+{
+	QMainWindow *m = mainWindow();
+	if (!m)
+		return;
+	QTimer::singleShot(200, m, []() { applyChrome(); });
 }
 
 /* browser docks and plugin docks appear after we first load; recolor
