@@ -1590,7 +1590,17 @@ private:
 		gs_projection_push();
 		gs_ortho(0.0f, (float)w, 0.0f, (float)h, -100.0f, 100.0f);
 		gs_set_viewport(vx, vy, vw, vh);
+		/* the canvas must READ as a screen even when the scene renders
+		   nothing (camera off): pure black backdrop + a dim frame */
+		drawFilledRect(0.0f, 0.0f, (float)w, (float)h, 0xFF000000);
 		obs_source_video_render(scene);
+		std::vector<vec2> frame(5);
+		vec2_set(&frame[0], 0.0f, 0.0f);
+		vec2_set(&frame[1], (float)w, 0.0f);
+		vec2_set(&frame[2], (float)w, (float)h);
+		vec2_set(&frame[3], 0.0f, (float)h);
+		vec2_set(&frame[4], 0.0f, 0.0f);
+		drawLineStrip(frame, 0xFF555555);
 		self->drawOverlay(scene, w, h, scale);
 		gs_projection_pop();
 		gs_viewport_pop();

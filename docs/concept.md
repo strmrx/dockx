@@ -260,6 +260,11 @@ off-thesis: encoders, multi-output, NDI, VST, replay buffer.
   minimum the app provably dropped -- the old blind 15s forget made the whole layout visibly
   breathe (shrink/regrow) after applying a layout that squeezed the dock below the window's
   real minimum (Joey's shifting-layout report, 2026-09-09).
+- **Visible preview canvas** (Joey 2026-09-09: camera off = "no indicator that a screen
+  is there") -- SHIPPED v0.41.0. The DockX Preview now paints its canvas as a real
+  screen: pure black backdrop + a dim frame around the canvas edge, drawn before/after
+  the scene render, so an empty or all-black scene still shows exactly where the canvas
+  sits and how it letterboxes.
 - **Video docks tab rebuild** (Joey 2026-09-09: the Source docks tab was "terribly
   confusing as a new user... what is program, what is dockx preview") -- SHIPPED
   v0.40.0. Tab renamed to "Video docks" and rebuilt on the de-wording recipe: list rows
