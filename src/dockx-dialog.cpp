@@ -1720,7 +1720,7 @@ void showDialog(const QString &initialTab)
 	};
 	for (const Look &lk : looks) {
 		QPushButton *b = new QPushButton(lk.name, looksBox);
-		QObject::connect(b, &QPushButton::clicked, &dlg, [&dlg, lk, reloadDocks]() {
+		QObject::connect(b, &QPushButton::clicked, &dlg, [&dlg, lk, reloadDocks, sepSpin]() {
 			if (QMessageBox::question(&dlg, "DockX",
 						  QString("Color every dock in the %1 look? Your current dock "
 							  "colors are replaced (scene name colors stay).")
@@ -1740,6 +1740,9 @@ void showDialog(const QString &initialTab)
 			panels::applyDockColors();
 			panels::applySeparators();
 			panels::applyChrome();
+			sepSpin->blockSignals(true);
+			sepSpin->setValue(state().sepSize);
+			sepSpin->blockSignals(false);
 			reloadDocks();
 		});
 		lkRow->addWidget(b);
@@ -1765,12 +1768,170 @@ void showDialog(const QString &initialTab)
 	});
 	lkRow->addWidget(lkClear);
 
-	QLabel *lkHint = new QLabel("Instant color across every dock you have open, plus tinted dock "
-				    "lines. Try one live, then fine tune single docks above. Back to "
-				    "theme wipes it all off.",
-				    looksBox);
-	lkHint->setWordWrap(true);
-	lkV->addWidget(lkHint);
+	/* ---- your saved looks: snapshot the whole Colors tab under a name ---- */
+	auto quietCheck = [](QCheckBox *cb, bool on) {
+		cb->blockSignals(true);
+		cb->setChecked(on);
+		cb->blockSignals(false);
+	};
+	auto applySavedLook = [&dlg, reloadDocks, chromeCb, chromeAllCb, glowCb, animCb, sepSpin, quietCheck](int id) {
+		const SavedLook *found = nullptr;
+		for (const SavedLook &s : state().savedLooks)
+			if (s.id == id) {
+				found = &s;
+				break;
+			}
+		if (!found)
+			return;
+		if (QMessageBox::question(&dlg, "DockX",
+					  QString("Switch every DockX color to your \"%1\" look? "
+						  "(Scene name colors stay.)")
+						  .arg(found->name)) != QMessageBox::Yes)
+			return;
+		const SavedLook lk = *found;
+		state().dockColorMap = lk.dockColorMap;
+		state().dockBgMap = lk.dockBgMap;
+		state().dockGradMap = lk.dockGradMap;
+		state().dockGlow = lk.dockGlow;
+		state().gradAnimate = lk.gradAnimate;
+		state().sepSize = lk.sepSize;
+		state().sepColor = lk.sepColor;
+		state().chromeOn = lk.chromeOn;
+		state().chromeEverywhere = lk.chromeEverywhere;
+		if (!lk.chromeColor.isEmpty())
+			state().chromeColor = lk.chromeColor;
+		stateSave();
+		panels::applyDockColors();
+		panels::applySeparators();
+		panels::applyChrome();
+		quietCheck(chromeCb, lk.chromeOn);
+		quietCheck(chromeAllCb, lk.chromeEverywhere);
+		chromeAllCb->setEnabled(lk.chromeOn);
+		quietCheck(glowCb, lk.dockGlow);
+		quietCheck(animCb, lk.gradAnimate);
+		sepSpin->blockSignals(true);
+		sepSpin->setValue(lk.sepSize);
+		sepSpin->blockSignals(false);
+		reloadDocks();
+	};
+
+	QHBoxLayout *myLkRow = new QHBoxLayout();
+	QPushButton *saveLookBtn = new QPushButton("Save this look", looksBox);
+	makePrimary(saveLookBtn);
+	saveLookBtn->setToolTip("Keeps everything on this tab (dock colors, backgrounds, title fades, "
+				"dock lines, the window accent) as your own one click button.");
+	myLkRow->addWidget(saveLookBtn);
+	QWidget *myLkWrap = new QWidget(looksBox);
+	QHBoxLayout *myLkBtns = new QHBoxLayout(myLkWrap);
+	myLkBtns->setContentsMargins(0, 0, 0, 0);
+	myLkRow->addWidget(myLkWrap);
+	myLkRow->addStretch(1);
+	lkV->addLayout(myLkRow);
+
+	auto rebuildHolder = std::make_shared<std::function<void()>>();
+	std::function<void()> *rebuildMyLooks = rebuildHolder.get();
+	*rebuildHolder = [myLkBtns, myLkWrap, &dlg, applySavedLook, rebuildMyLooks]() {
+		while (QLayoutItem *item = myLkBtns->takeAt(0)) {
+			if (item->widget())
+				item->widget()->deleteLater();
+			delete item;
+		}
+		for (const SavedLook &s : state().savedLooks) {
+			QPushButton *b = new QPushButton(s.name, myLkWrap);
+			b->setToolTip("Click to switch to this look. Right click to rename or delete it.");
+			const int id = s.id;
+			QObject::connect(b, &QPushButton::clicked, &dlg,
+					 [applySavedLook, id]() { applySavedLook(id); });
+			b->setContextMenuPolicy(Qt::CustomContextMenu);
+			QObject::connect(
+				b, &QPushButton::customContextMenuRequested, &dlg,
+				[&dlg, b, id, rebuildMyLooks](const QPoint &pos) {
+					QMenu menu(b);
+					QAction *ren = menu.addAction("Rename");
+					QAction *del = menu.addAction("Delete");
+					QAction *picked = menu.exec(b->mapToGlobal(pos));
+					if (picked == ren) {
+						for (SavedLook &s : state().savedLooks) {
+							if (s.id != id)
+								continue;
+							bool ok = false;
+							const QString name =
+								QInputDialog::getText(&dlg, "Rename look",
+										      "New name:", QLineEdit::Normal,
+										      s.name, &ok)
+									.trimmed();
+							if (ok && !name.isEmpty()) {
+								s.name = name;
+								stateSave();
+								(*rebuildMyLooks)();
+							}
+							break;
+						}
+					} else if (picked == del) {
+						if (QMessageBox::question(&dlg, "DockX",
+									  "Delete this saved look? Your docks keep "
+									  "the colors they have right now.") !=
+						    QMessageBox::Yes)
+							return;
+						auto &v = state().savedLooks;
+						for (auto it = v.begin(); it != v.end(); ++it) {
+							if (it->id == id) {
+								v.erase(it);
+								break;
+							}
+						}
+						stateSave();
+						(*rebuildMyLooks)();
+					}
+				});
+			myLkBtns->addWidget(b);
+		}
+	};
+	(*rebuildHolder)();
+
+	QObject::connect(saveLookBtn, &QPushButton::clicked, &dlg, [&dlg, rebuildHolder]() {
+		bool ok = false;
+		const QString name =
+			QInputDialog::getText(&dlg, "Save look", "Name this look:", QLineEdit::Normal, QString(), &ok)
+				.trimmed();
+		if (!ok || name.isEmpty())
+			return;
+		SavedLook *existing = nullptr;
+		for (SavedLook &s : state().savedLooks)
+			if (s.name.compare(name, Qt::CaseInsensitive) == 0) {
+				existing = &s;
+				break;
+			}
+		if (existing && QMessageBox::question(&dlg, "DockX",
+						      QString("You already have a look called \"%1\". Replace it with "
+							      "the colors you have on right now?")
+							      .arg(existing->name)) != QMessageBox::Yes)
+			return;
+		SavedLook lk;
+		lk.id = existing ? existing->id : state().nextLookId++;
+		lk.name = existing ? existing->name : name;
+		lk.dockColorMap = state().dockColorMap;
+		lk.dockBgMap = state().dockBgMap;
+		lk.dockGradMap = state().dockGradMap;
+		lk.dockGlow = state().dockGlow;
+		lk.gradAnimate = state().gradAnimate;
+		lk.sepSize = state().sepSize;
+		lk.sepColor = state().sepColor;
+		lk.chromeOn = state().chromeOn;
+		lk.chromeEverywhere = state().chromeEverywhere;
+		lk.chromeColor = state().chromeColor;
+		if (existing)
+			*existing = lk;
+		else
+			state().savedLooks.push_back(lk);
+		stateSave();
+		(*rebuildHolder)();
+	});
+
+	lkV->addWidget(groupSub("Instant color across every dock you have open, plus tinted dock lines. "
+				"Save this look keeps your whole current setup as a button of your own; "
+				"Back to theme wipes it all off.",
+				looksBox));
 
 	cvRoot->addWidget(looksBox);
 	cvRoot->addWidget(chromeBox);

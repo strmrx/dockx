@@ -260,6 +260,15 @@ off-thesis: encoders, multi-output, NDI, VST, replay buffer.
   minimum the app provably dropped -- the old blind 15s forget made the whole layout visibly
   breathe (shrink/regrow) after applying a layout that squeezed the dock below the window's
   real minimum (Joey's shifting-layout report, 2026-09-09).
+- **Saved looks** (Joey 2026-09-09: "the colors area needs some type of save look
+  options... save different obs looks") -- SHIPPED v0.38.0. "Save this look" (purple
+  primary button in the One click looks box) snapshots the ENTIRE Colors tab under a
+  name: per dock colors/backgrounds/title fades, glow + shimmer, dock line thickness +
+  tint, and the whole window accent (on/color/everywhere). Each saved look becomes its
+  own button next to the presets: click = apply (confirm; scene name colors stay, same
+  policy as presets), right click = Rename/Delete, saving an existing name asks to
+  replace. Persisted as a `saved_looks` array in dockx.json. Applying re-syncs every
+  control on the tab without firing their handlers.
 - **Bold accent + everywhere toggle** (Joey 2026-09-09 taste-test: "The changes that are
   happenning are cool, but its very little") -- SHIPPED v0.37.0. The accent went from a
   light touch to the standard look: every button wears a dim accent tint (full accent on

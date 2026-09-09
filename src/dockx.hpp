@@ -118,6 +118,24 @@ struct SourceLoadout {
 	std::vector<LoadoutItem> items;
 };
 
+/* a user saved color look: a full snapshot of the Colors tab (dock colors,
+   backgrounds, title fades, effects, dock lines, whole window accent) that
+   applies back in one click, next to the built in looks */
+struct SavedLook {
+	int id = 0;
+	QString name;
+	QHash<QString, QString> dockColorMap;
+	QHash<QString, QString> dockBgMap;
+	QHash<QString, QString> dockGradMap;
+	bool dockGlow = false;
+	bool gradAnimate = false;
+	int sepSize = 0;
+	QString sepColor;
+	bool chromeOn = false;
+	bool chromeEverywhere = false;
+	QString chromeColor;
+};
+
 /* scene folder layout for one scene collection */
 struct FolderData {
 	QHash<QString, QString> assign; /* scene uuid -> folder name */
@@ -169,6 +187,8 @@ struct State {
 	std::vector<PlaceholderEntry> placeholders;
 	int nextPlaceholderId = 1;
 	QStringList mixerOrder; /* custom Audio Mixer order (source names, top first) */
+	std::vector<SavedLook> savedLooks;
+	int nextLookId = 1;
 	std::vector<SourceLoadout> loadouts;
 	int nextLoadoutId = 1;
 	SourceLoadout loadoutUndo; /* pre-restore snapshot; undo twice = redo */

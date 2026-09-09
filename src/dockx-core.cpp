@@ -91,6 +91,32 @@ static char *configFilePath()
 	return obs_module_config_path("dockx.json");
 }
 
+/* string -> string maps (dock key -> color) as a JSON object, both directions */
+static QHash<QString, QString> readColorMap(obs_data_t *parent, const char *key)
+{
+	QHash<QString, QString> out;
+	obs_data_t *obj = obs_data_get_obj(parent, key);
+	if (!obj)
+		return out;
+	for (obs_data_item_t *item = obs_data_first(obj); item; obs_data_item_next(&item)) {
+		const char *k = obs_data_item_get_name(item);
+		const char *v = obs_data_item_get_string(item);
+		if (k && v && *v)
+			out[QString::fromUtf8(k)] = QString::fromUtf8(v);
+	}
+	obs_data_release(obj);
+	return out;
+}
+
+static void writeColorMap(obs_data_t *parent, const char *key, const QHash<QString, QString> &map)
+{
+	obs_data_t *obj = obs_data_create();
+	for (auto it = map.constBegin(); it != map.constEnd(); ++it)
+		obs_data_set_string(obj, it.key().toUtf8().constData(), it.value().toUtf8().constData());
+	obs_data_set_obj(parent, key, obj);
+	obs_data_release(obj);
+}
+
 void stateLoad()
 {
 	char *file = configFilePath();
@@ -223,6 +249,33 @@ void stateLoad()
 			obs_data_release(o);
 		}
 		obs_data_array_release(phs);
+	}
+
+	obs_data_set_default_int(d, "next_look_id", 1);
+	g_state.nextLookId = (int)obs_data_get_int(d, "next_look_id");
+	obs_data_array_t *lks = obs_data_get_array(d, "saved_looks");
+	if (lks) {
+		const size_t n = obs_data_array_count(lks);
+		for (size_t i = 0; i < n; i++) {
+			obs_data_t *o = obs_data_array_item(lks, i);
+			SavedLook lk;
+			lk.id = (int)obs_data_get_int(o, "id");
+			lk.name = QString::fromUtf8(obs_data_get_string(o, "name"));
+			lk.dockColorMap = readColorMap(o, "dock_color_map");
+			lk.dockBgMap = readColorMap(o, "dock_bg_map");
+			lk.dockGradMap = readColorMap(o, "dock_grad_map");
+			lk.dockGlow = obs_data_get_bool(o, "dock_glow");
+			lk.gradAnimate = obs_data_get_bool(o, "grad_animate");
+			lk.sepSize = (int)obs_data_get_int(o, "sep_size");
+			lk.sepColor = QString::fromUtf8(obs_data_get_string(o, "sep_color"));
+			lk.chromeOn = obs_data_get_bool(o, "chrome_on");
+			lk.chromeEverywhere = obs_data_get_bool(o, "chrome_everywhere");
+			lk.chromeColor = QString::fromUtf8(obs_data_get_string(o, "chrome_color"));
+			if (lk.id > 0 && !lk.name.isEmpty())
+				g_state.savedLooks.push_back(lk);
+			obs_data_release(o);
+		}
+		obs_data_array_release(lks);
 	}
 
 	obs_data_t *colors = obs_data_get_obj(d, "colors");
@@ -443,6 +496,28 @@ void stateSave()
 	}
 	obs_data_set_array(d, "placeholders", phs);
 	obs_data_array_release(phs);
+
+	obs_data_set_int(d, "next_look_id", g_state.nextLookId);
+	obs_data_array_t *lks = obs_data_array_create();
+	for (const SavedLook &lk : g_state.savedLooks) {
+		obs_data_t *o = obs_data_create();
+		obs_data_set_int(o, "id", lk.id);
+		obs_data_set_string(o, "name", lk.name.toUtf8().constData());
+		writeColorMap(o, "dock_color_map", lk.dockColorMap);
+		writeColorMap(o, "dock_bg_map", lk.dockBgMap);
+		writeColorMap(o, "dock_grad_map", lk.dockGradMap);
+		obs_data_set_bool(o, "dock_glow", lk.dockGlow);
+		obs_data_set_bool(o, "grad_animate", lk.gradAnimate);
+		obs_data_set_int(o, "sep_size", lk.sepSize);
+		obs_data_set_string(o, "sep_color", lk.sepColor.toUtf8().constData());
+		obs_data_set_bool(o, "chrome_on", lk.chromeOn);
+		obs_data_set_bool(o, "chrome_everywhere", lk.chromeEverywhere);
+		obs_data_set_string(o, "chrome_color", lk.chromeColor.toUtf8().constData());
+		obs_data_array_push_back(lks, o);
+		obs_data_release(o);
+	}
+	obs_data_set_array(d, "saved_looks", lks);
+	obs_data_array_release(lks);
 
 	obs_data_t *colors = obs_data_create();
 	for (auto it = g_state.colors.constBegin(); it != g_state.colors.constEnd(); ++it)
