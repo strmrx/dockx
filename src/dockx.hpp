@@ -271,6 +271,15 @@ void showFirstRun();  /* pop the dock open once so people discover it */
 void shutdown();
 } // namespace folders
 
+/* the DockX Stats dock: OBS's health numbers (fps, cpu, lag, dropped frames,
+   bitrates) in a dock that RESPONDS to its size instead of demanding ~590px
+   like OBS's own Stats panel. Read only 1s polling; registered at load,
+   opened from the Docks menu */
+namespace stats {
+void createDock();
+void shutdown(); /* stops the poll timer at EXIT */
+} // namespace stats
+
 /* live video docks: any source/scene (or Preview/Program) rendered in a dock */
 namespace sourcedocks {
 enum { KIND_SOURCE = 0, KIND_PROGRAM = 1, KIND_PREVIEW = 2 };

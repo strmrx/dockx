@@ -54,6 +54,7 @@ target_sources(
     src/dockx-preview.cpp
     src/dockx-search.cpp
     src/dockx-sourcedocks.cpp
+    src/dockx-stats.cpp
     src/dockx-templates.cpp
     src/dockx-thumbs.cpp
     src/dockx.hpp

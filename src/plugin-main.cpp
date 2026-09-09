@@ -81,6 +81,7 @@ static void on_frontend_event(enum obs_frontend_event event, void *)
 		dockx::filters::shutdown();
 		dockx::folders::shutdown();
 		dockx::placeholders::shutdown(); /* drops always-on-top from pinned windows */
+		dockx::stats::shutdown();
 		dockx::thumbs::shutdown();
 		dockx::panels::shutdown();
 		break;
@@ -100,6 +101,7 @@ bool obs_module_load(void)
 	dockx::stateLoad();
 	dockx::filters::init();
 	dockx::folders::createDock();
+	dockx::stats::createDock();
 	dockx::sourcedocks::createFromState();
 	dockx::editpreview::createFromState();
 	dockx::placeholders::createFromState();

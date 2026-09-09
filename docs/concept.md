@@ -97,14 +97,18 @@ off-thesis: encoders, multi-output, NDI, VST, replay buffer.
 ## Roadmap (in rough order; folds in the validated demand list above -- Joey 2026-07-30:
 ## ALL remaining items from that list stay on this roadmap; DockX is the ONE mega plugin,
 ## every OBS QoL fix ships in this single download, never ten separate plugins)
-- **DockX stats dock** (Joey 2026-09-09, greenlit as an idea: "love it... is there a
-  world we can recreate our own stats panel"): OBS's Stats dock demands ~590px minimum
-  width and jams any column it sits in (the exact wall Joey hit). Build our own from
-  the same public counters (CPU, memory, disk, FPS, render time, lagged/skipped frames,
-  per output dropped frames + bitrate; OBS frontend's window-basic-stats.cpp is the
-  reference) with a RESPONSIVE layout: wide = grid, narrow = stacked label/value, tiny
-  = a color coded health strip (FPS, CPU, dropped, bitrate). 1s QTimer polling, read
-  only, negligible cost. "A stats panel that actually fits in a corner."
+- **DockX stats dock** (Joey 2026-09-09: "yes build the dockx stats bar please") --
+  SHIPPED v0.43.0. New "DockX Stats" dock (new file `src/dockx-stats.cpp`, registered
+  at load, opened from the Docks menu): the same health numbers as OBS's Stats panel
+  (FPS vs target, CPU, memory, disk free at the recording path, render time,
+  render/encode lag, stream status + bitrate + dropped %, recording status + bitrate)
+  from the same public counters, polled once a second, read only. The difference is it
+  RESPONDS to its size instead of demanding ~590px: wide = two pairs per line, narrow =
+  stacked label/value rows, tiny (under ~205px) = essentials only (FPS, CPU, Stream,
+  Recording); minimum width 120px with a scroll fallback. Values color amber/red at
+  warning/trouble thresholds (lag or drops over 1%/5%, disk under 10GB/1GB, FPS under
+  95%/80% of target). Reset button restarts the counters. "A stats panel that actually
+  fits in a corner."
 - **Resize blocker hint** (Joey 2026-09-09: "cool idea... love it"): when a dock
   divider drag hits a wall, tell the user WHICH dock's minimum size is blocking (e.g.
   a toast or a brief highlight on the stubborn dock). Docks can only shrink to the
