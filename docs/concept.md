@@ -260,6 +260,14 @@ off-thesis: encoders, multi-output, NDI, VST, replay buffer.
   minimum the app provably dropped -- the old blind 15s forget made the whole layout visibly
   breathe (shrink/regrow) after applying a layout that squeezed the dock below the window's
   real minimum (Joey's shifting-layout report, 2026-09-09).
+- **Docks tab sections + looks dropdown** (Joey 2026-09-09: background/fade buttons
+  "blending into the dock colors"; presets "should be a dropdown menu") -- SHIPPED
+  v0.39.0. The Colors > Docks box is fully sectioned (divider + bold heading + dim one
+  liner each): Border and title color (with Glow on hover), Background color, Title fade
+  (with Shimmer, moved next to the fade buttons so the dependency reads), Lines between
+  docks. The built in looks collapsed into ONE "One click looks" dropdown whose items
+  carry palette stripe swatches, and grew from 5 to 13 (StrmrX brand purple first, plus
+  Vaporwave, Nord, Ocean, Lava, Gold rush, Cherry blossom, Dracula).
 - **Saved looks** (Joey 2026-09-09: "the colors area needs some type of save look
   options... save different obs looks") -- SHIPPED v0.38.0. "Save this look" (purple
   primary button in the One click looks box) snapshots the ENTIRE Colors tab under a

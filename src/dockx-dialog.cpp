@@ -96,6 +96,18 @@ static QLabel *groupSub(const QString &text, QWidget *parent)
 	return l;
 }
 
+/* a small stripe swatch of a look's palette, for the looks dropdown */
+static QIcon paletteIcon(const QStringList &cols)
+{
+	QPixmap pm(20, 16);
+	pm.fill(Qt::transparent);
+	QPainter p(&pm);
+	const int w = 20 / qMax(1, (int)cols.size());
+	for (int i = 0; i < (int)cols.size(); i++)
+		p.fillRect(i * w, 2, w, 12, QColor(cols.at(i)));
+	return QIcon(pm);
+}
+
 /* ONE accent styled button per box: the action the box exists for */
 static void makePrimary(QPushButton *b)
 {
@@ -1480,9 +1492,42 @@ void showDialog(const QString &initialTab)
 		panels::applyDockColors();
 	};
 
-	addPaletteRow(dockTab, dv, &dlg, setDockColor);
+	/* the Docks box reads as SECTIONS, not one pile of buttons: every styling
+	   move gets a divider + bold heading + one dim line (Joey 2026-09-09:
+	   background/fade controls blended into the dock colors) */
+	auto dockSection = [dockTab, dv](const QString &title) {
+		dv->addSpacing(8);
+		QFrame *line = new QFrame(dockTab);
+		line->setFrameShape(QFrame::HLine);
+		line->setFrameShadow(QFrame::Sunken);
+		dv->addWidget(line);
+		QLabel *head = new QLabel(title, dockTab);
+		QFont f = head->font();
+		f.setBold(true);
+		head->setFont(f);
+		dv->addWidget(head);
+	};
 
-	/* flashier per dock extras: content background + a two color title fade */
+	dv->addWidget(groupSub("Pick one or more docks (Ctrl click or Shift click), then style them "
+			       "with the sections below.",
+			       dockTab));
+
+	dockSection("Border and title color");
+	addPaletteRow(dockTab, dv, &dlg, setDockColor);
+	QCheckBox *glowCb = new QCheckBox("Glow on hover", dockTab);
+	glowCb->setChecked(state().dockGlow);
+	glowCb->setToolTip("A colored dock brightens its border while your mouse is over it. "
+			   "Docks without a color have nothing to glow.");
+	QObject::connect(glowCb, &QCheckBox::toggled, dockTab, [](bool on) {
+		state().dockGlow = on;
+		stateSave();
+		panels::applyDockColors();
+	});
+	dv->addWidget(glowCb);
+	dv->addWidget(groupSub("A colored border and title bar so you can spot the dock instantly. "
+			       "Glow brightens that border under your mouse.",
+			       dockTab));
+
 	auto selectedDockKeys = [dockListW, &dlg]() -> QStringList {
 		QStringList keys;
 		for (QListWidgetItem *it : dockListW->selectedItems())
@@ -1491,17 +1536,18 @@ void showDialog(const QString &initialTab)
 			QMessageBox::information(&dlg, "DockX", "Pick one or more docks first.");
 		return keys;
 	};
+
+	dockSection("Background color");
 	QHBoxLayout *exRow = new QHBoxLayout();
-	QPushButton *bgBtn = new QPushButton("Background color", dockTab);
+	QPushButton *bgBtn = new QPushButton("Set background", dockTab);
 	QPushButton *bgClearBtn = new QPushButton("Clear background", dockTab);
-	QPushButton *gradBtn = new QPushButton("Fade the title", dockTab);
-	QPushButton *gradClearBtn = new QPushButton("Solid title", dockTab);
 	exRow->addWidget(bgBtn);
 	exRow->addWidget(bgClearBtn);
-	exRow->addWidget(gradBtn);
-	exRow->addWidget(gradClearBtn);
 	exRow->addStretch(1);
 	dv->addLayout(exRow);
+	dv->addWidget(groupSub("Tints the dock's content to match. It won't show on video docks; if "
+			       "text gets hard to read, pick a darker tint or clear it.",
+			       dockTab));
 
 	QObject::connect(bgBtn, &QPushButton::clicked, &dlg, [&dlg, selectedDockKeys]() {
 		const QStringList keys = selectedDockKeys();
@@ -1524,6 +1570,28 @@ void showDialog(const QString &initialTab)
 		stateSave();
 		panels::applyDockColors();
 	});
+	dockSection("Title fade");
+	QHBoxLayout *gradRow = new QHBoxLayout();
+	QPushButton *gradBtn = new QPushButton("Fade the title", dockTab);
+	QPushButton *gradClearBtn = new QPushButton("Solid title", dockTab);
+	QCheckBox *animCb = new QCheckBox("Shimmer the fades", dockTab);
+	animCb->setChecked(state().gradAnimate);
+	animCb->setToolTip("Faded title bars slowly swap their two colors back and forth. "
+			   "Pure flair; turn it off any time.");
+	QObject::connect(animCb, &QCheckBox::toggled, dockTab, [](bool on) {
+		state().gradAnimate = on;
+		stateSave();
+		panels::applyDockColors();
+	});
+	gradRow->addWidget(gradBtn);
+	gradRow->addWidget(gradClearBtn);
+	gradRow->addWidget(animCb);
+	gradRow->addStretch(1);
+	dv->addLayout(gradRow);
+	dv->addWidget(groupSub("Blends the title bar from the dock's color into a second color you "
+			       "pick, so give the dock a color first. Shimmer slowly rocks the "
+			       "blend; Solid title takes the fade off.",
+			       dockTab));
 	QObject::connect(gradBtn, &QPushButton::clicked, &dlg, [&dlg, selectedDockKeys]() {
 		const QStringList keys = selectedDockKeys();
 		if (keys.isEmpty())
@@ -1556,52 +1624,7 @@ void showDialog(const QString &initialTab)
 		panels::applyDockColors();
 	});
 
-	QHBoxLayout *fxRow = new QHBoxLayout();
-	QCheckBox *glowCb = new QCheckBox("Glow on hover", dockTab);
-	glowCb->setChecked(state().dockGlow);
-	glowCb->setToolTip("A colored dock brightens its border while your mouse is over it.");
-	QObject::connect(glowCb, &QCheckBox::toggled, dockTab, [](bool on) {
-		state().dockGlow = on;
-		stateSave();
-		panels::applyDockColors();
-	});
-	fxRow->addWidget(glowCb);
-	QCheckBox *animCb = new QCheckBox("Shimmer the title fades", dockTab);
-	animCb->setChecked(state().gradAnimate);
-	animCb->setToolTip("Faded title bars slowly swap their two colors back and forth. "
-			   "Pure flair; turn it off any time.");
-	QObject::connect(animCb, &QCheckBox::toggled, dockTab, [](bool on) {
-		state().gradAnimate = on;
-		stateSave();
-		panels::applyDockColors();
-	});
-	fxRow->addWidget(animCb);
-	fxRow->addStretch(1);
-	dv->addLayout(fxRow);
-
-	QLabel *dhint = new QLabel("Pick a dock (Ctrl click or Shift click for several at once), then a "
-				   "color: the dock gets a colored border and title bar so you can spot "
-				   "it instantly. Background color tints the dock's content too (it "
-				   "won't show on video docks; if text gets hard to read, pick a darker "
-				   "tint or clear it). Fade the title blends the title bar from the "
-				   "dock's color into a second color you pick; Shimmer slowly animates "
-				   "that fade.",
-				   dockTab);
-	dhint->setWordWrap(true);
-	dv->addWidget(dhint);
-
-	/* the separator controls get their own moment: divider + heading, so
-	   they stop blending into the dock color pile above (Joey 2026-09-09) */
-	dv->addSpacing(8);
-	QFrame *sepDivider = new QFrame(dockTab);
-	sepDivider->setFrameShape(QFrame::HLine);
-	sepDivider->setFrameShadow(QFrame::Sunken);
-	dv->addWidget(sepDivider);
-	QLabel *sepHead = new QLabel("Lines between docks", dockTab);
-	QFont sepHeadFont = sepHead->font();
-	sepHeadFont.setBold(true);
-	sepHead->setFont(sepHeadFont);
-	dv->addWidget(sepHead);
+	dockSection("Lines between docks");
 
 	QHBoxLayout *sepRow = new QHBoxLayout();
 	sepRow->addWidget(new QLabel("Thickness:", dockTab));
@@ -1701,7 +1724,7 @@ void showDialog(const QString &initialTab)
 				chromeBox));
 
 	/* ---------- one click looks: coordinated color across every dock ---------- */
-	QGroupBox *looksBox = new QGroupBox("One click looks", colorsTab);
+	QGroupBox *looksBox = new QGroupBox("Looks", colorsTab);
 	QVBoxLayout *lkV = new QVBoxLayout(looksBox);
 	QHBoxLayout *lkRow = new QHBoxLayout();
 	lkV->addLayout(lkRow);
@@ -1711,42 +1734,58 @@ void showDialog(const QString &initialTab)
 		QStringList cols;
 		QString sep;
 	};
+	/* the built in looks live in ONE dropdown so the row stays calm no matter
+	   how many ship (Joey 2026-09-09: buttons would get overwhelming) */
 	const QList<Look> looks = {
+		{"StrmrX", {"#8c1eff", "#a34dff", "#6910c9", "#b975ff", "#7a14e0"}, "#8c1eff"},
 		{"Synthwave", {"#ff2975", "#8c1eff", "#00e5ff", "#ff6ac1", "#5561ff"}, "#8c1eff"},
+		{"Vaporwave", {"#ff71ce", "#01cdfe", "#05ffa1", "#b967ff", "#fffb96"}, "#b967ff"},
 		{"Midnight ice", {"#274690", "#3e78b2", "#5aa9e6", "#4062bb", "#2b3a67"}, "#3e78b2"},
-		{"Sunset", {"#ff6d00", "#ff2d55", "#c9184a", "#ff9e00", "#e5383b"}, "#ff2d55"},
+		{"Nord", {"#88c0d0", "#81a1c1", "#5e81ac", "#8fbcbb", "#b48ead"}, "#81a1c1"},
+		{"Ocean", {"#0077b6", "#00b4d8", "#48cae4", "#023e8a", "#90e0ef"}, "#00b4d8"},
 		{"Forest", {"#2d6a4f", "#40916c", "#52b788", "#1b4332", "#74c69d"}, "#40916c"},
+		{"Sunset", {"#ff6d00", "#ff2d55", "#c9184a", "#ff9e00", "#e5383b"}, "#ff2d55"},
+		{"Lava", {"#ff3d00", "#dd2c00", "#ff6e40", "#ff9e80", "#d50000"}, "#ff3d00"},
+		{"Gold rush", {"#f5c518", "#d4a017", "#b8860b", "#ffdf6b", "#c9a227"}, "#d4a017"},
 		{"Candy", {"#ff6b6b", "#feca57", "#48dbfb", "#ff9ff3", "#1dd1a1"}, "#feca57"},
+		{"Cherry blossom", {"#ffb7c5", "#ff8fab", "#fb6f92", "#ffc2d1", "#ff4d6d"}, "#fb6f92"},
+		{"Dracula", {"#bd93f9", "#ff79c6", "#8be9fd", "#50fa7b", "#ffb86c"}, "#bd93f9"},
 	};
+	auto applyPresetLook = [&dlg, reloadDocks, sepSpin](const Look &lk) {
+		if (QMessageBox::question(&dlg, "DockX",
+					  QString("Color every dock in the %1 look? Your current dock "
+						  "colors are replaced (scene name colors stay).")
+						  .arg(lk.name)) != QMessageBox::Yes)
+			return;
+		state().dockColorMap.clear();
+		state().dockGradMap.clear();
+		int i = 0;
+		for (const panels::DockInfo &info : panels::listDocks())
+			state().dockColorMap[info.key] = lk.cols[i++ % lk.cols.size()];
+		state().sepColor = lk.sep;
+		if (state().sepSize < 2)
+			state().sepSize = 2;
+		if (state().chromeOn)
+			state().chromeColor = lk.sep;
+		stateSave();
+		panels::applyDockColors();
+		panels::applySeparators();
+		panels::applyChrome();
+		sepSpin->blockSignals(true);
+		sepSpin->setValue(state().sepSize);
+		sepSpin->blockSignals(false);
+		reloadDocks();
+	};
+	QPushButton *lkMenuBtn = new QPushButton("One click looks", looksBox);
+	lkMenuBtn->setToolTip("Ready made color sets. Picking one colors every open dock at once; "
+			      "each swatch shows the palette.");
+	QMenu *lkMenu = new QMenu(lkMenuBtn);
 	for (const Look &lk : looks) {
-		QPushButton *b = new QPushButton(lk.name, looksBox);
-		QObject::connect(b, &QPushButton::clicked, &dlg, [&dlg, lk, reloadDocks, sepSpin]() {
-			if (QMessageBox::question(&dlg, "DockX",
-						  QString("Color every dock in the %1 look? Your current dock "
-							  "colors are replaced (scene name colors stay).")
-							  .arg(lk.name)) != QMessageBox::Yes)
-				return;
-			state().dockColorMap.clear();
-			state().dockGradMap.clear();
-			int i = 0;
-			for (const panels::DockInfo &info : panels::listDocks())
-				state().dockColorMap[info.key] = lk.cols[i++ % lk.cols.size()];
-			state().sepColor = lk.sep;
-			if (state().sepSize < 2)
-				state().sepSize = 2;
-			if (state().chromeOn)
-				state().chromeColor = lk.sep;
-			stateSave();
-			panels::applyDockColors();
-			panels::applySeparators();
-			panels::applyChrome();
-			sepSpin->blockSignals(true);
-			sepSpin->setValue(state().sepSize);
-			sepSpin->blockSignals(false);
-			reloadDocks();
-		});
-		lkRow->addWidget(b);
+		QAction *a = lkMenu->addAction(paletteIcon(lk.cols), lk.name);
+		QObject::connect(a, &QAction::triggered, &dlg, [applyPresetLook, lk]() { applyPresetLook(lk); });
 	}
+	lkMenuBtn->setMenu(lkMenu);
+	lkRow->addWidget(lkMenuBtn);
 	lkRow->addStretch(1);
 	QPushButton *lkClear = new QPushButton("Back to theme", looksBox);
 	QObject::connect(lkClear, &QPushButton::clicked, &dlg, [&dlg, reloadDocks, chromeCb]() {
@@ -1928,7 +1967,7 @@ void showDialog(const QString &initialTab)
 		(*rebuildHolder)();
 	});
 
-	lkV->addWidget(groupSub("Instant color across every dock you have open, plus tinted dock lines. "
+	lkV->addWidget(groupSub("One click looks color every open dock at once, plus the dock lines. "
 				"Save this look keeps your whole current setup as a button of your own; "
 				"Back to theme wipes it all off.",
 				looksBox));
