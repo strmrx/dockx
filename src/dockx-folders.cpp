@@ -271,6 +271,7 @@ static void addSourceRow(QTreeWidgetItem *parent, const QString &sceneUuid, obs_
 	row->setFlags(Qt::ItemIsEnabled | Qt::ItemIsSelectable);
 	const bool vis = obs_sceneitem_visible(item);
 	row->setIcon(0, sourceGlyph(vis, obs_sceneitem_locked(item)));
+	row->setToolTip(0, "Click the eye to show or hide this source.");
 	if (!vis)
 		row->setForeground(0, QBrush(QColor(150, 150, 150, 140)));
 	if (obs_sceneitem_is_group(item)) {
@@ -1706,9 +1707,29 @@ void createDock()
 	});
 	v->addWidget(g_tree, 1);
 
-	QObject::connect(g_tree, &QTreeWidget::itemClicked, g_tree, [](QTreeWidgetItem *it, int) {
+	/* was the click that just fired on this row over its eye icon? */
+	auto overRowEye = [](QTreeWidgetItem *it) {
+		if (!g_tree)
+			return false;
+		const QPoint pos = g_tree->viewport()->mapFromGlobal(QCursor::pos());
+		const QRect r = g_tree->visualItemRect(it);
+		if (!r.contains(pos))
+			return false;
+		return pos.x() <= r.left() + g_tree->iconSize().width() + 4;
+	};
+	QObject::connect(g_tree, &QTreeWidget::itemClicked, g_tree, [overRowEye](QTreeWidgetItem *it, int) {
 		if (isFolder(it)) {
 			it->setExpanded(!it->isExpanded());
+			return;
+		}
+		if (isSourceRow(it)) {
+			/* the eye is a real button: click it to show/hide */
+			if (!overRowEye(it))
+				return;
+			withRowItem(it, [](obs_sceneitem_t *item) {
+				obs_sceneitem_set_visible(item, !obs_sceneitem_visible(item));
+			});
+			rebuildSoon();
 			return;
 		}
 		if (!isScene(it))
@@ -1743,9 +1764,10 @@ void createDock()
 		data().collapsed.insert(itemKey(it));
 		stateSave();
 	});
-	QObject::connect(g_tree, &QTreeWidget::itemDoubleClicked, g_tree, [](QTreeWidgetItem *it, int) {
-		/* double click a source row = show/hide, like the eye */
-		if (!isSourceRow(it))
+	QObject::connect(g_tree, &QTreeWidget::itemDoubleClicked, g_tree, [overRowEye](QTreeWidgetItem *it, int) {
+		/* double click a source row = show/hide, like the eye. Skip when the
+		   double click is ON the eye: the single click already toggled */
+		if (!isSourceRow(it) || overRowEye(it))
 			return;
 		withRowItem(it, [](obs_sceneitem_t *item) {
 			obs_sceneitem_set_visible(item, !obs_sceneitem_visible(item));
