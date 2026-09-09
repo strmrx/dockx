@@ -260,6 +260,16 @@ off-thesis: encoders, multi-output, NDI, VST, replay buffer.
   minimum the app provably dropped -- the old blind 15s forget made the whole layout visibly
   breathe (shrink/regrow) after applying a layout that squeezed the dock below the window's
   real minimum (Joey's shifting-layout report, 2026-09-09).
+- **Video docks tab rebuild** (Joey 2026-09-09: the Source docks tab was "terribly
+  confusing as a new user... what is program, what is dockx preview") -- SHIPPED
+  v0.40.0. Tab renamed to "Video docks" and rebuilt on the de-wording recipe: list rows
+  explain themselves ("Program (what your viewers see)", "(scene)" vs "(source)",
+  "DockX Preview (your editable preview)"), the empty list teaches in the empty space,
+  and the add area is three explained boxes with the DockX Preview as the purple
+  primary star. Its copy now leads with Joey's why: OBS's built in preview is bolted to
+  the center of the window and every dock must fit around it; add the DockX Preview,
+  hide the big preview (Settings), and the whole layout is yours. "Add Program dock"
+  button added (was not reachable from the tab before).
 - **Docks tab sections + looks dropdown** (Joey 2026-09-09: background/fade buttons
   "blending into the dock colors"; presets "should be a dropdown menu") -- SHIPPED
   v0.39.0. The Colors > Docks box is fully sectioned (divider + bold heading + dim one

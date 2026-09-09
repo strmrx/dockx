@@ -252,8 +252,8 @@ QString describeHolders(const QString &sourceName)
 	/* our own live source docks (the one holder DockX itself can create) */
 	for (const SourceDockEntry &e : state().sourceDocks)
 		if (e.kind == sourcedocks::KIND_SOURCE && e.sourceName == sourceName) {
-			reasons << "a DockX live dock is showing it (Tools > DockX > "
-				   "Source docks, remove that dock)";
+			reasons << "a DockX video dock is showing it (Tools > DockX > "
+				   "Video docks, remove that dock)";
 			break;
 		}
 

@@ -1977,17 +1977,32 @@ void showDialog(const QString &initialTab)
 
 	tabs->addTab(colorsTab, "Colors");
 
-	/* ---------- Source docks tab ---------- */
+	/* ---------- Video docks tab (source docks + the DockX Preview) ----------
+	   renamed from "Source docks" + rebuilt on the de-wording recipe (Joey
+	   2026-09-09: "terribly confusing as a new user"): rows say what they are,
+	   the empty list teaches, and each add choice is its own explained box */
 	QWidget *sdTab = new QWidget();
 	QVBoxLayout *sdv = new QVBoxLayout(sdTab);
 
-	QListWidget *sdListW = new QListWidget(sdTab);
+	sdv->addWidget(groupSub("Small live video windows you can dock anywhere in your layout, each "
+				"showing one thing.",
+				sdTab));
+
+	QListWidget *sdListW = new HintList("No video docks yet.\n\nAdd one below: keep an eye on a camera "
+					    "or chat, watch exactly what your viewers see, or add the DockX "
+					    "Preview and take control of your whole layout.",
+					    sdTab);
+	sdListW->setToolTip("Every video dock also appears in OBS's Docks menu, and its position saves "
+			    "with your dock layouts.");
 	auto sdTitle = [](const SourceDockEntry &e) {
 		if (e.kind == sourcedocks::KIND_PROGRAM)
-			return QString("Program");
+			return QString("Program (what your viewers see)");
 		if (e.kind == sourcedocks::KIND_PREVIEW)
-			return QString("Preview");
-		return e.sourceName;
+			return QString("Preview (studio mode staging)");
+		obs_source_t *s = obs_get_source_by_name(e.sourceName.toUtf8().constData());
+		const bool isScene = s && obs_source_is_scene(s);
+		obs_source_release(s);
+		return QString("%1 (%2)").arg(e.sourceName, isScene ? "scene" : "source");
 	};
 	auto sdReload = [sdListW, sdTitle]() {
 		sdListW->clear();
@@ -1997,7 +2012,7 @@ void showDialog(const QString &initialTab)
 			it->setData(Qt::UserRole + 1, false); /* not an editable dock */
 		}
 		for (int id : editpreview::dockIds()) {
-			QListWidgetItem *it = new QListWidgetItem("DockX Preview", sdListW);
+			QListWidgetItem *it = new QListWidgetItem("DockX Preview (your editable preview)", sdListW);
 			it->setData(Qt::UserRole, id);
 			it->setData(Qt::UserRole + 1, true); /* editable dock */
 		}
@@ -2005,16 +2020,19 @@ void showDialog(const QString &initialTab)
 	sdReload();
 
 	/* --- your current docks --- */
-	QLabel *sdListLbl = new QLabel("Your source docks", sdTab);
+	QLabel *sdListLbl = new QLabel("Your video docks", sdTab);
 	sdv->addWidget(sdListLbl);
 	sdv->addWidget(sdListW, 1);
 
 	QHBoxLayout *sdListBtns = new QHBoxLayout();
 	QPushButton *sdRemove = new QPushButton("Remove selected", sdTab);
+	sdRemove->setEnabled(false);
 	sdListBtns->addWidget(sdRemove);
 	sdListBtns->addStretch(1);
 	sdv->addLayout(sdListBtns);
-	QObject::connect(sdRemove, &QPushButton::clicked, sdTab, [sdListW, sdReload]() {
+	QObject::connect(sdListW, &QListWidget::itemSelectionChanged, sdTab,
+			 [sdListW, sdRemove]() { sdRemove->setEnabled(sdListW->currentItem() != nullptr); });
+	QObject::connect(sdRemove, &QPushButton::clicked, sdTab, [sdListW, sdReload, sdRemove]() {
 		QListWidgetItem *it = sdListW->currentItem();
 		if (!it)
 			return;
@@ -2024,10 +2042,10 @@ void showDialog(const QString &initialTab)
 		else
 			sourcedocks::removeDock(id);
 		sdReload();
+		sdRemove->setEnabled(false);
 	});
 
-	/* --- add a new dock: scenes and sources live in their own searchable
-	   dropdowns so the two never blur together --- */
+	/* --- add a new dock: three separate, explained choices --- */
 	auto makeSearchCombo = [sdTab](const QStringList &items, const QString &placeholder) {
 		QComboBox *c = new QComboBox(sdTab);
 		c->addItems(items);
@@ -2056,39 +2074,61 @@ void showDialog(const QString &initialTab)
 		c->clearEditText();
 	};
 
-	QGroupBox *addGroup = new QGroupBox("Add a live dock", sdTab);
-	QVBoxLayout *ag = new QVBoxLayout(addGroup);
+	QHBoxLayout *sdAddRow = new QHBoxLayout();
+
+	/* the star: the editable preview that frees the layout */
+	QGroupBox *epBox = new QGroupBox("DockX Preview", sdTab);
+	QVBoxLayout *epV = new QVBoxLayout(epBox);
+	QPushButton *editBtn = new QPushButton("Add DockX Preview", epBox);
+	makePrimary(editBtn);
+	editBtn->setToolTip("Its Show/Hide OBS preview button brings the built in preview back any time.");
+	epV->addWidget(editBtn);
+	epV->addWidget(groupSub("Your scene in a dock you can EDIT: drag sources with snapping. OBS's own "
+				"preview is bolted to the center and every dock must fit around it; add "
+				"this, hide the big preview (Settings tab), and your whole layout is "
+				"yours.",
+				epBox));
+	epV->addStretch(1);
+	sdAddRow->addWidget(epBox, 3);
+
+	QGroupBox *watchBox = new QGroupBox("Watch one scene or source", sdTab);
+	QVBoxLayout *ag = new QVBoxLayout(watchBox);
 
 	QHBoxLayout *sceneRow = new QHBoxLayout();
-	QLabel *sceneLbl = new QLabel("Scene", addGroup);
-	sceneLbl->setMinimumWidth(60);
+	QLabel *sceneLbl = new QLabel("Scene", watchBox);
+	sceneLbl->setMinimumWidth(50);
 	QComboBox *sceneCombo = makeSearchCombo(sceneNames(), "Type to search scenes");
-	QPushButton *addSceneBtn = new QPushButton("Add", addGroup);
+	QPushButton *addSceneBtn = new QPushButton("Add", watchBox);
 	sceneRow->addWidget(sceneLbl);
 	sceneRow->addWidget(sceneCombo, 1);
 	sceneRow->addWidget(addSceneBtn);
 	ag->addLayout(sceneRow);
 
 	QHBoxLayout *srcRow = new QHBoxLayout();
-	QLabel *sdSrcLbl = new QLabel("Source", addGroup);
-	sdSrcLbl->setMinimumWidth(60);
+	QLabel *sdSrcLbl = new QLabel("Source", watchBox);
+	sdSrcLbl->setMinimumWidth(50);
 	QComboBox *srcCombo = makeSearchCombo(dockableInputNames(), "Type to search sources");
-	QPushButton *addSrcBtn = new QPushButton("Add", addGroup);
+	QPushButton *addSrcBtn = new QPushButton("Add", watchBox);
 	srcRow->addWidget(sdSrcLbl);
 	srcRow->addWidget(srcCombo, 1);
 	srcRow->addWidget(addSrcBtn);
 	ag->addLayout(srcRow);
 
-	QHBoxLayout *editRow = new QHBoxLayout();
-	QLabel *editLbl = new QLabel("Preview", addGroup);
-	editLbl->setMinimumWidth(60);
-	QPushButton *editBtn = new QPushButton("Add DockX Preview (movable, editable)", addGroup);
-	editRow->addWidget(editLbl);
-	editRow->addWidget(editBtn);
-	editRow->addStretch(1);
-	ag->addLayout(editRow);
+	ag->addWidget(groupSub("A live mini window of just that one thing, like your camera or chat. "
+			       "Audio sources get volume and mute; browser sources stay clickable.",
+			       watchBox));
+	ag->addStretch(1);
+	sdAddRow->addWidget(watchBox, 4);
 
-	sdv->addWidget(addGroup);
+	QGroupBox *progBox = new QGroupBox("Your live output", sdTab);
+	QVBoxLayout *pgV = new QVBoxLayout(progBox);
+	QPushButton *addProgBtn = new QPushButton("Add Program dock", progBox);
+	pgV->addWidget(addProgBtn);
+	pgV->addWidget(groupSub("A small copy of exactly what your viewers are seeing right now.", progBox));
+	pgV->addStretch(1);
+	sdAddRow->addWidget(progBox, 2);
+
+	sdv->addLayout(sdAddRow);
 
 	QObject::connect(addSceneBtn, &QPushButton::clicked, sdTab, [addNamed, sceneCombo]() { addNamed(sceneCombo); });
 	QObject::connect(sceneCombo->lineEdit(), &QLineEdit::returnPressed, sdTab,
@@ -2100,19 +2140,12 @@ void showDialog(const QString &initialTab)
 		editpreview::addDock();
 		sdReload();
 	});
+	QObject::connect(addProgBtn, &QPushButton::clicked, sdTab, [sdReload]() {
+		sourcedocks::addDock(sourcedocks::KIND_PROGRAM, QString());
+		sdReload();
+	});
 
-	QLabel *sdHint = new QLabel("A scene or source dock shows that one thing live. Audio sources get "
-				    "volume and mute controls; browser sources are clickable right in the "
-				    "dock. A DockX Preview is the movable, editable window of your current "
-				    "scene: click a source and drag it, with snapping, right in the dock, "
-				    "and its Show/Hide OBS preview button gives you OBS's built-in preview "
-				    "back any time. Find them in the Docks menu; their position saves with "
-				    "your dock layouts.",
-				    sdTab);
-	sdHint->setWordWrap(true);
-	sdv->addWidget(sdHint);
-
-	tabs->addTab(sdTab, "Source docks");
+	tabs->addTab(sdTab, "Video docks");
 
 	/* ---------- Placeholders tab ---------- */
 	QWidget *phTab = new QWidget();

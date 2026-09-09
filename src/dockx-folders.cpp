@@ -1170,7 +1170,7 @@ static void buildSceneMenu(QMenu &menu, const QString &uuid, const QString &name
 			setSceneColor(name, c.name());
 	});
 	colorMenu->addAction("No color", [name]() { setSceneColor(name, QString()); });
-	menu.addAction("Add Source Dock", [name]() { sourcedocks::addDock(sourcedocks::KIND_SOURCE, name); });
+	menu.addAction("Add Video Dock", [name]() { sourcedocks::addDock(sourcedocks::KIND_SOURCE, name); });
 
 	menu.addSeparator();
 	QMenu *projMenu = menu.addMenu("Open Scene Projector");
