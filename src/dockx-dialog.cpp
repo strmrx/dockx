@@ -45,6 +45,7 @@ GPL v2, see plugin-main.cpp for the full notice.
 #include <QHeaderView>
 #include <QTreeWidget>
 #include <QVBoxLayout>
+#include <QPainter>
 
 #include <functional>
 #include <memory>
@@ -54,6 +55,55 @@ namespace dockx {
 static QMainWindow *mainWindow()
 {
 	return static_cast<QMainWindow *>(obs_frontend_get_main_window());
+}
+
+/* a list that explains itself while it is empty: the guidance lives IN the
+   empty space instead of a paragraph below, and disappears once there are
+   rows (part of the dialog de-wording pass, Joey 2026-09-09) */
+class HintList : public QListWidget {
+public:
+	HintList(const QString &hint, QWidget *parent = nullptr) : QListWidget(parent), hintText(hint)
+	{
+		setSpacing(2);
+	}
+
+protected:
+	void paintEvent(QPaintEvent *ev) override
+	{
+		QListWidget::paintEvent(ev);
+		if (count() > 0)
+			return;
+		QPainter p(viewport());
+		QColor c = palette().color(QPalette::Text);
+		c.setAlpha(150);
+		p.setPen(c);
+		p.drawText(viewport()->rect().adjusted(24, 12, -24, -12), Qt::AlignCenter | Qt::TextWordWrap, hintText);
+	}
+
+private:
+	QString hintText;
+};
+
+/* a quiet one line subtitle under a group title; carries the whole
+   explanation so the boxes need no paragraph of small print */
+static QLabel *groupSub(const QString &text, QWidget *parent)
+{
+	QLabel *l = new QLabel(text, parent);
+	l->setWordWrap(true);
+	QColor c = l->palette().color(QPalette::Text);
+	l->setStyleSheet(QString("color: rgba(%1,%2,%3,165);").arg(c.red()).arg(c.green()).arg(c.blue()));
+	return l;
+}
+
+/* ONE accent styled button per box: the action the box exists for */
+static void makePrimary(QPushButton *b)
+{
+	b->setStyleSheet("QPushButton { background-color: #8c1eff; color: #ffffff; font-weight: 600;"
+			 " border: none; border-radius: 4px; padding: 5px 14px; }"
+			 " QPushButton:hover { background-color: #9d43ff; }"
+			 " QPushButton:pressed { background-color: #7a14e0; }"
+			 " QPushButton:disabled { background-color: rgba(140,30,255,90);"
+			 " color: rgba(255,255,255,140); }");
 }
 
 static QStringList sceneNames()
@@ -581,8 +631,11 @@ void showDialog(const QString &initialTab)
 	   found the split confusing and he built it) */
 	QGroupBox *savedBox = new QGroupBox("Dock layouts (your panels)", layoutsTab);
 	QVBoxLayout *slv = new QVBoxLayout(savedBox);
+	slv->addWidget(groupSub("Where your panels sit around the screen. Save one per way you stream.", savedBox));
 
-	QListWidget *layoutList = new QListWidget(savedBox);
+	QListWidget *layoutList = new HintList("No layouts saved yet.\n\nArrange your docks the way you like, "
+					       "then click Save current layout.",
+					       savedBox);
 	slv->addWidget(layoutList, 1);
 
 	auto reloadLayouts = [layoutList]() {
@@ -604,32 +657,45 @@ void showDialog(const QString &initialTab)
 
 	QHBoxLayout *lb = new QHBoxLayout();
 	QPushButton *saveBtn = new QPushButton("Save current layout", layoutsTab);
+	makePrimary(saveBtn);
+	saveBtn->setToolTip("Snapshots which docks are open and where they sit right now.");
 	QPushButton *applyBtn = new QPushButton("Apply", layoutsTab);
+	applyBtn->setToolTip("Rearrange your docks to the selected layout. You can always undo. "
+			     "Double clicking a layout applies it too.");
+	applyBtn->setEnabled(false);
 	QPushButton *undoBtn = new QPushButton("Undo apply", layoutsTab);
+	undoBtn->setToolTip("Put the docks back the way they were before the last apply.");
+	QPushButton *moreBtn = new QPushButton("More", layoutsTab);
 	lb->addWidget(saveBtn);
 	lb->addWidget(applyBtn);
 	lb->addWidget(undoBtn);
+	lb->addWidget(moreBtn);
+	lb->addStretch(1);
 	slv->addLayout(lb);
 
-	QHBoxLayout *lb2 = new QHBoxLayout();
-	QPushButton *hotkeyBtn = new QPushButton("Set hotkey", layoutsTab);
-	QPushButton *unbindBtn = new QPushButton("Remove hotkey", layoutsTab);
-	QPushButton *renameBtn = new QPushButton("Rename", layoutsTab);
-	QPushButton *deleteBtn = new QPushButton("Delete", layoutsTab);
-	lb2->addWidget(hotkeyBtn);
-	lb2->addWidget(unbindBtn);
-	lb2->addWidget(renameBtn);
-	lb2->addWidget(deleteBtn);
-	lb2->addStretch(1);
-	slv->addLayout(lb2);
-
-	QLabel *hint = new QLabel("A dock layout remembers your PANELS: which docks are open and "
-				  "where they sit around your screen. Save one per way you stream. "
-				  "Set hotkey binds a key right here; a Stream Deck can press that "
-				  "key for one tap changes. Applying always keeps an undo.",
-				  savedBox);
-	hint->setWordWrap(true);
-	slv->addWidget(hint);
+	/* rename/delete/hotkeys live behind More and behind a right click on the
+	   list: available, not shouting */
+	QMenu *layoutMenu = new QMenu(moreBtn);
+	layoutMenu->setToolTipsVisible(true);
+	QAction *actHotkey = layoutMenu->addAction("Set hotkey...");
+	actHotkey->setToolTip("Bind a key that applies the selected layout; a Stream Deck can "
+			      "press that key for one tap changes.");
+	QAction *actUnbind = layoutMenu->addAction("Remove hotkey");
+	layoutMenu->addSeparator();
+	QAction *actRename = layoutMenu->addAction("Rename...");
+	QAction *actDelete = layoutMenu->addAction("Delete");
+	moreBtn->setMenu(layoutMenu);
+	layoutList->setContextMenuPolicy(Qt::CustomContextMenu);
+	QObject::connect(layoutList, &QListWidget::customContextMenuRequested, layoutList,
+			 [layoutList, layoutMenu](const QPoint &pos) {
+				 if (QListWidgetItem *it = layoutList->itemAt(pos))
+					 layoutList->setCurrentItem(it);
+				 layoutMenu->exec(layoutList->viewport()->mapToGlobal(pos));
+			 });
+	QObject::connect(layoutList, &QListWidget::itemSelectionChanged, applyBtn,
+			 [applyBtn, layoutList]() { applyBtn->setEnabled(layoutList->currentItem() != nullptr); });
+	QObject::connect(layoutList, &QListWidget::itemDoubleClicked, &dlg,
+			 [](QListWidgetItem *it) { panels::applyLayout(it->data(Qt::UserRole).toInt()); });
 
 	QObject::connect(saveBtn, &QPushButton::clicked, &dlg, [&dlg, reloadLayouts]() {
 		QMainWindow *m = mainWindow();
@@ -653,7 +719,7 @@ void showDialog(const QString &initialTab)
 		}
 		panels::applyLayout(id);
 	});
-	QObject::connect(renameBtn, &QPushButton::clicked, &dlg, [&dlg, selectedLayoutId, reloadLayouts]() {
+	QObject::connect(actRename, &QAction::triggered, &dlg, [&dlg, selectedLayoutId, reloadLayouts]() {
 		int id = selectedLayoutId();
 		Layout *l = id ? findLayout(id) : nullptr;
 		if (!l)
@@ -667,7 +733,7 @@ void showDialog(const QString &initialTab)
 		renameLayout(id, name);
 		reloadLayouts();
 	});
-	QObject::connect(deleteBtn, &QPushButton::clicked, &dlg, [&dlg, selectedLayoutId, reloadLayouts]() {
+	QObject::connect(actDelete, &QAction::triggered, &dlg, [&dlg, selectedLayoutId, reloadLayouts]() {
 		int id = selectedLayoutId();
 		Layout *l = id ? findLayout(id) : nullptr;
 		if (!l)
@@ -685,7 +751,7 @@ void showDialog(const QString &initialTab)
 		if (!panels::undoLayout())
 			QMessageBox::information(&dlg, "DockX", "Nothing to undo yet.");
 	});
-	QObject::connect(hotkeyBtn, &QPushButton::clicked, &dlg, [&dlg, selectedLayoutId, reloadLayouts]() {
+	QObject::connect(actHotkey, &QAction::triggered, &dlg, [&dlg, selectedLayoutId, reloadLayouts]() {
 		int id = selectedLayoutId();
 		Layout *l = id ? findLayout(id) : nullptr;
 		if (!l) {
@@ -705,7 +771,7 @@ void showDialog(const QString &initialTab)
 			setLayoutHotkey(l, QKeySequence());
 		reloadLayouts();
 	});
-	QObject::connect(unbindBtn, &QPushButton::clicked, &dlg, [&dlg, selectedLayoutId, reloadLayouts]() {
+	QObject::connect(actUnbind, &QAction::triggered, &dlg, [&dlg, selectedLayoutId, reloadLayouts]() {
 		int id = selectedLayoutId();
 		Layout *l = id ? findLayout(id) : nullptr;
 		if (!l) {
@@ -731,11 +797,9 @@ void showDialog(const QString &initialTab)
 	tplList->setMaximumHeight(96);
 	tplV->addWidget(tplList);
 
-	QLabel *tplDesc = new QLabel("Pick a starting point, then make it yours. Applying a template "
-				     "hides OBS's fixed preview, adds a DockX Preview, and arranges your "
-				     "docks. It always keeps an undo, so it is safe to try on any layout.",
-				     tplTab);
-	tplDesc->setWordWrap(true);
+	QLabel *tplDesc = groupSub("Ready made starting points. Pick one to see what it does; "
+				   "applying always keeps an undo.",
+				   tplTab);
 	tplV->addWidget(tplDesc);
 
 	auto tplSelId = [tplList]() -> QString {
@@ -750,22 +814,28 @@ void showDialog(const QString &initialTab)
 
 	QHBoxLayout *tplBtns = new QHBoxLayout();
 	QPushButton *tplApply = new QPushButton("Apply template", tplTab);
+	tplApply->setEnabled(false);
+	tplApply->setToolTip("Hides OBS's fixed preview, adds a DockX Preview, and arranges "
+			     "your docks. Safe to try: Undo apply puts everything back.");
 	QPushButton *tplUndo = new QPushButton("Undo apply", tplTab);
 	tplBtns->addWidget(tplApply);
 	tplBtns->addWidget(tplUndo);
 	tplBtns->addStretch(1);
 	tplV->addLayout(tplBtns);
 
-	QObject::connect(tplApply, &QPushButton::clicked, &dlg, [&dlg, tplSelId]() {
+	QObject::connect(tplList, &QListWidget::itemSelectionChanged, tplApply,
+			 [tplApply, tplList]() { tplApply->setEnabled(tplList->currentItem() != nullptr); });
+	auto applyTemplate = [&dlg, tplSelId]() {
 		const QString id = tplSelId();
-		if (id.isEmpty()) {
-			QMessageBox::information(&dlg, "DockX", "Pick a template first.");
+		if (id.isEmpty())
 			return;
-		}
 		if (!templates::apply(id, &dlg))
 			QMessageBox::information(&dlg, "DockX",
 						 "Could not apply that template. Your layout was not changed.");
-	});
+	};
+	QObject::connect(tplApply, &QPushButton::clicked, &dlg, applyTemplate);
+	QObject::connect(tplList, &QListWidget::itemDoubleClicked, &dlg,
+			 [applyTemplate](QListWidgetItem *) { applyTemplate(); });
 	QObject::connect(tplUndo, &QPushButton::clicked, &dlg, [&dlg]() {
 		if (!panels::undoLayout())
 			QMessageBox::information(&dlg, "DockX", "Nothing to undo yet.");
@@ -778,8 +848,14 @@ void showDialog(const QString &initialTab)
 	/* ---------- source loadouts (source positions, LoadoutX ported) ---------- */
 	QGroupBox *loTab = new QGroupBox("Source loadouts (inside your scenes)", layoutsTab);
 	QVBoxLayout *lov = new QVBoxLayout(loTab);
+	lov->addWidget(groupSub("Where your sources sit inside a scene: position, size, crop, "
+				"visibility. Layouts are your panels; loadouts are your sources.",
+				loTab));
 
-	QListWidget *loList = new QListWidget(loTab);
+	QListWidget *loList = new HintList("No loadouts saved yet.\n\nSet a scene up perfectly, then click "
+					   "Save current scene. If things get nudged mid stream, Restore "
+					   "snaps them all back.",
+					   loTab);
 	lov->addWidget(loList, 1);
 
 	auto reloadLoadouts = [loList]() {
@@ -838,46 +914,52 @@ void showDialog(const QString &initialTab)
 
 	QHBoxLayout *lob = new QHBoxLayout();
 	QPushButton *loSaveCur = new QPushButton("Save current scene", loTab);
+	makePrimary(loSaveCur);
+	loSaveCur->setToolTip("Saves where every source in the current scene sits: position, size, "
+			      "rotation, crop, visibility, lock.");
 	QPushButton *loSaveAll = new QPushButton("Save all scenes", loTab);
+	loSaveAll->setToolTip("One loadout that covers every scene at once.");
 	QPushButton *loRestore = new QPushButton("Restore", loTab);
+	loRestore->setToolTip("Snap every saved source back to its saved spot. You can always undo. "
+			      "Double clicking a loadout restores it too.");
+	loRestore->setEnabled(false);
 	QPushButton *loUndo = new QPushButton("Undo restore", loTab);
+	loUndo->setToolTip("Put things back the way they were before the restore. Press it twice "
+			   "to flip forward again.");
+	QPushButton *loMore = new QPushButton("More", loTab);
 	lob->addWidget(loSaveCur);
 	lob->addWidget(loSaveAll);
 	lob->addWidget(loRestore);
 	lob->addWidget(loUndo);
+	lob->addWidget(loMore);
+	lob->addStretch(1);
 	lov->addLayout(lob);
 
-	QHBoxLayout *lob2 = new QHBoxLayout();
-	QPushButton *loRename = new QPushButton("Rename", loTab);
-	QPushButton *loDelete = new QPushButton("Delete", loTab);
-	QPushButton *loExport = new QPushButton("Back up to file", loTab);
-	QPushButton *loImport = new QPushButton("Import from file", loTab);
-	lob2->addWidget(loRename);
-	lob2->addWidget(loDelete);
-	lob2->addWidget(loExport);
-	lob2->addWidget(loImport);
-	lob2->addStretch(1);
-	lov->addLayout(lob2);
-
-	QLabel *loHint = new QLabel("Dock layouts (left) are your panels; a LOADOUT is your sources: where "
-				    "everything sits INSIDE your scenes (position, size, rotation, crop, "
-				    "visibility, lock). Save one when a scene looks perfect; if things get "
-				    "nudged mid stream, Restore snaps them all back. Restoring keeps an "
-				    "undo (press Undo restore twice to flip back again). Back up to file "
-				    "moves loadouts to another PC or shares them; Import adds them without "
-				    "overwriting anything.",
-				    loTab);
-	loHint->setWordWrap(true);
-	lov->addWidget(loHint);
+	QMenu *loMenu = new QMenu(loMore);
+	loMenu->setToolTipsVisible(true);
+	QAction *loActRename = loMenu->addAction("Rename...");
+	QAction *loActDelete = loMenu->addAction("Delete");
+	loMenu->addSeparator();
+	QAction *loActExport = loMenu->addAction("Back up to file...");
+	loActExport->setToolTip("Saves your loadouts to a file, to move them to another PC or share them.");
+	QAction *loActImport = loMenu->addAction("Import from file...");
+	loActImport->setToolTip("Adds loadouts from a backup file; nothing of yours is overwritten.");
+	loMore->setMenu(loMenu);
+	loList->setContextMenuPolicy(Qt::CustomContextMenu);
+	QObject::connect(loList, &QListWidget::customContextMenuRequested, loList, [loList, loMenu](const QPoint &pos) {
+		if (QListWidgetItem *it = loList->itemAt(pos))
+			loList->setCurrentItem(it);
+		loMenu->exec(loList->viewport()->mapToGlobal(pos));
+	});
+	QObject::connect(loList, &QListWidget::itemSelectionChanged, loRestore,
+			 [loRestore, loList]() { loRestore->setEnabled(loList->currentItem() != nullptr); });
 
 	QObject::connect(loSaveCur, &QPushButton::clicked, &dlg, [saveLoadout]() { saveLoadout(false); });
 	QObject::connect(loSaveAll, &QPushButton::clicked, &dlg, [saveLoadout]() { saveLoadout(true); });
-	QObject::connect(loRestore, &QPushButton::clicked, &dlg, [&dlg, selectedLoadout]() {
+	auto restoreSelected = [&dlg, selectedLoadout]() {
 		SourceLoadout *l = selectedLoadout();
-		if (!l) {
-			QMessageBox::information(&dlg, "DockX", "Pick a loadout first.");
+		if (!l)
 			return;
-		}
 		const QString scope = l->sceneUuid.isEmpty() ? "every scene" : l->sceneName;
 		const auto answer =
 			QMessageBox::question(&dlg, "Restore loadout",
@@ -896,7 +978,10 @@ void showDialog(const QString &initialTab)
 			msg += "\n\nNot found anymore:\n" + shown.join("\n");
 		}
 		QMessageBox::information(&dlg, "DockX", msg);
-	});
+	};
+	QObject::connect(loRestore, &QPushButton::clicked, &dlg, restoreSelected);
+	QObject::connect(loList, &QListWidget::itemDoubleClicked, &dlg,
+			 [restoreSelected](QListWidgetItem *) { restoreSelected(); });
 	QObject::connect(loUndo, &QPushButton::clicked, &dlg, [&dlg]() {
 		loadouts::RestoreReport r;
 		if (!loadouts::undoRestore(r)) {
@@ -907,7 +992,7 @@ void showDialog(const QString &initialTab)
 		QMessageBox::information(&dlg, "DockX",
 					 QString("Put %1 sources back the way they were.").arg(r.restored));
 	});
-	QObject::connect(loRename, &QPushButton::clicked, &dlg, [&dlg, selectedLoadout, reloadLoadouts]() {
+	QObject::connect(loActRename, &QAction::triggered, &dlg, [&dlg, selectedLoadout, reloadLoadouts]() {
 		SourceLoadout *l = selectedLoadout();
 		if (!l)
 			return;
@@ -921,7 +1006,7 @@ void showDialog(const QString &initialTab)
 		stateSave();
 		reloadLoadouts();
 	});
-	QObject::connect(loDelete, &QPushButton::clicked, &dlg, [&dlg, selectedLoadout, reloadLoadouts]() {
+	QObject::connect(loActDelete, &QAction::triggered, &dlg, [&dlg, selectedLoadout, reloadLoadouts]() {
 		SourceLoadout *l = selectedLoadout();
 		if (!l)
 			return;
@@ -942,7 +1027,7 @@ void showDialog(const QString &initialTab)
 		stateSave();
 		reloadLoadouts();
 	});
-	QObject::connect(loExport, &QPushButton::clicked, &dlg, [&dlg]() {
+	QObject::connect(loActExport, &QAction::triggered, &dlg, [&dlg]() {
 		if (state().loadouts.empty()) {
 			QMessageBox::information(&dlg, "DockX", "You have no loadouts to back up yet.");
 			return;
@@ -959,7 +1044,7 @@ void showDialog(const QString &initialTab)
 		else
 			QMessageBox::warning(&dlg, "DockX", "Could not write that file.");
 	});
-	QObject::connect(loImport, &QPushButton::clicked, &dlg, [&dlg, reloadLoadouts]() {
+	QObject::connect(loActImport, &QAction::triggered, &dlg, [&dlg, reloadLoadouts]() {
 		const QString path =
 			QFileDialog::getOpenFileName(&dlg, "Import loadouts", QString(), "DockX loadouts (*.json)");
 		if (path.isEmpty())
@@ -1146,14 +1231,12 @@ void showDialog(const QString &initialTab)
 	QGroupBox *autoTab = new QGroupBox("Auto switch by scene", layoutsTab);
 	QVBoxLayout *av = new QVBoxLayout(autoTab);
 
-	QLabel *aintro = new QLabel("Pair a scene with a layout. When OBS switches to that "
-				    "scene, DockX rearranges your docks to match. Great for a "
-				    "gameplay layout, a chatting layout, an ending layout.",
-				    autoTab);
-	aintro->setWordWrap(true);
-	av->addWidget(aintro);
+	av->addWidget(groupSub("When OBS switches to a scene, DockX applies the layout you paired with it.", autoTab));
 
-	QListWidget *ruleList = new QListWidget(autoTab);
+	QListWidget *ruleList = new HintList("Nothing paired yet.\n\nClick Pair scene with layout to have a "
+					     "scene bring its own dock arrangement: a gameplay layout, a "
+					     "chatting layout, an ending layout.",
+					     autoTab);
 	av->addWidget(ruleList, 1);
 
 	auto reloadRules = [ruleList]() {
@@ -1173,11 +1256,19 @@ void showDialog(const QString &initialTab)
 
 	QHBoxLayout *ab = new QHBoxLayout();
 	QPushButton *addRuleBtn = new QPushButton("Pair scene with layout", autoTab);
+	makePrimary(addRuleBtn);
+	addRuleBtn->setToolTip("Tip: a Stream Deck button that switches the scene will pull the "
+			       "matching layout with it automatically.");
 	QPushButton *removeRuleBtn = new QPushButton("Remove pairing", autoTab);
+	removeRuleBtn->setEnabled(false);
 	ab->addWidget(addRuleBtn);
 	ab->addWidget(removeRuleBtn);
 	ab->addStretch(1);
 	av->addLayout(ab);
+
+	QObject::connect(ruleList, &QListWidget::itemSelectionChanged, removeRuleBtn, [removeRuleBtn, ruleList]() {
+		removeRuleBtn->setEnabled(ruleList->currentItem() != nullptr);
+	});
 
 	QObject::connect(addRuleBtn, &QPushButton::clicked, &dlg, [&dlg, reloadRules]() {
 		if (state().layouts.empty()) {
@@ -1221,12 +1312,6 @@ void showDialog(const QString &initialTab)
 		stateSave();
 		reloadRules();
 	});
-
-	QLabel *ahint = new QLabel("Tip: a Stream Deck button that switches the scene will pull "
-				   "the matching layout with it automatically.",
-				   autoTab);
-	ahint->setWordWrap(true);
-	av->addWidget(ahint);
 
 	lvR->addWidget(autoTab, 1);
 

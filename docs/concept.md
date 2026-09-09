@@ -260,6 +260,19 @@ off-thesis: encoders, multi-output, NDI, VST, replay buffer.
   minimum the app provably dropped -- the old blind 15s forget made the whole layout visibly
   breathe (shrink/regrow) after applying a layout that squeezed the dock below the window's
   real minimum (Joey's shifting-layout report, 2026-09-09).
+- **Layouts tab de-wording pass** (Joey 2026-09-09: "this is a scary page... a LOT of
+  words, small print, not a great UX") -- SHIPPED v0.36.0, the MODEL for restyling the
+  other tabs. The recipe: (1) empty lists explain themselves (new `HintList` widget
+  paints centered guidance in the empty space; it vanishes once rows exist); (2) each
+  group gets a dim ONE LINE subtitle (`groupSub`) instead of a paragraph of small print;
+  (3) one accent styled PRIMARY button per box (`makePrimary`, StrmrX purple) -- Save
+  current layout / Save current scene / Pair scene with layout; (4) secondary actions
+  (rename, delete, hotkeys, back up, import) folded into a "More" menu button AND a
+  right click on the list; (5) long explanations moved into tooltips on the buttons they
+  describe; (6) selection dependent buttons stay disabled until a row is picked;
+  (7) double click = the main action (apply layout / apply template / restore loadout).
+  Visible buttons 15 -> 9 on the tab, hint paragraphs 5 -> 0. Apply the same recipe to
+  the remaining tabs in later passes.
 - **Whole window accent** (Joey 2026-09-09: "lets do the obs chrome opt in restyle") --
   SHIPPED v0.35.0. New "Whole window accent" group in the Colors tab: an opt-in checkbox
   ("Accent OBS itself (experimental)", `chrome_on`, default OFF) + an accent color picker
