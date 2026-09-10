@@ -1076,17 +1076,19 @@ void showDialog(const QString &initialTab)
 
 	lvR->addWidget(loTab, 2);
 
-	/* ---------- Locks tab ---------- */
-	QWidget *lockTab = new QWidget();
-	QVBoxLayout *lkv = new QVBoxLayout(lockTab);
+	/* ---------- lock groups (folded into the Layouts tab, Joey 09-10:
+	   dock locking joins the panels column, source locking joins the
+	   inside-your-scenes column; the separate Locks tab was noise) ---------- */
 
 	/* -- dock layout locking -- */
-	QGroupBox *dockGroup = new QGroupBox("Dock layout", lockTab);
+	QGroupBox *dockGroup = new QGroupBox("Lock the layout", layoutsTab);
 	QVBoxLayout *dg = new QVBoxLayout(dockGroup);
 
 	QCheckBox *hardLockChk =
 		new QCheckBox("Lock docks in place (they can't be dragged or floated by accident)", dockGroup);
 	hardLockChk->setChecked(locks::hardLock());
+	hardLockChk->setToolTip("Docks stay put until you untick this. There is a hotkey for it in OBS "
+				"Settings > Hotkeys (search DockX).");
 	dg->addWidget(hardLockChk);
 	QObject::connect(hardLockChk, &QCheckBox::toggled, dockGroup, [](bool on) { locks::setHardLock(on); });
 
@@ -1118,25 +1120,17 @@ void showDialog(const QString &initialTab)
 						 "Set a revert point first, then this snaps your docks "
 						 "back to it.");
 	});
-
-	QLabel *dockTip = new QLabel("Tip: give Revert to point and the dock lock a hotkey in OBS Settings "
-				     "> Hotkeys (search DockX) so you can snap back mid stream without "
-				     "opening this window. Tools > DockX: Revert dock layout works too.",
-				     dockGroup);
-	dockTip->setWordWrap(true);
-	dg->addWidget(dockTip);
-	lkv->addWidget(dockGroup);
+	setPointBtn->setToolTip("Saves the current dock arrangement as your snap back point.");
+	revertBtn->setToolTip("Snaps every dock back to the saved point. Hotkey: OBS Settings > Hotkeys "
+			      "(search DockX). Tools > DockX: Revert dock layout works too.");
+	lv->addWidget(dockGroup);
 
 	/* -- scene source locking -- */
-	QGroupBox *srcGroup = new QGroupBox("Scene sources", lockTab);
+	QGroupBox *srcGroup = new QGroupBox("Lock sources in scenes", layoutsTab);
 	QVBoxLayout *sg = new QVBoxLayout(srcGroup);
-	QLabel *srcLbl = new QLabel("Lock every source in a scene at once so nothing on the canvas can be "
-				    "dragged or resized. Perfect for a Just Chatting scene you never want to "
-				    "nudge. This flips the same lock you see on each source, just all "
-				    "together.",
-				    srcGroup);
-	srcLbl->setWordWrap(true);
-	sg->addWidget(srcLbl);
+	sg->addWidget(groupSub("Lock every source in a scene at once so nothing on the canvas gets "
+			       "nudged by accident.",
+			       srcGroup));
 
 	auto currentSceneName = []() -> QString {
 		obs_source_t *cur = obs_frontend_get_current_scene();
@@ -1149,6 +1143,8 @@ void showDialog(const QString &initialTab)
 	QHBoxLayout *sgb = new QHBoxLayout();
 	QPushButton *lockCur = new QPushButton("Lock this scene", srcGroup);
 	QPushButton *unlockCur = new QPushButton("Unlock this scene", srcGroup);
+	lockCur->setToolTip("Flips the same lock you see on each source, just all together.");
+	unlockCur->setToolTip("Unlocks every source in the current scene.");
 	sgb->addWidget(lockCur);
 	sgb->addWidget(unlockCur);
 	sgb->addStretch(1);
@@ -1163,8 +1159,8 @@ void showDialog(const QString &initialTab)
 	sgb2->addWidget(pickBtn);
 	sgb2->addStretch(1);
 	sg->addLayout(sgb2);
-	lkv->addWidget(srcGroup);
-	lkv->addStretch(1);
+	/* added to the right column AFTER the auto switch box below, so the
+	   column reads loadouts -> auto switch -> locks */
 
 	QObject::connect(lockCur, &QPushButton::clicked, &dlg, [&dlg, currentSceneName]() {
 		const QString n = currentSceneName();
@@ -1237,8 +1233,6 @@ void showDialog(const QString &initialTab)
 						 .arg(action == 1 ? "Locked" : "Unlocked")
 						 .arg(uuids.size()));
 	});
-
-	tabs->addTab(lockTab, "Locks");
 
 	/* ---------- Auto switch tab ---------- */
 	QGroupBox *autoTab = new QGroupBox("Auto switch dock layouts by scene", layoutsTab);
@@ -1330,6 +1324,7 @@ void showDialog(const QString &initialTab)
 	});
 
 	lvR->addWidget(autoTab, 1);
+	lvR->addWidget(srcGroup);
 
 	/* ---------- Filters tab ---------- */
 	QWidget *filtersTab = new QWidget();
@@ -1978,7 +1973,8 @@ void showDialog(const QString &initialTab)
 	cvRoot->addWidget(looksBox);
 	cvRoot->addWidget(chromeBox);
 
-	tabs->addTab(colorsTab, "Colors");
+	/* third tab by Joey's order: Find, Layouts, Colors, then the rest */
+	tabs->insertTab(2, colorsTab, "Colors");
 
 	/* ---------- Video docks tab (source docks + the DockX Preview) ----------
 	   renamed from "Source docks" + rebuilt on the de-wording recipe (Joey
