@@ -52,6 +52,7 @@ covered. The center's 0x0 pin is restored on every exit path of the apply.
 #include <QPainter>
 #include <QPointer>
 #include <QSet>
+#include <QTabBar>
 #include <QTimer>
 
 #include <algorithm>
@@ -510,24 +511,59 @@ static void rebuild()
 			return; /* never yank the handle mid drag */
 
 	QList<QDockWidget *> live;
+	bool hasLeft = false, hasRight = false, hasTop = false, hasBottom = false;
 	const auto docks = m->findChildren<QDockWidget *>(QString(), Qt::FindDirectChildrenOnly);
 	for (QDockWidget *d : docks) {
 		if (d->isVisible() && !d->isFloating() && d->width() > 0 &&
-		    m->dockWidgetArea(d) != Qt::NoDockWidgetArea)
+		    m->dockWidgetArea(d) != Qt::NoDockWidgetArea) {
 			live.push_back(d);
+			const Qt::DockWidgetArea a = m->dockWidgetArea(d);
+			hasLeft = hasLeft || a == Qt::LeftDockWidgetArea;
+			hasRight = hasRight || a == Qt::RightDockWidgetArea;
+			hasTop = hasTop || a == Qt::TopDockWidgetArea;
+			hasBottom = hasBottom || a == Qt::BottomDockWidgetArea;
+		}
 	}
+
+	/* while curing Joey's leftover column (2026-09-10) we learned Qt's OWN
+	   between-area separator drags work fine ACROSS the pinned 0x0 center,
+	   as long as both flanking areas are populated (the drag pushes space
+	   straight through the zero-width center). When natives work they feel
+	   better than the ghost bar -- so DockX only bridges seams Qt cannot
+	   serve: a horizontal seam with the left or right area empty (the
+	   leftover-column case, where the handle's real job is offering the
+	   column repair), and the vertical mirror. */
+	const bool nativeH = hasLeft && hasRight;
+	const bool nativeV = hasTop && hasBottom;
 
 	QList<Spec> specs;
 	for (QDockWidget *a : live) {
 		for (QDockWidget *b : live) {
 			if (a == b || m->dockWidgetArea(a) == m->dockWidgetArea(b))
 				continue;
-			QRect r = boundaryRect(a->geometry(), b->geometry(), Qt::Horizontal);
-			if (r.isValid())
-				specs.append({r, a, b, Qt::Horizontal});
-			r = boundaryRect(a->geometry(), b->geometry(), Qt::Vertical);
-			if (r.isValid())
-				specs.append({r, a, b, Qt::Vertical});
+			if (!nativeH) {
+				QRect r = boundaryRect(a->geometry(), b->geometry(), Qt::Horizontal);
+				if (r.isValid())
+					specs.append({r, a, b, Qt::Horizontal});
+			}
+			if (!nativeV) {
+				QRect r = boundaryRect(a->geometry(), b->geometry(), Qt::Vertical);
+				if (r.isValid())
+					specs.append({r, a, b, Qt::Vertical});
+			}
+		}
+	}
+
+	/* long tab rows set a hard floor on a column's width (each label claims
+	   its full text). Elided labels + scroll buttons let tab bars shrink,
+	   so a tabbed column can go as narrow as its widest dock instead of the
+	   sum of its tab labels (Joey: dropping from 4 tabs to 3 visibly
+	   lowered his column's minimum). Idempotent; runs on the same timer. */
+	const auto tabBars = m->findChildren<QTabBar *>(QString(), Qt::FindDirectChildrenOnly);
+	for (QTabBar *tb : tabBars) {
+		if (tb->elideMode() != Qt::ElideRight) {
+			tb->setElideMode(Qt::ElideRight);
+			tb->setUsesScrollButtons(true);
 		}
 	}
 
