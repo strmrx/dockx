@@ -10,21 +10,21 @@ separator there freezes in both directions. This module finds exactly those
 boundaries (two visible docked docks from DIFFERENT dock areas sitting edge
 to edge) and lays a thin handle widget over each.
 
-The drag itself (v0.46.0, third design -- the first two failed on the rig):
+The drag itself (v0.46.10, FIFTH design -- the first four failed on the rig):
 - While the mouse is down NOTHING in the layout moves. The handle paints
   itself as a ghost bar and follows the mouse. (v0.45.1 forced a relayout
   per mouse move; every video dock's obs_display resized every few ms, the
   UI glitched, and the layout stormed. Never again.)
-- On release the trade is applied ONCE, routed through the center: the
-  central widget's 0x0 pin is lifted for one moment, the shrinking dock is
-  resized first (the center absorbs the space), the growing dock second
-  (the center gives it straight back), then the center is pinned to 0x0
-  again. Both calls are QMainWindow::resizeDocks trading with the CENTER,
-  which is the one trade it never refuses (proven on-rig 2026-09-09: a
-  direct cross-area resizeDocks is silently ignored). resizeDocks writes
-  the result into Qt's own dock layout state, so the new sizes stick --
-  unlike the v0.45.1 min=max pin, which Qt reverted on release (the
-  snap-back).
+- On release the trade is applied ONCE by driving Qt's OWN separator-drag
+  machinery with synthetic mouse events while the center's 0x0 pin is
+  briefly lifted (see dragNativeSeparator + TradeFlexScope below). Every
+  resizeDocks-based design failed on the rig: min=max pinning snapped back
+  (0.45.1), direct cross-area calls are silently ignored (0.45.0), and
+  center-mediated calls get re-balanced away because top/bottom area widths
+  are DERIVED and the right area just reshuffles internally (0.46.3-0.46.9,
+  five identical "settled at 304" logs). The separator path is the one
+  mechanism proven to move area boundaries durably: it is exactly what
+  happens when the user drags a divider with the preview visible.
 
 Defensive by design: handles are plain widgets on top of the separator gap;
 they intercept nothing else, never touch Qt layout internals, and are torn
