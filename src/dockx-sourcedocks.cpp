@@ -411,6 +411,10 @@ private:
 	/* graphics thread: libobs calls only */
 	static void drawCb(void *param, uint32_t cx, uint32_t cy)
 	{
+		/* never render a user scene while OBS is loading or switching
+		   collections (see obsReady() in dockx.hpp: startup crash fix) */
+		if (!obsReady())
+			return;
 		VideoWidget *v = static_cast<VideoWidget *>(param);
 		obs_source_t *src = nullptr;
 		uint32_t w, h;

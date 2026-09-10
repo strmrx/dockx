@@ -1399,7 +1399,22 @@ private:
 		snapVy.clear();
 	}
 
-	/* ---- rendering (graphics thread) ---- */
+	/* ---- rendering (graphics thread) ----
+
+	   THE 2026-09-09/10 CRASH FIX lives in these two helpers: after every
+	   gs_render_stop, the current vertex buffer MUST be unloaded.
+	   gs_render_start(true)/gs_render_stop draw through a temporary vertex
+	   buffer that libobs destroys right after the draw -- but libobs 31.1.1's
+	   gs_vertexbuffer_destroy clears only the device's lastVertexBuffer
+	   cache, NOT curVertexBuffer, which is left DANGLING at freed memory.
+	   The async-source color conversion (update_async_texrender, i.e. every
+	   camera frame) then calls gs_draw with NO buffer loaded on purpose,
+	   trusting curVertexBuffer -- and dereferences our freed buffer:
+	   "This vertex shader requires a point buffer" when the freed memory
+	   reads as zeros, c0000005 in d3d11.dll (LoadVertexBufferData) when it
+	   reads as garbage. Five identical rig crashes, all within seconds of
+	   these draws starting. gs_load_vertexbuffer(nullptr) resets
+	   curVertexBuffer to exactly the state the conversion draw expects. */
 
 	static void drawLineStrip(const std::vector<vec2> &pts, uint32_t rgba)
 	{
@@ -1419,6 +1434,7 @@ private:
 			for (const vec2 &v : pts)
 				gs_vertex2f(v.x, v.y);
 			gs_render_stop(GS_LINESTRIP);
+			gs_load_vertexbuffer(nullptr); /* crash fix: see above */
 			gs_technique_end_pass(tech);
 		}
 		gs_technique_end(tech);
@@ -1446,6 +1462,7 @@ private:
 			gs_vertex2f(x0, y1);
 			gs_vertex2f(x1, y1);
 			gs_render_stop(GS_TRISTRIP);
+			gs_load_vertexbuffer(nullptr); /* crash fix: see drawLineStrip */
 			gs_technique_end_pass(tech);
 		}
 		gs_technique_end(tech);
@@ -1571,6 +1588,10 @@ private:
 
 	static void drawCb(void *param, uint32_t cx, uint32_t cy)
 	{
+		/* never render a user scene while OBS is loading or switching
+		   collections (see obsReady() in dockx.hpp: startup crash fix) */
+		if (!obsReady())
+			return;
 		EditWidget *self = static_cast<EditWidget *>(param);
 		obs_source_t *scene = self->lockScene();
 		if (!scene)

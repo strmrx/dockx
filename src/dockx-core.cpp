@@ -33,6 +33,7 @@ if the UI does not look the way we expect, do NOTHING. Never crash OBS.
 #include <QTimer>
 
 #include <algorithm>
+#include <atomic>
 #include <cmath>
 
 namespace dockx {
@@ -62,6 +63,19 @@ State &state()
 	return g_state;
 }
 
+/* atomic: written on the Qt thread (frontend events), read on the libobs
+   graphics thread by every draw callback */
+static std::atomic<bool> g_obsReady{false};
+bool obsReady()
+{
+	return g_obsReady.load(std::memory_order_acquire);
+}
+void setObsReady(bool ready)
+{
+	g_obsReady.store(ready, std::memory_order_release);
+	obs_log(LOG_INFO, "video docks %s", ready ? "rendering (OBS ready)" : "paused (OBS loading)");
+}
+
 static QMainWindow *mainWindow()
 {
 	return static_cast<QMainWindow *>(obs_frontend_get_main_window());
@@ -85,6 +99,52 @@ static void registerHotkey(Layout &l)
 	QByteArray desc = QString("DockX: apply layout \"%1\"").arg(l.name).toUtf8();
 	l.hotkey = obs_hotkey_register_frontend(name.constData(), desc.constData(), hotkeyCb, (void *)(intptr_t)l.id);
 }
+
+static void loadoutHotkeyCb(void *data, obs_hotkey_id, obs_hotkey_t *, bool pressed)
+{
+	if (!pressed)
+		return;
+	int id = (int)(intptr_t)data;
+	QMainWindow *m = mainWindow();
+	if (!m)
+		return;
+	/* hotkeys can fire off the UI thread; source edits must not */
+	QMetaObject::invokeMethod(
+		m,
+		[id]() {
+			for (SourceLoadout &l : g_state.loadouts) {
+				if (l.id != id)
+					continue;
+				const loadouts::RestoreReport r = loadouts::restore(l);
+				obs_log(LOG_INFO, "hotkey restored loadout '%s' (%d sources)",
+					l.name.toUtf8().constData(), r.restored);
+				return;
+			}
+		},
+		Qt::QueuedConnection);
+}
+
+namespace loadouts {
+void registerHotkey(SourceLoadout &l)
+{
+	/* re-register on rename so OBS's hotkey list shows the new name; the
+	   binding is carried over */
+	obs_data_array_t *saved = nullptr;
+	if (l.hotkey != OBS_INVALID_HOTKEY_ID) {
+		saved = obs_hotkey_save(l.hotkey);
+		obs_hotkey_unregister(l.hotkey);
+	}
+	QByteArray name = QString("dockx_loadout_%1").arg(l.id).toUtf8();
+	QByteArray desc = QString("DockX: restore loadout \"%1\"").arg(l.name).toUtf8();
+	l.hotkey = obs_hotkey_register_frontend(name.constData(), desc.constData(), loadoutHotkeyCb,
+						(void *)(intptr_t)l.id);
+	if (saved) {
+		if (l.hotkey != OBS_INVALID_HOTKEY_ID)
+			obs_hotkey_load(l.hotkey, saved);
+		obs_data_array_release(saved);
+	}
+}
+} // namespace loadouts
 
 static char *configFilePath()
 {
@@ -177,6 +237,14 @@ void stateLoad()
 		for (size_t i = 0; i < ln; i++) {
 			obs_data_t *e = obs_data_array_item(louts, i);
 			g_state.loadouts.push_back(loadouts::fromData(e));
+			SourceLoadout &nl = g_state.loadouts.back();
+			loadouts::registerHotkey(nl);
+			obs_data_array_t *hk = obs_data_get_array(e, "hotkey");
+			if (hk) {
+				if (nl.hotkey != OBS_INVALID_HOTKEY_ID)
+					obs_hotkey_load(nl.hotkey, hk);
+				obs_data_array_release(hk);
+			}
 			obs_data_release(e);
 		}
 		obs_data_array_release(louts);
@@ -437,6 +505,13 @@ void stateSave()
 	obs_data_array_t *louts = obs_data_array_create();
 	for (const SourceLoadout &l : g_state.loadouts) {
 		obs_data_t *e = loadouts::toData(l);
+		if (l.hotkey != OBS_INVALID_HOTKEY_ID) {
+			obs_data_array_t *hk = obs_hotkey_save(l.hotkey);
+			if (hk) {
+				obs_data_set_array(e, "hotkey", hk);
+				obs_data_array_release(hk);
+			}
+		}
 		obs_data_array_push_back(louts, e);
 		obs_data_release(e);
 	}

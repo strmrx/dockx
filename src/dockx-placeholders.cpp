@@ -349,6 +349,10 @@ private:
 	   the widget's life and the callback is removed before it is released */
 	static void drawCb(void *param, uint32_t cx, uint32_t cy)
 	{
+		/* never render while OBS is loading or switching collections
+		   (see obsReady() in dockx.hpp: startup crash fix) */
+		if (!obsReady())
+			return;
 		MediaVideoWidget *v = static_cast<MediaVideoWidget *>(param);
 		obs_source_t *src = v->source;
 		if (!src)

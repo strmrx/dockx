@@ -875,9 +875,12 @@ void showDialog(const QString &initialTab)
 		loList->clear();
 		for (const SourceLoadout &l : state().loadouts) {
 			const QString scope = l.sceneUuid.isEmpty() ? "All scenes" : l.sceneName;
-			QListWidgetItem *it = new QListWidgetItem(
-				QString("%1   ·   %2   ·   %3 sources").arg(l.name, scope).arg((int)l.items.size()),
-				loList);
+			QString row =
+				QString("%1   ·   %2   ·   %3 sources").arg(l.name, scope).arg((int)l.items.size());
+			const QString hk = hotkeyIdText(l.hotkey);
+			if (!hk.isEmpty())
+				row += QString("   ·   %1").arg(hk);
+			QListWidgetItem *it = new QListWidgetItem(row, loList);
 			it->setData(Qt::UserRole, l.id);
 		}
 	};
@@ -921,6 +924,7 @@ void showDialog(const QString &initialTab)
 		l.id = state().nextLoadoutId++;
 		l.name = name;
 		state().loadouts.push_back(l);
+		loadouts::registerHotkey(state().loadouts.back());
 		stateSave();
 		reloadLoadouts();
 	};
@@ -950,6 +954,8 @@ void showDialog(const QString &initialTab)
 
 	QMenu *loMenu = new QMenu(loMore);
 	loMenu->setToolTipsVisible(true);
+	QAction *loActHotkey = loMenu->addAction("Set hotkey...");
+	loActHotkey->setToolTip("One key (or Stream Deck button) restores this loadout, no dialog, no confirm.");
 	QAction *loActRename = loMenu->addAction("Rename...");
 	QAction *loActDelete = loMenu->addAction("Delete");
 	loMenu->addSeparator();
@@ -1005,6 +1011,18 @@ void showDialog(const QString &initialTab)
 		QMessageBox::information(&dlg, "DockX",
 					 QString("Put %1 sources back the way they were.").arg(r.restored));
 	});
+	QObject::connect(loActHotkey, &QAction::triggered, &dlg, [&dlg, selectedLoadout, reloadLoadouts]() {
+		SourceLoadout *l = selectedLoadout();
+		if (!l)
+			return;
+		QKeySequence seq;
+		const int r = promptHotkey(&dlg, QString("Hotkey for \"%1\"").arg(l->name), seq);
+		if (r == 0)
+			return;
+		applyHotkeyBinding(l->hotkey, r == 2 ? QKeySequence() : seq);
+		stateSave();
+		reloadLoadouts();
+	});
 	QObject::connect(loActRename, &QAction::triggered, &dlg, [&dlg, selectedLoadout, reloadLoadouts]() {
 		SourceLoadout *l = selectedLoadout();
 		if (!l)
@@ -1016,6 +1034,7 @@ void showDialog(const QString &initialTab)
 		if (!ok || name.isEmpty())
 			return;
 		l->name = name;
+		loadouts::registerHotkey(*l); /* hotkey list shows the new name */
 		stateSave();
 		reloadLoadouts();
 	});
@@ -1033,6 +1052,8 @@ void showDialog(const QString &initialTab)
 		auto &v = state().loadouts;
 		for (size_t i = 0; i < v.size(); i++) {
 			if (v[i].id == id) {
+				if (v[i].hotkey != OBS_INVALID_HOTKEY_ID)
+					obs_hotkey_unregister(v[i].hotkey);
 				v.erase(v.begin() + i);
 				break;
 			}
@@ -1076,17 +1097,22 @@ void showDialog(const QString &initialTab)
 
 	lvR->addWidget(loTab, 2);
 
-	/* ---------- Locks tab ---------- */
-	QWidget *lockTab = new QWidget();
-	QVBoxLayout *lkv = new QVBoxLayout(lockTab);
+	/* ---------- lock groups (folded into the Layouts tab, Joey 09-10:
+	   dock locking joins the panels column, source locking joins the
+	   inside-your-scenes column; the separate Locks tab was noise) ---------- */
 
 	/* -- dock layout locking -- */
-	QGroupBox *dockGroup = new QGroupBox("Dock layout", lockTab);
+	QGroupBox *dockGroup = new QGroupBox("Lock the layout", layoutsTab);
 	QVBoxLayout *dg = new QVBoxLayout(dockGroup);
+	dg->addWidget(groupSub("Nudge your setup mid stream, hit one key (or a Stream Deck button), and "
+			       "it snaps back. Set the keys right below.",
+			       dockGroup));
 
 	QCheckBox *hardLockChk =
 		new QCheckBox("Lock docks in place (they can't be dragged or floated by accident)", dockGroup);
 	hardLockChk->setChecked(locks::hardLock());
+	hardLockChk->setToolTip("Docks stay put until you untick this. There is a hotkey for it in OBS "
+				"Settings > Hotkeys (search DockX).");
 	dg->addWidget(hardLockChk);
 	QObject::connect(hardLockChk, &QCheckBox::toggled, dockGroup, [](bool on) { locks::setHardLock(on); });
 
@@ -1118,25 +1144,54 @@ void showDialog(const QString &initialTab)
 						 "Set a revert point first, then this snaps your docks "
 						 "back to it.");
 	});
+	setPointBtn->setToolTip("Saves the current dock arrangement as your snap back point.");
+	revertBtn->setToolTip("Snaps every dock back to the saved point. Tools > DockX: Revert dock "
+			      "layout works too.");
 
-	QLabel *dockTip = new QLabel("Tip: give Revert to point and the dock lock a hotkey in OBS Settings "
-				     "> Hotkeys (search DockX) so you can snap back mid stream without "
-				     "opening this window. Tools > DockX: Revert dock layout works too.",
-				     dockGroup);
-	dockTip->setWordWrap(true);
-	dg->addWidget(dockTip);
-	lkv->addWidget(dockGroup);
+	/* set the hotkeys right here, where the features live (Joey: "the
+	   hotkey add should be with the lock areas, not in the hotkey area") */
+	QHBoxLayout *hkRow = new QHBoxLayout();
+	QPushButton *revHkBtn = new QPushButton(dockGroup);
+	QPushButton *lockHkBtn = new QPushButton(dockGroup);
+	auto refreshHkButtons = [revHkBtn, lockHkBtn]() {
+		const QString rk = hotkeyIdText(state().hkRevert);
+		const QString lk = hotkeyIdText(state().hkHardLock);
+		revHkBtn->setText(rk.isEmpty() ? "Revert hotkey..." : QString("Revert hotkey: %1").arg(rk));
+		lockHkBtn->setText(lk.isEmpty() ? "Lock hotkey..." : QString("Lock hotkey: %1").arg(lk));
+	};
+	refreshHkButtons();
+	revHkBtn->setToolTip("Pick the key (or Stream Deck button) that snaps your docks back to the "
+			     "revert point. Also listed in OBS Settings > Hotkeys.");
+	lockHkBtn->setToolTip("Pick the key that toggles the dock lock on and off. Also listed in OBS "
+			      "Settings > Hotkeys.");
+	hkRow->addWidget(revHkBtn);
+	hkRow->addWidget(lockHkBtn);
+	hkRow->addStretch(1);
+	dg->addLayout(hkRow);
+	QObject::connect(revHkBtn, &QPushButton::clicked, &dlg, [&dlg, refreshHkButtons]() {
+		QKeySequence seq;
+		const int r = promptHotkey(&dlg, "Revert to point hotkey", seq);
+		if (r == 0)
+			return;
+		applyHotkeyBinding(state().hkRevert, r == 2 ? QKeySequence() : seq);
+		refreshHkButtons();
+	});
+	QObject::connect(lockHkBtn, &QPushButton::clicked, &dlg, [&dlg, refreshHkButtons]() {
+		QKeySequence seq;
+		const int r = promptHotkey(&dlg, "Dock lock hotkey", seq);
+		if (r == 0)
+			return;
+		applyHotkeyBinding(state().hkHardLock, r == 2 ? QKeySequence() : seq);
+		refreshHkButtons();
+	});
+	lv->addWidget(dockGroup);
 
 	/* -- scene source locking -- */
-	QGroupBox *srcGroup = new QGroupBox("Scene sources", lockTab);
+	QGroupBox *srcGroup = new QGroupBox("Lock sources in scenes", layoutsTab);
 	QVBoxLayout *sg = new QVBoxLayout(srcGroup);
-	QLabel *srcLbl = new QLabel("Lock every source in a scene at once so nothing on the canvas can be "
-				    "dragged or resized. Perfect for a Just Chatting scene you never want to "
-				    "nudge. This flips the same lock you see on each source, just all "
-				    "together.",
-				    srcGroup);
-	srcLbl->setWordWrap(true);
-	sg->addWidget(srcLbl);
+	sg->addWidget(groupSub("Lock every source in a scene at once so nothing on the canvas gets "
+			       "nudged by accident.",
+			       srcGroup));
 
 	auto currentSceneName = []() -> QString {
 		obs_source_t *cur = obs_frontend_get_current_scene();
@@ -1149,6 +1204,8 @@ void showDialog(const QString &initialTab)
 	QHBoxLayout *sgb = new QHBoxLayout();
 	QPushButton *lockCur = new QPushButton("Lock this scene", srcGroup);
 	QPushButton *unlockCur = new QPushButton("Unlock this scene", srcGroup);
+	lockCur->setToolTip("Flips the same lock you see on each source, just all together.");
+	unlockCur->setToolTip("Unlocks every source in the current scene.");
 	sgb->addWidget(lockCur);
 	sgb->addWidget(unlockCur);
 	sgb->addStretch(1);
@@ -1163,8 +1220,8 @@ void showDialog(const QString &initialTab)
 	sgb2->addWidget(pickBtn);
 	sgb2->addStretch(1);
 	sg->addLayout(sgb2);
-	lkv->addWidget(srcGroup);
-	lkv->addStretch(1);
+	/* added to the right column AFTER the auto switch box below, so the
+	   column reads loadouts -> auto switch -> locks */
 
 	QObject::connect(lockCur, &QPushButton::clicked, &dlg, [&dlg, currentSceneName]() {
 		const QString n = currentSceneName();
@@ -1238,13 +1295,14 @@ void showDialog(const QString &initialTab)
 						 .arg(uuids.size()));
 	});
 
-	tabs->addTab(lockTab, "Locks");
-
 	/* ---------- Auto switch tab ---------- */
-	QGroupBox *autoTab = new QGroupBox("Auto switch by scene", layoutsTab);
+	QGroupBox *autoTab = new QGroupBox("Auto switch dock layouts by scene", layoutsTab);
 	QVBoxLayout *av = new QVBoxLayout(autoTab);
 
-	av->addWidget(groupSub("When OBS switches to a scene, DockX applies the layout you paired with it.", autoTab));
+	av->addWidget(groupSub("Link an OBS scene to a dock layout. Want your panels arranged differently for "
+			       "certain scenes? Pair them up and OBS rearranges itself every time the scene "
+			       "changes.",
+			       autoTab));
 
 	QListWidget *ruleList = new HintList("Nothing paired yet.\n\nClick Pair scene with layout to have a "
 					     "scene bring its own dock arrangement: a gameplay layout, a "
@@ -1327,6 +1385,7 @@ void showDialog(const QString &initialTab)
 	});
 
 	lvR->addWidget(autoTab, 1);
+	lvR->addWidget(srcGroup);
 
 	/* ---------- Filters tab ---------- */
 	QWidget *filtersTab = new QWidget();
@@ -1975,7 +2034,8 @@ void showDialog(const QString &initialTab)
 	cvRoot->addWidget(looksBox);
 	cvRoot->addWidget(chromeBox);
 
-	tabs->addTab(colorsTab, "Colors");
+	/* third tab by Joey's order: Find, Layouts, Colors, then the rest */
+	tabs->insertTab(2, colorsTab, "Colors");
 
 	/* ---------- Video docks tab (source docks + the DockX Preview) ----------
 	   renamed from "Source docks" + rebuilt on the de-wording recipe (Joey
