@@ -132,12 +132,16 @@ off-thesis: encoders, multi-output, NDI, VST, replay buffer.
   row with the full count ("12 / 4000 (0.3%)", "-" while not streaming), and the Video
   docks tab gained a "Stream health" box with an "Open DockX Stats" button so the dock
   is discoverable from Tools > DockX, not just the Docks menu.
-- **Resize blocker hint** (Joey 2026-09-09: "cool idea... love it"): when a dock
-  divider drag hits a wall, tell the user WHICH dock's minimum size is blocking (e.g.
-  a toast or a brief highlight on the stubborn dock). Docks can only shrink to the
-  widest minimum in their row/column; today that wall is invisible and reads as a bug.
-- Scene Folders visual pass (Joey: must read as large/clear as the native panel) + his
-  v0.4/v0.5 test feedback
+- **Resize blocker hint** (Joey 2026-09-09: "cool idea... love it") -- SHIPPED
+  v0.48.0 (2026-09-10, new file `src/dockx-blocker.cpp`). Docks can only shrink to
+  the widest minimum in their row/column; that wall was invisible and read as a bug.
+  A pure observer event filter watches native separator drags (split cursor press);
+  when a drag clearly fights the wall (36px of mouse with the dragged edge frozen)
+  the shrink-side dock at its minimum gets a brief amber flash + a bubble naming it
+  ("X is as small as it can go"). Never consumes events, never touches the layout,
+  silent when unsure. The DockX divider's failed-trade path shows the same hint.
+- Scene Folders visual pass -- CLOSED without work (Joey 2026-09-10: "the scene
+  folders look good currently")
 - Source docks / preview-as-a-dock (demand #2, 227k downloads proof; unlocks multiview,
   align tools, studio mode QoL later)
 - Scene thumbnails -- SHIPPED v0.16 (2026-08-01, demand #7). Live scene previews power
@@ -231,7 +235,8 @@ off-thesis: encoders, multi-output, NDI, VST, replay buffer.
   libobs vertex buffer use-after-free our immediate-mode draws exposed;
   gs_vertexbuffer_destroy clears lastVertexBuffer but not curVertexBuffer) is fixed on
   our side with gs_load_vertexbuffer(nullptr) after gs_render_stop; upstream report
-  still owed. Full saga: handoff.md 2026-09-10 entries.
+  FILED 2026-09-10 with Joey's OK: obsproject/obs-studio#13888. Full saga: handoff.md
+  2026-09-10 entries.
 - **Fully interactive (editable) Preview dock** (Joey 2026-08-07) -- FIRST SLICE SHIPPED
   v0.22.0, SECOND SLICE (resize + rotate + snap-to-sources) SHIPPED v0.23.0, THIRD SLICE
   (multi-item group resize + Alt-drag edge crop) SHIPPED v0.24.0 (2026-08-28).
