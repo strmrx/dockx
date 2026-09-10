@@ -200,6 +200,10 @@ static bool repairLeftColumn(QMainWindow *m, QList<QDockWidget *> col)
 		heights.append(d->height());
 	}
 
+	/* pass 1: place the group MAINS as a clean vertical split chain --
+	   tabifying is deferred so every split works on a single plain dock
+	   (splitting into/around live tab groups is what merged Joey's whole
+	   column into one tab group on the first rig run of this repair) */
 	QDockWidget *prev = nullptr;
 	QList<QDockWidget *> mains;
 	for (const auto &grp : groups) {
@@ -208,30 +212,44 @@ static bool repairLeftColumn(QMainWindow *m, QList<QDockWidget *> col)
 			m->addDockWidget(Qt::LeftDockWidgetArea, main);
 		else
 			m->splitDockWidget(prev, main, Qt::Vertical);
-		for (int i = 1; i < grp.size(); i++)
-			m->tabifyDockWidget(main, grp[i]);
-		main->raise(); /* keep the previously visible tab on top */
 		mains.append(main);
 		prev = main;
 	}
 	if (m->layout())
 		m->layout()->activate();
+
+	/* pass 2: settle the geometry BEFORE re-attaching tabs */
 	m->resizeDocks(mains, heights, Qt::Vertical);
 	m->resizeDocks({mains.first()}, {width}, Qt::Horizontal);
 	if (m->layout())
 		m->layout()->activate();
 
+	/* pass 3: put the tab siblings back onto their mains */
 	for (const auto &grp : groups) {
-		for (QDockWidget *d : grp) {
-			if (m->dockWidgetArea(d) != Qt::LeftDockWidgetArea) {
-				obs_log(LOG_WARNING, "divider: column repair failed for '%s', rolling back",
-					d->objectName().toUtf8().constData());
-				m->restoreState(before);
-				if (m->layout())
-					m->layout()->activate();
-				return false;
-			}
-		}
+		for (int i = 1; i < grp.size(); i++)
+			m->tabifyDockWidget(grp.first(), grp[i]);
+		grp.first()->raise(); /* keep the previously visible tab on top */
+	}
+	if (m->layout())
+		m->layout()->activate();
+
+	/* verify BOTH placement and structure: every dock in the left area,
+	   and no two group MAINS merged into one tab set. Anything off = the
+	   layout is not what the user had -> put it all back. */
+	bool ok = true;
+	for (const auto &grp : groups) {
+		for (QDockWidget *d : grp)
+			ok = ok && m->dockWidgetArea(d) == Qt::LeftDockWidgetArea;
+		const auto tabs = m->tabifiedDockWidgets(grp.first());
+		for (QDockWidget *t : tabs)
+			ok = ok && !mains.contains(t);
+	}
+	if (!ok) {
+		obs_log(LOG_WARNING, "divider: column repair did not reproduce the arrangement, rolling back");
+		m->restoreState(before);
+		if (m->layout())
+			m->layout()->activate();
+		return false;
 	}
 	obs_log(LOG_INFO, "divider: column repair re-docked %d dock group(s) into the left area", (int)groups.size());
 	return true;
