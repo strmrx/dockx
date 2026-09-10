@@ -1573,6 +1573,20 @@ void showDialog(const QString &initialTab)
 		}
 	};
 	reloadDocks();
+
+	/* the pick-first instruction was a dim afterthought BELOW the list and
+	   everyone missed it (Joey 2026-09-10): now a bold status line ABOVE
+	   the list that flips between "pick one" and "Styling: X", while the
+	   per-dock sections below gray out until something is picked -- the
+	   dependency is visible instead of written in small print */
+	QLabel *pickHint = new QLabel(dockTab);
+	pickHint->setWordWrap(true);
+	{
+		QFont pf = pickHint->font();
+		pf.setBold(true);
+		pickHint->setFont(pf);
+	}
+	dv->addWidget(pickHint);
 	dv->addWidget(dockListW, 1);
 
 	auto setDockColor = [dockListW, &dlg](const QString &hex) {
@@ -1600,25 +1614,27 @@ void showDialog(const QString &initialTab)
 	/* the Docks box reads as SECTIONS, not one pile of buttons: every styling
 	   move gets a divider + bold heading + one dim line (Joey 2026-09-09:
 	   background/fade controls blended into the dock colors) */
-	auto dockSection = [dockTab, dv](const QString &title) {
-		dv->addSpacing(8);
+	auto dockSection = [dockTab](QVBoxLayout *lay, const QString &title) {
+		lay->addSpacing(8);
 		QFrame *line = new QFrame(dockTab);
 		line->setFrameShape(QFrame::HLine);
 		line->setFrameShadow(QFrame::Sunken);
-		dv->addWidget(line);
+		lay->addWidget(line);
 		QLabel *head = new QLabel(title, dockTab);
 		QFont f = head->font();
 		f.setBold(true);
 		head->setFont(f);
-		dv->addWidget(head);
+		lay->addWidget(head);
 	};
 
-	dv->addWidget(groupSub("Pick one or more docks (Ctrl click or Shift click), then style them "
-			       "with the sections below.",
-			       dockTab));
+	/* everything that styles THE PICKED DOCKS lives in this wrapper so it
+	   can gray out as one block while nothing is picked */
+	QWidget *styleWrap = new QWidget(dockTab);
+	QVBoxLayout *dsv = new QVBoxLayout(styleWrap);
+	dsv->setContentsMargins(0, 0, 0, 0);
 
-	dockSection("Border and title color");
-	addPaletteRow(dockTab, dv, &dlg, setDockColor);
+	dockSection(dsv, "Border and title color");
+	addPaletteRow(dockTab, dsv, &dlg, setDockColor);
 	QCheckBox *glowCb = new QCheckBox("Glow on hover", dockTab);
 	glowCb->setChecked(state().dockGlow);
 	glowCb->setToolTip("A colored dock brightens its border while your mouse is over it. "
@@ -1628,8 +1644,8 @@ void showDialog(const QString &initialTab)
 		stateSave();
 		panels::applyDockColors();
 	});
-	dv->addWidget(glowCb);
-	dv->addWidget(groupSub("A colored border and title bar so you can spot the dock instantly. "
+	dsv->addWidget(glowCb);
+	dsv->addWidget(groupSub("A colored border and title bar so you can spot the dock instantly. "
 			       "Glow brightens that border under your mouse.",
 			       dockTab));
 
@@ -1642,15 +1658,15 @@ void showDialog(const QString &initialTab)
 		return keys;
 	};
 
-	dockSection("Background color");
+	dockSection(dsv, "Background color");
 	QHBoxLayout *exRow = new QHBoxLayout();
 	QPushButton *bgBtn = new QPushButton("Set background", dockTab);
 	QPushButton *bgClearBtn = new QPushButton("Clear background", dockTab);
 	exRow->addWidget(bgBtn);
 	exRow->addWidget(bgClearBtn);
 	exRow->addStretch(1);
-	dv->addLayout(exRow);
-	dv->addWidget(groupSub("Tints the dock's content to match. It won't show on video docks; if "
+	dsv->addLayout(exRow);
+	dsv->addWidget(groupSub("Tints the dock's content to match. It won't show on video docks; if "
 			       "text gets hard to read, pick a darker tint or clear it.",
 			       dockTab));
 
@@ -1675,7 +1691,7 @@ void showDialog(const QString &initialTab)
 		stateSave();
 		panels::applyDockColors();
 	});
-	dockSection("Title fade");
+	dockSection(dsv, "Title fade");
 	QHBoxLayout *gradRow = new QHBoxLayout();
 	QPushButton *gradBtn = new QPushButton("Fade the title", dockTab);
 	QPushButton *gradClearBtn = new QPushButton("Solid title", dockTab);
@@ -1692,8 +1708,8 @@ void showDialog(const QString &initialTab)
 	gradRow->addWidget(gradClearBtn);
 	gradRow->addWidget(animCb);
 	gradRow->addStretch(1);
-	dv->addLayout(gradRow);
-	dv->addWidget(groupSub("Blends the title bar from the dock's color into a second color you "
+	dsv->addLayout(gradRow);
+	dsv->addWidget(groupSub("Blends the title bar from the dock's color into a second color you "
 			       "pick, so give the dock a color first. Shimmer slowly rocks the "
 			       "blend; Solid title takes the fade off.",
 			       dockTab));
@@ -1729,7 +1745,30 @@ void showDialog(const QString &initialTab)
 		panels::applyDockColors();
 	});
 
-	dockSection("Lines between docks");
+	dv->addWidget(styleWrap);
+
+	/* the status line + gray-out, kept in lockstep with the selection */
+	auto refreshPickState = [dockListW, pickHint, styleWrap]() {
+		const QList<QListWidgetItem *> sel = dockListW->selectedItems();
+		if (sel.isEmpty()) {
+			pickHint->setText("First, pick a dock in this list (Ctrl or Shift click grabs "
+					  "several). The styling sections wake up once you do.");
+			pickHint->setStyleSheet("color: #f0c33c;");
+			styleWrap->setEnabled(false);
+			return;
+		}
+		QString label = sel.first()->text();
+		if (sel.size() > 1)
+			label += QString(" + %1 more").arg(sel.size() - 1);
+		pickHint->setText(QString("Styling: %1").arg(label));
+		pickHint->setStyleSheet(QString());
+		styleWrap->setEnabled(true);
+	};
+	refreshPickState();
+	QObject::connect(dockListW, &QListWidget::itemSelectionChanged, dockTab,
+			 [refreshPickState]() { refreshPickState(); });
+
+	dockSection(dv, "Lines between docks");
 
 	QHBoxLayout *sepRow = new QHBoxLayout();
 	sepRow->addWidget(new QLabel("Thickness:", dockTab));
@@ -2282,21 +2321,29 @@ void showDialog(const QString &initialTab)
 	QWidget *phTab = new QWidget();
 	QVBoxLayout *phv = new QVBoxLayout(phTab);
 
+	/* purpose first, bold (same treatment as the Mixer tab, Joey 2026-09-10) */
+	QLabel *phHead = new QLabel("Put other apps (or your own art) inside your OBS layout", phTab);
+	{
+		QFont pf = phHead->font();
+		pf.setBold(true);
+		phHead->setFont(pf);
+	}
+	phv->addWidget(phHead);
 	QLabel *phIntro =
-		new QLabel("A placeholder is an empty dock that reserves a spot in your layout for a window OBS "
-			   "can't own, like a TikTok Live Studio chat. Give it a label and a color, then float "
-			   "the real window over it. On Windows you can go further: pin the window, and DockX "
-			   "keeps it on top of OBS, sized exactly over the placeholder, following it through dock "
-			   "drags, layout switches and restarts. A placeholder can also show a local image, GIF, "
-			   "or looping video instead: your logo, brand art, any set dressing you want living in "
-			   "your layout.",
+		new QLabel("An app dock reserves a spot in your layout for a window OBS can't own, like a "
+			   "TikTok Live Studio chat. Give it a label and a color, then float the real window "
+			   "over it. On Windows you can go further: pin the window, and DockX keeps it on top "
+			   "of OBS, sized exactly over the spot, following it through dock drags, layout "
+			   "switches and restarts. An app dock can also show a local image, GIF, or looping "
+			   "video instead: your logo, brand art, any set dressing you want living in your "
+			   "layout.",
 			   phTab);
 	phIntro->setWordWrap(true);
 	phv->addWidget(phIntro);
 
 	QListWidget *phList = new QListWidget(phTab);
 	auto phTitle = [](const PlaceholderEntry &e) {
-		QString t = e.label.isEmpty() ? QString("Placeholder") : e.label;
+		QString t = e.label.isEmpty() ? QString("App dock") : e.label;
 		if (!e.pinTitle.isEmpty())
 			t += QString(" · pinned: %1").arg(e.pinTitle);
 		if (!e.mediaPath.isEmpty())
@@ -2313,7 +2360,7 @@ void showDialog(const QString &initialTab)
 		}
 	};
 	phReload();
-	QLabel *phListLbl = new QLabel("Your placeholders", phTab);
+	QLabel *phListLbl = new QLabel("Your app docks", phTab);
 	phv->addWidget(phListLbl);
 	phv->addWidget(phList, 1);
 
@@ -2323,7 +2370,7 @@ void showDialog(const QString &initialTab)
 	};
 
 	QHBoxLayout *phBtns = new QHBoxLayout();
-	QPushButton *phAdd = new QPushButton("Add placeholder", phTab);
+	QPushButton *phAdd = new QPushButton("Add app dock", phTab);
 	QPushButton *phLabelBtn = new QPushButton("Set label", phTab);
 	QPushButton *phColorBtn = new QPushButton("Set color", phTab);
 	QPushButton *phPinBtn = new QPushButton("Pin a window", phTab);
@@ -2352,7 +2399,7 @@ void showDialog(const QString &initialTab)
 
 	QObject::connect(phAdd, &QPushButton::clicked, phTab, [phTab, phReload]() {
 		bool ok = false;
-		const QString label = QInputDialog::getText(phTab, "Add placeholder",
+		const QString label = QInputDialog::getText(phTab, "Add app dock",
 							    "Label (what belongs in this spot):", QLineEdit::Normal,
 							    "TikTok chat", &ok);
 		if (!ok)
@@ -2370,7 +2417,7 @@ void showDialog(const QString &initialTab)
 				current = e.label;
 		bool ok = false;
 		const QString label =
-			QInputDialog::getText(phTab, "Placeholder label", "Label:", QLineEdit::Normal, current, &ok);
+			QInputDialog::getText(phTab, "App dock label", "Label:", QLineEdit::Normal, current, &ok);
 		if (!ok)
 			return;
 		placeholders::setLabel(id, label.trimmed());
@@ -2385,7 +2432,7 @@ void showDialog(const QString &initialTab)
 			if (e.id == id)
 				current = e.color;
 		const QColor start = current.isEmpty() ? QColor("#232330") : QColor(current);
-		const QColor c = QColorDialog::getColor(start, phTab, "Placeholder background");
+		const QColor c = QColorDialog::getColor(start, phTab, "App dock background");
 		if (c.isValid())
 			placeholders::setColor(id, c.name());
 	});
@@ -2438,17 +2485,17 @@ void showDialog(const QString &initialTab)
 	});
 
 	QLabel *phHint =
-		new QLabel("Tip: every option here is also one right click away on the placeholder dock itself, "
+		new QLabel("Tip: every option here is also one right click away on the app dock itself, "
 			   "and its position saves with your dock layouts like any other dock.\n\n"
 			   "Good to know about pinned windows:\n"
 			   "•  DockX resizes the window to fill the spot, but every app has a true minimum "
-			   "size that DockX cannot override. If the window refuses to shrink, the placeholder "
+			   "size that DockX cannot override. If the window refuses to shrink, the app dock "
 			   "learns that minimum and stops you dragging the dock smaller, so the space you see is "
 			   "always the space the window really fits. You can often make an app shrink further by "
 			   "trimming what is inside it (closing extra panels or options in that app); adding more "
 			   "can raise its minimum.\n"
 			   "•  If the app's minimum changes while pinned, DockX notices and relearns within "
-			   "about 15 seconds. To fix it right away, right click the placeholder, choose Reset "
+			   "about 15 seconds. To fix it right away, right click the app dock, choose Reset "
 			   "size limit, then drag the dock to the size you want.\n"
 			   "•  Some apps (TikTok Live Studio, for one) pull their popped out panel back into "
 			   "the main window whenever the app restarts. DockX remembers the exact window you "
@@ -2459,12 +2506,12 @@ void showDialog(const QString &initialTab)
 			   "tells them apart: pin the small one.\n"
 			   "•  Rare edge case: if an app ever shows two windows with the same name, program, "
 			   "AND size, DockX cannot tell them apart and may grab the wrong one after a restart. "
-			   "The fix is quick: right click the placeholder, unpin, and pin the right window "
+			   "The fix is quick: right click the app dock, unpin, and pin the right window "
 			   "again.\n"
 			   "•  Seamless hides the pinned window's own title bar and border so it reads as "
 			   "pure content living in OBS; turning it off or unpinning brings the frame right back "
 			   "(so does restarting that app).\n"
-			   "•  Showing an image, GIF, or video: right click the placeholder, Show an image or "
+			   "•  Showing an image, GIF, or video: right click the app dock, Show an image or "
 			   "video. Videos loop with the sound off. The same right click menu picks how it fills "
 			   "the spot: Fit shows all of it, Fill covers the spot and crops the edges, Tile "
 			   "repeats it. A spot shows a file or holds a pinned window, not both at once.",
@@ -2472,11 +2519,25 @@ void showDialog(const QString &initialTab)
 	phHint->setWordWrap(true);
 	phv->addWidget(phHint);
 
-	tabs->addTab(phTab, "Placeholders");
+	tabs->addTab(phTab, "App docks"); /* renamed from "Placeholders" (Joey 2026-09-10: it does more) */
 
 	/* ---------- Mixer tab ---------- */
 	QWidget *mixTab = new QWidget();
 	QVBoxLayout *mxv = new QVBoxLayout(mixTab);
+
+	/* purpose FIRST, bold, before the wall of sources (Joey 2026-09-10:
+	   "people should click on it and know immediately what this tab is
+	   about" -- the one explaining line sat tiny at the bottom) */
+	QLabel *mixHead = new QLabel("Put your Audio Mixer in the order YOU want", mixTab);
+	{
+		QFont mf = mixHead->font();
+		mf.setBold(true);
+		mixHead->setFont(mf);
+	}
+	mxv->addWidget(mixHead);
+	mxv->addWidget(groupSub("Drag the sources below into your order. It sticks: OBS reapplies it "
+				"every time it rebuilds the mixer, across scenes and restarts.",
+				mixTab));
 
 	QListWidget *mixList = new QListWidget(mixTab);
 	mixList->setDragDropMode(QAbstractItemView::InternalMove);
@@ -2519,12 +2580,8 @@ void showDialog(const QString &initialTab)
 		mixReload();
 	});
 
-	QLabel *mixHint = new QLabel("Drag to reorder the Audio Mixer. The order sticks and reapplies "
-				     "itself whenever OBS rebuilds the mixer. Forgetting the custom order "
-				     "returns to OBS ordering after the next scene switch.",
-				     mixTab);
-	mixHint->setWordWrap(true);
-	mxv->addWidget(mixHint);
+	mixReset->setToolTip("Drops your custom order; the mixer returns to OBS's own ordering "
+			     "after the next scene switch.");
 
 	tabs->addTab(mixTab, "Mixer");
 

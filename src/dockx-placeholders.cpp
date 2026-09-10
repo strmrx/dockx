@@ -71,7 +71,7 @@ static PlaceholderEntry *entryFor(int id)
 
 static QString titleFor(const PlaceholderEntry &e)
 {
-	return e.label.isEmpty() ? QString("Placeholder") : e.label;
+	return e.label.isEmpty() ? QString("App dock") : e.label;
 }
 
 static QMainWindow *mainWindow()
@@ -543,7 +543,7 @@ protected:
 		f.setBold(true);
 		p.setFont(f);
 		p.setPen(text);
-		const QString label = e ? titleFor(*e) : QString("Placeholder");
+		const QString label = e ? titleFor(*e) : QString("App dock");
 		QRect textRect = rect().adjusted(10, 0, -10, 0);
 		p.drawText(textRect, Qt::AlignCenter | Qt::TextWordWrap, label);
 
@@ -584,8 +584,8 @@ protected:
 			if (!e2)
 				return;
 			bool ok = false;
-			const QString text = QInputDialog::getText(this, "Placeholder label",
-								   "Label:", QLineEdit::Normal, e2->label, &ok);
+			const QString text = QInputDialog::getText(this, "App dock label", "Label:", QLineEdit::Normal,
+								   e2->label, &ok);
 			if (ok)
 				setLabel(id, text.trimmed());
 		});
@@ -594,7 +594,7 @@ protected:
 			if (!e2)
 				return;
 			const QColor start = e2->color.isEmpty() ? QColor("#232330") : QColor(e2->color);
-			const QColor c = QColorDialog::getColor(start, this, "Placeholder background");
+			const QColor c = QColorDialog::getColor(start, this, "App dock background");
 			if (c.isValid())
 				setColor(id, c.name());
 		});
