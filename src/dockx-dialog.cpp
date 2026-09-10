@@ -1083,6 +1083,10 @@ void showDialog(const QString &initialTab)
 	/* -- dock layout locking -- */
 	QGroupBox *dockGroup = new QGroupBox("Lock the layout", layoutsTab);
 	QVBoxLayout *dg = new QVBoxLayout(dockGroup);
+	dg->addWidget(groupSub("Every lock and revert here has a hotkey: OBS Settings > Hotkeys, search "
+			       "DockX. Nudge your setup mid stream, hit one key (or a Stream Deck "
+			       "button), and it snaps back.",
+			       dockGroup));
 
 	QCheckBox *hardLockChk =
 		new QCheckBox("Lock docks in place (they can't be dragged or floated by accident)", dockGroup);

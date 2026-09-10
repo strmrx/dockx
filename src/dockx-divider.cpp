@@ -300,14 +300,22 @@ private:
 			setGeometry(r);
 	}
 
-	/* a failed trade means SOME dock in one of the two areas is clamping it;
-	   print every dock in both areas with its constraints so one log read
-	   names the culprit */
+	/* a failed trade means the layout math is not what we think; print the
+	   full topology -- window, corners, and every dock in the two areas with
+	   position, size, and constraints -- so one log read shows the real
+	   shape of the layout */
 	void logAreaDiagnostics(QMainWindow *m)
 	{
 		const Qt::DockWidgetArea aa = m->dockWidgetArea(first);
 		const Qt::DockWidgetArea ba = m->dockWidgetArea(second);
 		const bool horiz = orient == Qt::Horizontal;
+		obs_log(LOG_WARNING,
+			"divider:   window %dx%d, corners TL=%d TR=%d BL=%d BR=%d, first='%s' (area %d), "
+			"second='%s' (area %d), %s drag",
+			m->width(), m->height(), (int)m->corner(Qt::TopLeftCorner), (int)m->corner(Qt::TopRightCorner),
+			(int)m->corner(Qt::BottomLeftCorner), (int)m->corner(Qt::BottomRightCorner),
+			first->objectName().toUtf8().constData(), (int)aa, second->objectName().toUtf8().constData(),
+			(int)ba, horiz ? "horizontal" : "vertical");
 		const auto docks = m->findChildren<QDockWidget *>(QString(), Qt::FindDirectChildrenOnly);
 		for (QDockWidget *d : docks) {
 			if (!d->isVisible() || d->isFloating())
@@ -316,10 +324,11 @@ private:
 			if (da != aa && da != ba)
 				continue;
 			const QSize mn = d->minimumSize(), mh = d->minimumSizeHint(), mx = d->maximumSize();
-			obs_log(LOG_WARNING, "divider:   area %d dock '%s' %s=%d min=%d minHint=%d max=%d", (int)da,
-				d->objectName().toUtf8().constData(), horiz ? "w" : "h",
-				horiz ? d->width() : d->height(), horiz ? mn.width() : mn.height(),
-				horiz ? mh.width() : mh.height(), horiz ? mx.width() : mx.height());
+			const QRect g = d->geometry();
+			obs_log(LOG_WARNING, "divider:   area %d dock '%s' at %d,%d %dx%d min=%d minHint=%d max=%d",
+				(int)da, d->objectName().toUtf8().constData(), g.x(), g.y(), g.width(), g.height(),
+				horiz ? mn.width() : mn.height(), horiz ? mh.width() : mh.height(),
+				horiz ? mx.width() : mx.height());
 		}
 	}
 
