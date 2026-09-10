@@ -100,20 +100,23 @@ off-thesis: encoders, multi-output, NDI, VST, replay buffer.
 - **Edge strip span controls** (Joey 2026-09-10: "it would be cool to be able to have a
   tab still span across how i want. at the very least at the full horizontal, and even
   better, allow to choose how many docks across it could span... to the bottom and top
-  as an option") -- SHIPPED v0.47.0, UX reworked same day as v0.47.1 after the first rig pass (guided stretch dialog with a plain-words summary + Undo apply reversal; "Wide docks" box with the stretch button and two plain full-width checkboxes) (2026-09-10, new file `src/dockx-edges.cpp`). Two
-  tiers, both in the Layouts tab's "Edge rows" box:
-  (a) per-edge corner ownership: top and bottom row each choose "Let OBS decide" /
-  "Runs the full window width" / "Side columns keep the corners"
-  (QMainWindow::setCorner), persisted and reasserted on a 1.5s guard timer because
-  OBS's all-or-nothing Full-height docks menu toggle (which is what blocked Joey's
-  full-width mixer drop) rewrites all four corners whenever it is used.
-  (b) "Stretch a dock across a row": pick a dock plus the neighbor docks it should
-  run under or over (the mixer under exactly the two chat docks) and DockX rebuilds
-  the nesting so the dock becomes one strip spanning that row. Offered on every dock
-  title bar right-click (added to OBS's own dock menu) and from the dialog. Built on
-  the machinery proven by the v0.46.12 column repair: saveState snapshot first, split
+  as an option") -- SHIPPED v0.47.0, UX reworked same day as v0.47.1 after Joey's
+  first rig pass stretched the wrong dock without saying so (2026-09-10, new file
+  `src/dockx-edges.cpp`). Two tiers, both in the Layouts tab's "Wide docks" box:
+  (a) "Stretch a dock across a row": a guided dialog (Stretch this dock / Across
+  these docks / Under-Above) with a live plain-words summary of exactly what will
+  happen; the pre-stretch layout lands in undoState so Undo apply reverses it.
+  DockX rebuilds the nesting so the dock becomes one strip spanning that row (the
+  mixer under exactly the two chat docks). Offered on every dock title bar
+  right-click (added to OBS's own dock menu) and from the dialog. Built on the
+  machinery proven by the v0.46.12 column repair: saveState snapshot first, split
   plain docks, settle sizes, tabify last (the v0.46.13 ordering lesson), verify
   placement + structure, roll back on any mismatch.
+  (b) two plain checkboxes ("Bottom/Top docks may span the full window width"):
+  per-edge corner ownership via QMainWindow::setCorner, persisted and reasserted on
+  a 1.5s guard timer because OBS's all-or-nothing Full-height docks menu toggle
+  (which is what blocked Joey's full-width mixer drop) rewrites all four corners
+  whenever it is used; unticking restores the corner setup OBS chose at startup.
 - **DockX stats dock** (Joey 2026-09-09: "yes build the dockx stats bar please") --
   SHIPPED v0.43.0. New "DockX Stats" dock (new file `src/dockx-stats.cpp`, registered
   at load, opened from the Docks menu): the same health numbers as OBS's Stats panel
