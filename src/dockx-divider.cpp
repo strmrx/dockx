@@ -102,28 +102,35 @@ static QRect boundaryRect(const QRect &a, const QRect &b, Qt::Orientation o)
 	return QRect(left, y, right - left + 1, h);
 }
 
-/* resize one dock, letting the pinned-to-0x0 central widget flex for just
-   this call so Qt has a mediator to route the space through. The pin is
-   ALWAYS restored before returning. No-op when the center is not pinned
-   (defensive: handles only exist while the preview is collapsed). */
-static void resizeThroughCenter(QMainWindow *m, QDockWidget *d, int size, Qt::Orientation o)
-{
-	QWidget *c = m->centralWidget();
-	const bool pinned = c && c->maximumWidth() == 0 && c->maximumHeight() == 0;
-	if (pinned) {
-		c->setMinimumSize(0, 0);
-		c->setMaximumSize(QWIDGETSIZE_MAX, QWIDGETSIZE_MAX);
+/* lift the central widget's 0x0 pin for the duration of ONE WHOLE boundary
+   trade, then restore it. The pin must span the entire trade: re-pinning
+   between the shrink and the grow forces Qt to empty the center again, and
+   it hands the freed space straight back where it came from -- the net-zero
+   "settled at the same size" failure seen on-rig 2026-09-10. Everything in
+   the scope runs synchronously before Qt paints, so the briefly flexible
+   center is never visible. */
+class CenterFlexScope {
+public:
+	explicit CenterFlexScope(QMainWindow *m) : c(m->centralWidget())
+	{
+		pinned = c && c->maximumWidth() == 0 && c->maximumHeight() == 0;
+		if (pinned) {
+			c->setMinimumSize(0, 0);
+			c->setMaximumSize(QWIDGETSIZE_MAX, QWIDGETSIZE_MAX);
+		}
 	}
-	m->resizeDocks({d}, {size}, o);
-	if (m->layout())
-		m->layout()->activate();
-	if (pinned) {
-		c->setMinimumSize(0, 0);
-		c->setMaximumSize(0, 0);
-		if (m->layout())
-			m->layout()->activate();
+	~CenterFlexScope()
+	{
+		if (pinned) {
+			c->setMinimumSize(0, 0);
+			c->setMaximumSize(0, 0);
+		}
 	}
-}
+
+private:
+	QWidget *c;
+	bool pinned = false;
+};
 
 class BoundaryHandle : public QWidget {
 public:
@@ -229,17 +236,32 @@ private:
 		if (!m || newFirst == firstSize)
 			return;
 		const int newSecond = firstSize + secondSize - newFirst;
-		/* shrink first, grow second: the shrinking dock hands its space to
-		   the (briefly flexible) center, the growing dock takes it back out.
-		   Growing before shrinking would ask the 0-size center for space it
-		   does not have, and Qt would refuse the whole trade. */
-		if (newFirst < firstSize) {
-			resizeThroughCenter(m, first, newFirst, orient);
-			resizeThroughCenter(m, second, newSecond, orient);
-		} else {
-			resizeThroughCenter(m, second, newSecond, orient);
-			resizeThroughCenter(m, first, newFirst, orient);
-		}
+		{
+			CenterFlexScope flex(m);
+			/* both docks in one call: Qt satisfies the pair by moving
+			   the space through the (briefly flexible) center */
+			m->resizeDocks({first, second}, {newFirst, newSecond}, orient);
+			if (m->layout())
+				m->layout()->activate();
+			if (std::abs(sizeOf(first) - newFirst) > 4) {
+				/* combined call refused: route explicitly, shrink
+				   first (center absorbs), grow second (center gives
+				   it back), center still flexible throughout */
+				const bool firstShrinks = newFirst < firstSize;
+				QDockWidget *sh = firstShrinks ? first.data() : second.data();
+				QDockWidget *gr = firstShrinks ? second.data() : first.data();
+				const int shTo = firstShrinks ? newFirst : newSecond;
+				const int grTo = firstShrinks ? newSecond : newFirst;
+				m->resizeDocks({sh}, {shTo}, orient);
+				if (m->layout())
+					m->layout()->activate();
+				m->resizeDocks({gr}, {grTo}, orient);
+				if (m->layout())
+					m->layout()->activate();
+			}
+		} /* center re-pinned to 0x0 here */
+		if (m->layout())
+			m->layout()->activate();
 		const int got = sizeOf(first);
 		if (std::abs(got - newFirst) > 4)
 			obs_log(LOG_WARNING,
