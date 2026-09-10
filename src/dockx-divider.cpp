@@ -10,21 +10,24 @@ separator there freezes in both directions. This module finds exactly those
 boundaries (two visible docked docks from DIFFERENT dock areas sitting edge
 to edge) and lays a thin handle widget over each.
 
-The drag itself (v0.46.10, FIFTH design -- the first four failed on the rig):
+The drag itself (v0.46.11, SIXTH design -- the first five failed on the rig):
 - While the mouse is down NOTHING in the layout moves. The handle paints
   itself as a ghost bar and follows the mouse. (v0.45.1 forced a relayout
   per mouse move; every video dock's obs_display resized every few ms, the
   UI glitched, and the layout stormed. Never again.)
-- On release the trade is applied ONCE by driving Qt's OWN separator-drag
-  machinery with synthetic mouse events while the center's 0x0 pin is
-  briefly lifted (see dragNativeSeparator + TradeFlexScope below). Every
-  resizeDocks-based design failed on the rig: min=max pinning snapped back
-  (0.45.1), direct cross-area calls are silently ignored (0.45.0), and
-  center-mediated calls get re-balanced away because top/bottom area widths
-  are DERIVED and the right area just reshuffles internally (0.46.3-0.46.9,
-  five identical "settled at 304" logs). The separator path is the one
-  mechanism proven to move area boundaries durably: it is exactly what
-  happens when the user drags a divider with the preview visible.
+- On release the trade is applied ONCE by SAVESTATE SURGERY: snapshot the
+  layout (QMainWindow::saveState), patch the stored size integers of every
+  area/item on either side of the boundary, restoreState with the center's
+  0x0 pin briefly lifted (see the blob namespace + TradeFlexScope below).
+  Why: every live-layout design failed on the rig. min=max pinning snapped
+  back (0.45.1); direct cross-area resizeDocks is silently ignored
+  (0.45.0); center-mediated resizeDocks gets re-balanced away because
+  top/bottom band widths are DERIVED and the right area reshuffles
+  internally (0.46.3-0.46.9, five identical "settled at 304" logs);
+  synthetic native-separator drags find nothing to grab because the pinned
+  0x0 center leaves its separators zero pixels long (0.46.10). The
+  save/restore path is the one mechanism PROVEN to reproduce this exact
+  cross-band layout: it does so on every OBS restart.
 
 Defensive by design: handles are plain widgets on top of the separator gap;
 they intercept nothing else, never touch Qt layout internals, and are torn
@@ -38,19 +41,17 @@ covered. The center's 0x0 pin is restored on every exit path of the apply.
 #include <obs-frontend-api.h>
 #include <plugin-support.h>
 
-#include <QApplication>
 #include <QDockWidget>
-#include <QEventLoop>
 #include <QLayout>
 #include <QMainWindow>
 #include <QMouseEvent>
 #include <QPainter>
 #include <QPointer>
+#include <QSet>
 #include <QTimer>
 
 #include <algorithm>
 #include <cmath>
-#include <functional>
 
 namespace dockx {
 namespace divider {
@@ -160,32 +161,190 @@ private:
 	QList<QPair<QPointer<QDockWidget>, QSize>> saved;
 };
 
-/* Drive Qt's OWN separator-drag machinery with synthetic mouse events sent
-   straight to the QMainWindow. This is the one code path guaranteed to move
-   dock AREA boundaries durably -- it is exactly what happens when the user
-   drags a divider with the preview visible (proven working on the rig).
-   QMainWindow::event -> QMainWindowLayoutSeparatorHelper::windowEvent
-   hit-tests the position against the separator regions only, so a miss is a
-   no-op and the events never reach any dock (sendEvent does not propagate
-   to children). Subtlety from the Qt source: the helper applies the move
-   from a ZERO-DELAY TIMER, and the release cancels a pending move -- so the
-   event loop must run between move and release (user input excluded). */
-static bool dragNativeSeparator(QMainWindow *m, const QPoint &from, const QPoint &to)
+/* ---- saveState blob surgery (divider design v6) ----
+
+   The ONE path proven on Joey's rig to reproduce cross-band boundaries
+   faithfully is QMainWindow::saveState/restoreState: his layout (with all
+   its derived-width bands) survives every OBS restart bit-perfect. The
+   snapshot literally stores every area's size and every item's extent as
+   plain integers, so a boundary drag becomes: saveState -> patch the
+   integers on both sides of the boundary -> restoreState.
+
+   Format (verified against Qt 6.8 qdockarealayout.cpp/qmainwindowlayout.cpp,
+   copies in the session scratchpad; QDataStream big-endian, Qt_5_0):
+     qint32 0xff, qint32 version          (QMainWindow::saveState header)
+     uchar  0xfd                          (DockWidgetStateMarker; dock
+                                           section is FIRST in the layout
+                                           state, before floating tab groups
+                                           and toolbars)
+     qint32 areaCount
+     per area: qint32 areaPos, qint32 w, qint32 h, then info:
+       uchar 0xfa(tab)+qint32 index | 0xfc(sequence)
+       uchar orientation (1=H, 2=V), qint32 itemCount
+       per item:
+         0xfb widget: QString objectName, uchar flags,
+              4x qint32 (floating: x,y,w,h; docked: pos,size,min,max)
+         0xfc subinfo: 4x qint32 (pos,size,min,max), recursive info
+     QSize centralWidgetRect, 4x qint32 corners
+   Everything after the dock section is left byte-identical. */
+
+namespace blob {
+
+struct Cursor {
+	const uchar *p;
+	int n;
+	int off = 0;
+	bool ok = true;
+
+	uchar u8()
+	{
+		if (off + 1 > n) {
+			ok = false;
+			return 0;
+		}
+		return p[off++];
+	}
+	qint32 i32()
+	{
+		if (off + 4 > n) {
+			ok = false;
+			return 0;
+		}
+		qint32 v = (qint32)((quint32)p[off] << 24 | (quint32)p[off + 1] << 16 | (quint32)p[off + 2] << 8 |
+				    (quint32)p[off + 3]);
+		off += 4;
+		return v;
+	}
+	QString str()
+	{
+		const quint32 len = (quint32)i32();
+		if (len == 0xFFFFFFFFu)
+			return QString(); /* null string */
+		if (!ok || off + (int)len > n || (len % 2) != 0) {
+			ok = false;
+			return QString();
+		}
+		QString s;
+		s.reserve((int)len / 2);
+		for (quint32 i = 0; i < len; i += 2)
+			s.append(QChar((ushort)((ushort)p[off + i] << 8 | (ushort)p[off + i + 1])));
+		off += (int)len;
+		return s;
+	}
+};
+
+/* one patchable size int: its byte offset, and whether it is an extent
+   along the horizontal axis */
+struct ItemRef {
+	int sizeOff = 0;
+	bool horiz = false;
+	QStringList names; /* every dock objectName in this item's subtree */
+};
+
+struct AreaRef {
+	int wOff = 0, hOff = 0;
+	QStringList names;
+	QList<ItemRef> topItems; /* the area's DIRECT children only */
+};
+
+/* parse one QDockAreaLayoutInfo; fills names; when topItems is non-null the
+   info's direct items are recorded there (top level of an area) */
+static void parseInfo(Cursor &c, QStringList &names, QList<ItemRef> *topItems)
 {
-	const QPointF gFrom = m->mapToGlobal(from), gTo = m->mapToGlobal(to);
-	QMouseEvent press(QEvent::MouseButtonPress, QPointF(from), gFrom, Qt::LeftButton, Qt::LeftButton,
-			  Qt::NoModifier);
-	QApplication::sendEvent(m, &press);
-	if (!press.isAccepted())
-		return false; /* not on a separator; nothing grabbed, nothing to release */
-	QMouseEvent move(QEvent::MouseMove, QPointF(to), gTo, Qt::NoButton, Qt::LeftButton, Qt::NoModifier);
-	QApplication::sendEvent(m, &move);
-	/* let the helper's 0ms timer apply the move before the release clears it */
-	QCoreApplication::processEvents(QEventLoop::ExcludeUserInputEvents);
-	QMouseEvent rel(QEvent::MouseButtonRelease, QPointF(to), gTo, Qt::LeftButton, Qt::NoButton, Qt::NoModifier);
-	QApplication::sendEvent(m, &rel);
-	return true;
+	const uchar marker = c.u8();
+	if (marker == 0xfa) {
+		c.i32(); /* current tab index */
+	} else if (marker != 0xfc) {
+		c.ok = false;
+		return;
+	}
+	const uchar o = c.u8(); /* 1 = Horizontal, 2 = Vertical */
+	const qint32 cnt = c.i32();
+	if (!c.ok || cnt < 0 || cnt > 512) {
+		c.ok = false;
+		return;
+	}
+	for (qint32 i = 0; i < cnt && c.ok; i++) {
+		const uchar im = c.u8();
+		ItemRef ref;
+		ref.horiz = o == 1;
+		if (im == 0xfb) { /* widget (or placeholder) */
+			const QString name = c.str();
+			const uchar flags = c.u8();
+			if (flags & 2) { /* floating: x,y,w,h */
+				c.i32();
+				c.i32();
+				c.i32();
+				c.i32();
+			} else {
+				c.i32(); /* pos */
+				ref.sizeOff = c.off;
+				c.i32(); /* size */
+				c.i32(); /* min */
+				c.i32(); /* max */
+			}
+			ref.names << name;
+			names << name;
+		} else if (im == 0xfc) { /* nested info */
+			c.i32();         /* pos */
+			ref.sizeOff = c.off;
+			c.i32(); /* size */
+			c.i32(); /* min */
+			c.i32(); /* max */
+			QStringList sub;
+			parseInfo(c, sub, nullptr);
+			ref.names = sub;
+			names << sub;
+		} else {
+			c.ok = false;
+			return;
+		}
+		if (topItems && ref.sizeOff)
+			topItems->append(ref);
+	}
 }
+
+/* parse the dock section of a QMainWindow::saveState blob */
+static bool parse(const QByteArray &state, QList<AreaRef> &areas)
+{
+	Cursor c{(const uchar *)state.constData(), (int)state.size()};
+	if (c.i32() != 0xff)
+		return false; /* VersionMarker */
+	c.i32();              /* version */
+	if (c.u8() != 0xfd)
+		return false; /* DockWidgetStateMarker */
+	const qint32 cnt = c.i32();
+	if (!c.ok || cnt < 0 || cnt > 4)
+		return false;
+	for (qint32 i = 0; i < cnt && c.ok; i++) {
+		c.i32(); /* area position index */
+		AreaRef a;
+		a.wOff = c.off;
+		c.i32(); /* w */
+		a.hOff = c.off;
+		c.i32(); /* h */
+		parseInfo(c, a.names, &a.topItems);
+		areas.append(a);
+	}
+	return c.ok;
+}
+
+static void writeI32(QByteArray &state, int off, qint32 v)
+{
+	uchar *p = (uchar *)state.data() + off;
+	p[0] = (uchar)((quint32)v >> 24);
+	p[1] = (uchar)((quint32)v >> 16);
+	p[2] = (uchar)((quint32)v >> 8);
+	p[3] = (uchar)v;
+}
+
+static qint32 readI32(const QByteArray &state, int off)
+{
+	const uchar *p = (const uchar *)state.constData() + off;
+	return (qint32)((quint32)p[0] << 24 | (quint32)p[1] << 16 | (quint32)p[2] << 8 | (quint32)p[3]);
+}
+
+} // namespace blob
 
 class BoundaryHandle : public QWidget {
 public:
@@ -293,62 +452,78 @@ private:
 		if (!m || newFirst == firstSize)
 			return;
 		const int delta = newFirst - firstSize;
-
-		/* resize the WHOLE EDGE, not just the two docks under the handle.
-		   Rig lesson (2026-09-10): a visual column can span MULTIPLE Qt
-		   dock areas (Joey's left column = Controls/stream info in the
-		   LEFT area stacked over stats/preview in the BOTTOM area). Qt
-		   only takes width orders through some areas (left/right for a
-		   horizontal drag); top/bottom area widths are derived. Sending
-		   the same trade to EVERY dock whose edge sits on this boundary
-		   means the order lands through the commandable areas, and the
-		   derived ones follow automatically. */
 		const bool horiz = orient == Qt::Horizontal;
+
+		/* classify every dock by which side of the dragged boundary its
+		   edge sits on (whole-edge semantics: a visual column can span
+		   multiple Qt areas, so the patch must cover every aligned dock) */
+		const int edgeA = horiz ? first->geometry().right() : first->geometry().bottom();
+		const int edgeB = horiz ? second->geometry().left() : second->geometry().top();
+		QSet<QString> sideA, sideB; /* dock objectNames before/after the line */
+		const auto all = m->findChildren<QDockWidget *>(QString(), Qt::FindDirectChildrenOnly);
+		for (QDockWidget *d : all) {
+			if (!d->isVisible() || d->isFloating() || m->dockWidgetArea(d) == Qt::NoDockWidgetArea)
+				continue;
+			const QRect g = d->geometry();
+			if (std::abs((horiz ? g.right() : g.bottom()) - edgeA) <= MAX_GAP)
+				sideA.insert(d->objectName());
+			else if (std::abs((horiz ? g.left() : g.top()) - edgeB) <= MAX_GAP)
+				sideB.insert(d->objectName());
+		}
+
+		/* snapshot -> patch the stored sizes -> restore. save/restore is
+		   the one mechanism proven (by every OBS restart) to reproduce
+		   this layout's cross-band boundaries faithfully; patching its
+		   integers sidesteps the live layout negotiation that swallowed
+		   every resizeDocks/separator attempt (designs 1-5). */
+		QByteArray state = m->saveState();
+		QList<blob::AreaRef> areas;
+		if (!blob::parse(state, areas)) {
+			obs_log(LOG_WARNING, "divider: could not parse the layout state; drag ignored");
+			return;
+		}
+		auto side = [&](const QStringList &names) {
+			bool a = false, b = false;
+			for (const QString &n : names) {
+				a = a || sideA.contains(n);
+				b = b || sideB.contains(n);
+			}
+			return a == b ? 0 : (a ? 1 : 2); /* 0 = neither or both (skip) */
+		};
+		int patched = 0;
+		for (const blob::AreaRef &ar : areas) {
+			const int areaSide = side(ar.names);
+			const int off = horiz ? ar.wOff : ar.hOff;
+			if (areaSide == 1) {
+				blob::writeI32(state, off, blob::readI32(state, off) + delta);
+				patched++;
+			} else if (areaSide == 2) {
+				blob::writeI32(state, off, blob::readI32(state, off) - delta);
+				patched++;
+			}
+			/* the area's DIRECT items partition it along its own axis;
+			   only same-axis items carry the boundary */
+			for (const blob::ItemRef &it : ar.topItems) {
+				if (it.horiz != horiz)
+					continue;
+				const int s = side(it.names);
+				if (s == 0)
+					continue;
+				blob::writeI32(state, it.sizeOff,
+					       blob::readI32(state, it.sizeOff) + (s == 1 ? delta : -delta));
+				patched++;
+			}
+		}
+		if (!patched) {
+			obs_log(LOG_WARNING, "divider: found nothing to patch for this boundary; drag ignored");
+			return;
+		}
 		{
 			TradeFlexScope flex(m, first, second);
-			/* PRIMARY (v0.46.10): simulate the native separator drags a
-			   user would do with the preview visible. While the center is
-			   flexible the two between-area separators come alive; drag
-			   the one that OPENS the center gap first, then the one that
-			   closes it, and Qt's own machinery records the sizes durably
-			   (setGrid), which resizeDocks never managed across bands.
-			   Press points walk the boundary gap until one lands on the
-			   right separator (verified by watching the edge move). */
-			const QPoint mid = pressRect.center();
-			const int gapL = horiz ? first->geometry().right() + 1 : first->geometry().bottom() + 1;
-			const int gapR = horiz ? second->geometry().left() - 1 : second->geometry().top() - 1;
-			auto edgeOfFirst = [&]() {
-				return horiz ? first->geometry().right() : first->geometry().bottom();
-			};
-			auto edgeOfSecond = [&]() {
-				return horiz ? second->geometry().left() : second->geometry().top();
-			};
-			auto at = [&](int along) {
-				return horiz ? QPoint(along, mid.y()) : QPoint(mid.x(), along);
-			};
-			/* one separator drag: press at each candidate spot in the gap
-			   until the watched edge actually moves */
-			auto dragUntil = [&](int fromLo, int fromHi, const std::function<int()> &watch) {
-				const int before = watch();
-				const int step = fromLo <= fromHi ? 1 : -1;
-				for (int x = fromLo; step > 0 ? x <= fromHi : x >= fromHi; x += step) {
-					dragNativeSeparator(m, at(x), at(x + delta));
-					if (std::abs(watch() - before) >= std::abs(delta) / 2)
-						return true;
-				}
-				return false;
-			};
-			if (delta > 0) {
-				/* first grows: push the far separator away (center opens),
-				   then move the near one into the gap (center closes) */
-				dragUntil(gapR, gapL, edgeOfSecond);
-				dragUntil(gapL, gapR, edgeOfFirst);
-			} else {
-				/* first shrinks: pull the near separator back (center
-				   opens), then the far one follows (center closes) */
-				dragUntil(gapL, gapR, edgeOfFirst);
-				dragUntil(gapR, gapL, edgeOfSecond);
-			}
+			/* restore with the center flexible, exactly like OBS startup
+			   (state restores BEFORE DockX pins the center 0x0 -- the
+			   condition under which these sizes provably round-trip) */
+			m->restoreState(state);
 			if (m->layout())
 				m->layout()->activate();
 		} /* dock maximums + the center's 0x0 pin restored here */
@@ -357,8 +532,8 @@ private:
 		const int got = sizeOf(first);
 		if (std::abs(got - newFirst) > 4) {
 			obs_log(LOG_WARNING,
-				"divider: drag wanted %d, layout settled at %d (native separator sim; a dock minimum, or no separator found in the gap)",
-				newFirst, got);
+				"divider: drag wanted %d, layout settled at %d (state surgery, %d ints patched; a dock minimum, or the layout re-derived)",
+				newFirst, got, patched);
 			logAreaDiagnostics(m);
 		}
 		/* follow the real boundary so the cursor stays on the handle */
