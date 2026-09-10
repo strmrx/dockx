@@ -71,6 +71,9 @@ struct SourceDockEntry {
 	int id = 0;
 	int kind = 0; /* 0 = named source/scene, 1 = Program, 2 = Preview */
 	QString sourceName;
+	double zoom = 1.0; /* 1 = fit the dock; up to 8x punch in */
+	double panX = 0.5; /* fraction of the source at the dock's center */
+	double panY = 0.5;
 };
 
 /* an empty labeled dock that reserves layout space for a window OBS cannot
@@ -189,6 +192,8 @@ struct State {
 	int nextSourceDockId = 1;
 	std::vector<int> editDocks; /* ids of the editable Preview docks */
 	int nextEditDockId = 1;
+	QHash<int, QString> editDockScenes; /* edit dock id -> pinned scene uuid;
+	                                       absent = the dock follows the current scene */
 	std::vector<PlaceholderEntry> placeholders;
 	int nextPlaceholderId = 1;
 	QStringList mixerOrder; /* custom Audio Mixer order (source names, top first) */

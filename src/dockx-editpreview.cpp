@@ -30,11 +30,13 @@ overlay. Sources are held as weak references and resolved on the UI thread.
 #include <graphics/vec3.h>
 #include <graphics/vec4.h>
 
+#include <QCursor>
 #include <QDockWidget>
 #include <QHBoxLayout>
 #include <QHideEvent>
 #include <QLabel>
 #include <QMainWindow>
+#include <QMenu>
 #include <QMouseEvent>
 #include <QPushButton>
 #include <QResizeEvent>
@@ -125,13 +127,29 @@ public:
 		setScene(nullptr);
 	}
 
-	/* UI thread: point the dock at the scene the user is editing. In studio
-	   mode that is the PREVIEW (staging) scene -- edits land there and only go
-	   live on transition, matching OBS's studio workflow -- otherwise it is the
-	   current program scene. Re-resolved on every scene / preview-scene /
+	/* UI thread: point the dock at the scene the user is editing. A PINNED
+	   scene (state().editDockScenes, Joey 2026-09-10: edit any scene through
+	   a dock, not just the live one) wins outright; otherwise in studio mode
+	   it is the PREVIEW (staging) scene -- edits land there and only go live
+	   on transition, matching OBS's studio workflow -- else the current
+	   program scene. Re-resolved on every scene / preview-scene /
 	   studio-mode event via refreshAll(). */
 	void refresh()
 	{
+		const QString pin = state().editDockScenes.value(id);
+		if (!pin.isEmpty()) {
+			obs_source_t *pinned = obs_get_source_by_uuid(pin.toUtf8().constData());
+			if (pinned) {
+				setScene(obs_source_get_weak_source(pinned));
+				obs_source_release(pinned);
+				return;
+			}
+			/* the pinned scene is gone (deleted, or another scene
+			   collection): fall back to following the current scene */
+			state().editDockScenes.remove(id);
+			stateSave();
+			obs_log(LOG_INFO, "edit dock %d: pinned scene gone, following the current scene again", id);
+		}
 		obs_source_t *scene = obs_frontend_preview_program_mode_active()
 					      ? obs_frontend_get_current_preview_scene()
 					      : obs_frontend_get_current_scene();
@@ -1649,6 +1667,14 @@ public:
 		QLabel *tag = new QLabel("DockX Preview", bar);
 		h->addWidget(tag);
 		h->addStretch(1);
+		/* pin the dock to ONE scene so it can be edited without going
+		   live (Joey 2026-09-10); default follows the current scene */
+		sceneBtn = new QPushButton(bar);
+		sceneBtn->setToolTip("Which scene this dock shows and edits. Follow the current "
+				     "scene (the default), or pin one scene so you can tweak it "
+				     "while a different scene is live.");
+		QObject::connect(sceneBtn, &QPushButton::clicked, this, [this]() { pickScene(); });
+		h->addWidget(sceneBtn);
 		obsBtn = new QPushButton(bar);
 		obsBtn->setToolTip("Show or hide OBS's built-in preview (the fixed "
 				   "one in the middle of the window)");
@@ -1674,10 +1700,59 @@ public:
 
 	void teardown() { video->teardown(); }
 
-	void updateButton() { obsBtn->setText(preview::collapsed() ? "Show OBS preview" : "Hide OBS preview"); }
+	void updateButton()
+	{
+		obsBtn->setText(preview::collapsed() ? "Show OBS preview" : "Hide OBS preview");
+		const QString pin = state().editDockScenes.value(id);
+		QString label = "Scene: follows current";
+		if (!pin.isEmpty()) {
+			if (obs_source_t *s = obs_get_source_by_uuid(pin.toUtf8().constData())) {
+				label = QString("Scene: %1").arg(QString::fromUtf8(obs_source_get_name(s)));
+				obs_source_release(s);
+			}
+		}
+		sceneBtn->setText(label);
+	}
 
 private:
 	QPushButton *obsBtn;
+	QPushButton *sceneBtn;
+
+	void pickScene()
+	{
+		QMenu menu(this);
+		const QString pin = state().editDockScenes.value(id);
+		QAction *follow = menu.addAction("Follow the current scene");
+		follow->setCheckable(true);
+		follow->setChecked(pin.isEmpty());
+		menu.addSeparator();
+		struct obs_frontend_source_list scenes = {};
+		obs_frontend_get_scenes(&scenes);
+		QList<QPair<QAction *, QString>> picks;
+		for (size_t i = 0; i < scenes.sources.num; i++) {
+			obs_source_t *s = scenes.sources.array[i];
+			const char *uuid = obs_source_get_uuid(s);
+			const char *name = obs_source_get_name(s);
+			if (!uuid || !name)
+				continue;
+			QAction *a = menu.addAction(QString::fromUtf8(name));
+			a->setCheckable(true);
+			a->setChecked(pin == QString::fromUtf8(uuid));
+			picks.append({a, QString::fromUtf8(uuid)});
+		}
+		QAction *chosen = menu.exec(QCursor::pos());
+		obs_frontend_source_list_free(&scenes);
+		if (!chosen)
+			return;
+		if (chosen == follow)
+			state().editDockScenes.remove(id);
+		else
+			for (const auto &p : picks)
+				if (p.first == chosen)
+					state().editDockScenes[id] = p.second;
+		stateSave();
+		refresh();
+	}
 };
 
 static std::vector<EditPreviewPanel *> g_panels;
@@ -1744,6 +1819,7 @@ void removeDock(int id)
 			break;
 		}
 	}
+	state().editDockScenes.remove(id);
 	stateSave();
 }
 

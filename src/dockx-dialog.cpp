@@ -2728,7 +2728,7 @@ void showDialog(const QString &initialTab)
 	QObject::connect(collList, &QListWidget::itemDoubleClicked, &dlg,
 			 [switchCollection](QListWidgetItem *) { switchCollection(); });
 
-	tabs->addTab(swTab, "Switch");
+	tabs->addTab(swTab, "Profiles"); /* renamed from "Switch" (Joey 2026-09-10) */
 
 	/* ---------- Monitors tab ---------- */
 	QWidget *monTab = new QWidget();

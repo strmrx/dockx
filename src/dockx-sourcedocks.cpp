@@ -19,11 +19,13 @@ dock, like OBS's own Interact window.
 #include <obs-frontend-api.h>
 #include <plugin-support.h>
 
+#include <QContextMenuEvent>
 #include <QDockWidget>
 #include <QFocusEvent>
 #include <QHBoxLayout>
 #include <QKeyEvent>
 #include <QMainWindow>
+#include <QMenu>
 #include <QMouseEvent>
 #include <QResizeEvent>
 #include <QShowEvent>
@@ -35,6 +37,7 @@ dock, like OBS's own Interact window.
 #include <QWheelEvent>
 #include <QWidget>
 
+#include <atomic>
 #include <cmath>
 #include <mutex>
 #include <vector>
@@ -47,6 +50,32 @@ static bool g_shutdown = false;
 static QString dockIdFor(int id)
 {
 	return QString("dockx_source_%1").arg(id);
+}
+
+/* per-dock zoom limits */
+static const float ZOOM_MAX = 8.0f;
+static const float ZOOM_STEP = 1.15f; /* per wheel notch / menu click */
+
+/* the widget-space view of the source for a given zoom + pan. zoom = 1 is
+   exactly the old centered letterbox; zoomed in, (panX, panY) is the source
+   fraction sitting at the widget's center, clamped so the view never
+   scrolls past the source. Used IDENTICALLY by the draw callback and the
+   input mapping so clicks stay accurate while zoomed. */
+static void viewRect(float cx, float cy, float w, float h, float zoom, float px, float py, float &scale, float &vx,
+		     float &vy)
+{
+	scale = qMin(cx / w, cy / h) * zoom;
+	const float vw = scale * w, vh = scale * h;
+	if (vw <= cx)
+		px = 0.5f;
+	else
+		px = qBound(cx / (2.0f * vw), px, 1.0f - cx / (2.0f * vw));
+	if (vh <= cy)
+		py = 0.5f;
+	else
+		py = qBound(cy / (2.0f * vh), py, 1.0f - cy / (2.0f * vh));
+	vx = cx / 2.0f - px * vw;
+	vy = cy / 2.0f - py * vh;
 }
 
 static uint32_t toObsModifiers(Qt::KeyboardModifiers m, Qt::MouseButtons buttons)
@@ -90,6 +119,14 @@ public:
 		setMinimumSize(80, 45);
 		setMouseTracking(true);
 		setFocusPolicy(Qt::ClickFocus);
+		for (const SourceDockEntry &e : state().sourceDocks) {
+			if (e.id == id_) {
+				zoom = (float)e.zoom;
+				panX = (float)e.panX;
+				panY = (float)e.panY;
+				break;
+			}
+		}
 	}
 
 	~VideoWidget() override
@@ -216,14 +253,66 @@ protected:
 		}
 	}
 
-	/* ---- input forwarding (browser sources etc.) ---- */
+	/* ---- input forwarding (browser sources etc.) + zoom gestures ---- */
 
-	void mousePressEvent(QMouseEvent *e) override { sendClick(e, false); }
-	void mouseReleaseEvent(QMouseEvent *e) override { sendClick(e, true); }
-	void mouseDoubleClickEvent(QMouseEvent *e) override { sendClick(e, false, 2); }
+	void mousePressEvent(QMouseEvent *e) override
+	{
+		/* middle-drag always pans; left-drag pans when zoomed in and the
+		   source does not take clicks itself */
+		if (e->button() == Qt::MiddleButton ||
+		    (!interactive && e->button() == Qt::LeftButton && zoom.load() > 1.001f)) {
+			panning = true;
+			panPress = e->position();
+			panAtPress = QPointF(panX.load(), panY.load());
+			setCursor(Qt::ClosedHandCursor);
+			e->accept();
+			return;
+		}
+		sendClick(e, false);
+	}
+
+	void mouseReleaseEvent(QMouseEvent *e) override
+	{
+		if (panning && (e->button() == Qt::MiddleButton || e->button() == Qt::LeftButton)) {
+			panning = false;
+			unsetCursor();
+			scheduleSave();
+			e->accept();
+			return;
+		}
+		sendClick(e, true);
+	}
+
+	void mouseDoubleClickEvent(QMouseEvent *e) override
+	{
+		/* double-click resets to fit (Ctrl+double-click when the source
+		   takes clicks itself, so browser double-clicks still work) */
+		if (!interactive || (e->modifiers() & Qt::ControlModifier)) {
+			resetZoom();
+			e->accept();
+			return;
+		}
+		sendClick(e, false, 2);
+	}
 
 	void mouseMoveEvent(QMouseEvent *e) override
 	{
+		if (panning) {
+			uint32_t w, h;
+			if (sourceSize(w, h)) {
+				const qreal dpr = devicePixelRatioF();
+				const float cx = (float)(width() * dpr), cy = (float)(height() * dpr);
+				const float scale = qMin(cx / (float)w, cy / (float)h) * zoom.load();
+				const float vw = scale * (float)w, vh = scale * (float)h;
+				const QPointF d = (e->position() - panPress) * dpr;
+				if (vw > 0.0f)
+					panX = (float)(panAtPress.x() - d.x() / vw);
+				if (vh > 0.0f)
+					panY = (float)(panAtPress.y() - d.y() / vh);
+			}
+			e->accept();
+			return;
+		}
 		if (!interactive)
 			return;
 		if (obs_source_t *src = lockSource()) {
@@ -249,8 +338,13 @@ protected:
 
 	void wheelEvent(QWheelEvent *e) override
 	{
-		if (!interactive) {
-			QWidget::wheelEvent(e);
+		/* wheel zooms; on sources that use the wheel themselves
+		   (browsers scroll) hold Ctrl to zoom instead */
+		if (!interactive || (e->modifiers() & Qt::ControlModifier)) {
+			const int notches = e->angleDelta().y() / 120;
+			if (notches != 0)
+				zoomAt(e->position(), std::pow(ZOOM_STEP, (float)notches));
+			e->accept();
 			return;
 		}
 		if (obs_source_t *src = lockSource()) {
@@ -261,6 +355,30 @@ protected:
 			obs_source_release(src);
 			e->accept();
 		}
+	}
+
+	void contextMenuEvent(QContextMenuEvent *e) override
+	{
+		/* interactive sources get right-clicks forwarded instead */
+		if (interactive) {
+			QWidget::contextMenuEvent(e);
+			return;
+		}
+		QMenu menu(this);
+		QAction *in = menu.addAction("Zoom in");
+		QAction *out = menu.addAction("Zoom out");
+		QAction *reset = menu.addAction("Reset zoom (fit)");
+		out->setEnabled(zoom.load() > 1.001f);
+		reset->setEnabled(zoom.load() > 1.001f);
+		QAction *picked = menu.exec(e->globalPos());
+		const QPointF center(width() / 2.0, height() / 2.0);
+		if (picked == in)
+			zoomAt(center, ZOOM_STEP);
+		else if (picked == out)
+			zoomAt(center, 1.0f / ZOOM_STEP);
+		else if (picked == reset)
+			resetZoom();
+		e->accept();
 	}
 
 	void keyPressEvent(QKeyEvent *e) override { sendKey(e, false); }
@@ -283,6 +401,90 @@ private:
 	obs_weak_source_t *weak = nullptr;
 	obs_source_t *shownSrc = nullptr; /* holds the inc_showing ref */
 	std::mutex weakMutex;
+
+	/* zoom + pan: written on the UI thread, read by the draw callback on
+	   the graphics thread, hence atomics */
+	std::atomic<float> zoom{1.0f};
+	std::atomic<float> panX{0.5f};
+	std::atomic<float> panY{0.5f};
+	bool panning = false;
+	QPointF panPress;
+	QPointF panAtPress;
+	QTimer *saveTimer = nullptr;
+
+	/* the rendered pixel size, UI thread */
+	bool sourceSize(uint32_t &w, uint32_t &h)
+	{
+		if (kind == KIND_PROGRAM) {
+			obs_video_info ovi;
+			if (!obs_get_video_info(&ovi))
+				return false;
+			w = ovi.base_width;
+			h = ovi.base_height;
+			return w && h;
+		}
+		obs_source_t *src = lockSource();
+		if (!src)
+			return false;
+		w = obs_source_get_width(src);
+		h = obs_source_get_height(src);
+		obs_source_release(src);
+		return w && h;
+	}
+
+	/* zoom by a factor keeping the source point under `pos` in place */
+	void zoomAt(const QPointF &pos, float factor)
+	{
+		uint32_t w, h;
+		if (!sourceSize(w, h))
+			return;
+		const qreal dpr = devicePixelRatioF();
+		const float cx = (float)(width() * dpr), cy = (float)(height() * dpr);
+		float scale, vx, vy;
+		viewRect(cx, cy, (float)w, (float)h, zoom.load(), panX.load(), panY.load(), scale, vx, vy);
+		const float mx = (float)(pos.x() * dpr), my = (float)(pos.y() * dpr);
+		const float sx = (mx - vx) / scale, sy = (my - vy) / scale; /* source pt under cursor */
+		const float nz = qBound(1.0f, zoom.load() * factor, ZOOM_MAX);
+		zoom = nz;
+		const float fit = qMin(cx / (float)w, cy / (float)h);
+		const float vw2 = fit * nz * (float)w, vh2 = fit * nz * (float)h;
+		if (vw2 > 0.0f && vh2 > 0.0f) {
+			/* keep (sx, sy) under the cursor: solve for the new pan */
+			panX = (cx / 2.0f - (mx - sx * fit * nz)) / vw2;
+			panY = (cy / 2.0f - (my - sy * fit * nz)) / vh2;
+		}
+		scheduleSave();
+	}
+
+	void resetZoom()
+	{
+		zoom = 1.0f;
+		panX = 0.5f;
+		panY = 0.5f;
+		scheduleSave();
+	}
+
+	/* wheel spam writes once, 600ms after the last change */
+	void scheduleSave()
+	{
+		if (!saveTimer) {
+			saveTimer = new QTimer(this);
+			saveTimer->setSingleShot(true);
+			saveTimer->setInterval(600);
+			QObject::connect(saveTimer, &QTimer::timeout, this, [this]() {
+				for (SourceDockEntry &e : state().sourceDocks) {
+					if (e.id == id) {
+						e.zoom = (double)zoom.load();
+						e.panX = (double)panX.load();
+						e.panY = (double)panY.load();
+						break;
+					}
+				}
+				stateSave();
+			});
+		}
+		saveTimer->start();
+	}
 
 	void ensureDisplay()
 	{
@@ -322,25 +524,20 @@ private:
 			p->setWindowTitle(n);
 	}
 
-	/* widget position -> source pixel position (undo the letterbox math) */
+	/* widget position -> source pixel position (undo the letterbox math,
+	   zoom + pan included so clicks stay accurate while zoomed) */
 	bool mapToSource(const QPointF &pos, int32_t &sx, int32_t &sy)
 	{
-		obs_source_t *src = lockSource();
-		if (!src)
-			return false;
-		const uint32_t w = obs_source_get_width(src);
-		const uint32_t h = obs_source_get_height(src);
-		obs_source_release(src);
-		if (!w || !h)
+		uint32_t w, h;
+		if (!sourceSize(w, h))
 			return false;
 		const qreal dpr = devicePixelRatioF();
 		const float cx = (float)(width() * dpr);
 		const float cy = (float)(height() * dpr);
-		const float scale = qMin(cx / (float)w, cy / (float)h);
+		float scale, vx, vy;
+		viewRect(cx, cy, (float)w, (float)h, zoom.load(), panX.load(), panY.load(), scale, vx, vy);
 		if (scale <= 0.0f)
 			return false;
-		const float vx = (cx - scale * (float)w) / 2.0f;
-		const float vy = (cy - scale * (float)h) / 2.0f;
 		sx = (int32_t)(((float)(pos.x() * dpr) - vx) / scale);
 		sy = (int32_t)(((float)(pos.y() * dpr) - vy) / scale);
 		sx = qBound(0, sx, (int32_t)w - 1);
@@ -435,15 +632,22 @@ private:
 				return;
 			}
 		}
-		const float scale = qMin((float)cx / (float)w, (float)cy / (float)h);
-		const int vw = (int)(scale * (float)w);
-		const int vh = (int)(scale * (float)h);
-		const int vx = ((int)cx - vw) / 2;
-		const int vy = ((int)cy - vh) / 2;
+		/* same view math as the input mapping: full-widget viewport, the
+		   ortho window crops to the zoomed + panned source region (at
+		   zoom 1 this is exactly the old centered letterbox) */
+		float scale, vx, vy;
+		viewRect((float)cx, (float)cy, (float)w, (float)h, v->zoom.load(), v->panX.load(), v->panY.load(),
+			 scale, vx, vy);
+		if (scale <= 0.0f) {
+			if (src)
+				obs_source_release(src);
+			return;
+		}
 		gs_viewport_push();
 		gs_projection_push();
-		gs_ortho(0.0f, (float)w, 0.0f, (float)h, -100.0f, 100.0f);
-		gs_set_viewport(vx, vy, vw, vh);
+		gs_ortho((0.0f - vx) / scale, ((float)cx - vx) / scale, (0.0f - vy) / scale, ((float)cy - vy) / scale,
+			 -100.0f, 100.0f);
+		gs_set_viewport(0, 0, (int)cx, (int)cy);
 		if (src) {
 			obs_source_video_render(src);
 			obs_source_release(src);

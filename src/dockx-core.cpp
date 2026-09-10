@@ -274,8 +274,12 @@ void stateLoad()
 		for (size_t i = 0; i < n; i++) {
 			obs_data_t *o = obs_data_array_item(edocks, i);
 			const int id = (int)obs_data_get_int(o, "id");
-			if (id > 0)
+			if (id > 0) {
 				g_state.editDocks.push_back(id);
+				const QString pin = QString::fromUtf8(obs_data_get_string(o, "scene_uuid"));
+				if (!pin.isEmpty())
+					g_state.editDockScenes[id] = pin;
+			}
 			obs_data_release(o);
 		}
 		obs_data_array_release(edocks);
@@ -290,6 +294,12 @@ void stateLoad()
 			e.id = (int)obs_data_get_int(o, "id");
 			e.kind = (int)obs_data_get_int(o, "kind");
 			e.sourceName = QString::fromUtf8(obs_data_get_string(o, "name"));
+			obs_data_set_default_double(o, "zoom", 1.0);
+			obs_data_set_default_double(o, "pan_x", 0.5);
+			obs_data_set_default_double(o, "pan_y", 0.5);
+			e.zoom = obs_data_get_double(o, "zoom");
+			e.panX = obs_data_get_double(o, "pan_x");
+			e.panY = obs_data_get_double(o, "pan_y");
 			if (e.id > 0)
 				g_state.sourceDocks.push_back(e);
 			obs_data_release(o);
@@ -538,6 +548,8 @@ void stateSave()
 	for (int id : g_state.editDocks) {
 		obs_data_t *o = obs_data_create();
 		obs_data_set_int(o, "id", id);
+		if (g_state.editDockScenes.contains(id))
+			obs_data_set_string(o, "scene_uuid", g_state.editDockScenes[id].toUtf8().constData());
 		obs_data_array_push_back(edocks, o);
 		obs_data_release(o);
 	}
@@ -550,6 +562,9 @@ void stateSave()
 		obs_data_set_int(o, "id", e.id);
 		obs_data_set_int(o, "kind", e.kind);
 		obs_data_set_string(o, "name", e.sourceName.toUtf8().constData());
+		obs_data_set_double(o, "zoom", e.zoom);
+		obs_data_set_double(o, "pan_x", e.panX);
+		obs_data_set_double(o, "pan_y", e.panY);
 		obs_data_array_push_back(sdocks, o);
 		obs_data_release(o);
 	}
