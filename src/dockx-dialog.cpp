@@ -1241,10 +1241,13 @@ void showDialog(const QString &initialTab)
 	tabs->addTab(lockTab, "Locks");
 
 	/* ---------- Auto switch tab ---------- */
-	QGroupBox *autoTab = new QGroupBox("Auto switch by scene", layoutsTab);
+	QGroupBox *autoTab = new QGroupBox("Auto switch dock layouts by scene", layoutsTab);
 	QVBoxLayout *av = new QVBoxLayout(autoTab);
 
-	av->addWidget(groupSub("When OBS switches to a scene, DockX applies the layout you paired with it.", autoTab));
+	av->addWidget(groupSub("Link an OBS scene to a dock layout. Want your panels arranged differently for "
+			       "certain scenes? Pair them up and OBS rearranges itself every time the scene "
+			       "changes.",
+			       autoTab));
 
 	QListWidget *ruleList = new HintList("Nothing paired yet.\n\nClick Pair scene with layout to have a "
 					     "scene bring its own dock arrangement: a gameplay layout, a "
