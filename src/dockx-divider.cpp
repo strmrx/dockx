@@ -102,26 +102,50 @@ static QRect boundaryRect(const QRect &a, const QRect &b, Qt::Orientation o)
 	return QRect(left, y, right - left + 1, h);
 }
 
-/* lift the central widget's 0x0 pin for the duration of ONE WHOLE boundary
-   trade, then restore it. The pin must span the entire trade: re-pinning
-   between the shrink and the grow forces Qt to empty the center again, and
-   it hands the freed space straight back where it came from -- the net-zero
-   "settled at the same size" failure seen on-rig 2026-09-10. Everything in
-   the scope runs synchronously before Qt paints, so the briefly flexible
-   center is never visible. */
-class CenterFlexScope {
+/* constraint relaxer for ONE WHOLE boundary trade, restored on scope exit.
+   Two things must give for the trade to work, both learned on-rig 2026-09-10:
+   1. The central widget's 0x0 pin must lift for the entire trade (re-pinning
+      between the shrink and the grow forces Qt to empty the center again,
+      handing the freed space straight back -- the net-zero failure).
+   2. A dock AREA's usable range is derived from the docks inside it: its
+      maximum along the trade axis is the SMALLEST maximum among its docks
+      (QDockAreaLayoutInfo::maximumSize). One size-capped dock anywhere in
+      the column freezes the whole column at that cap (the "settled at 304"
+      failure). So every dock in BOTH affected areas gets its maximum lifted
+      for the trade; minimums stay untouched (they protect content).
+   Everything in the scope runs synchronously before Qt paints, so none of
+   the relaxed states are ever visible. */
+class TradeFlexScope {
 public:
-	explicit CenterFlexScope(QMainWindow *m) : c(m->centralWidget())
+	TradeFlexScope(QMainWindow *m, QDockWidget *a, QDockWidget *b) : c(m->centralWidget())
 	{
-		pinned = c && c->maximumWidth() == 0 && c->maximumHeight() == 0;
-		if (pinned) {
+		centerPinned = c && c->maximumWidth() == 0 && c->maximumHeight() == 0;
+		if (centerPinned) {
 			c->setMinimumSize(0, 0);
 			c->setMaximumSize(QWIDGETSIZE_MAX, QWIDGETSIZE_MAX);
 		}
+		const Qt::DockWidgetArea aa = m->dockWidgetArea(a);
+		const Qt::DockWidgetArea ba = m->dockWidgetArea(b);
+		const auto docks = m->findChildren<QDockWidget *>(QString(), Qt::FindDirectChildrenOnly);
+		for (QDockWidget *d : docks) {
+			if (!d->isVisible() || d->isFloating())
+				continue;
+			const Qt::DockWidgetArea da = m->dockWidgetArea(d);
+			if (da != aa && da != ba)
+				continue;
+			const QSize mx = d->maximumSize();
+			if (mx.width() >= QWIDGETSIZE_MAX && mx.height() >= QWIDGETSIZE_MAX)
+				continue; /* nothing to lift */
+			saved.append({d, mx});
+			d->setMaximumSize(QWIDGETSIZE_MAX, QWIDGETSIZE_MAX);
+		}
 	}
-	~CenterFlexScope()
+	~TradeFlexScope()
 	{
-		if (pinned) {
+		for (const auto &s : saved)
+			if (s.first)
+				s.first->setMaximumSize(s.second);
+		if (centerPinned) {
 			c->setMinimumSize(0, 0);
 			c->setMaximumSize(0, 0);
 		}
@@ -129,7 +153,8 @@ public:
 
 private:
 	QWidget *c;
-	bool pinned = false;
+	bool centerPinned = false;
+	QList<QPair<QPointer<QDockWidget>, QSize>> saved;
 };
 
 class BoundaryHandle : public QWidget {
@@ -237,7 +262,7 @@ private:
 			return;
 		const int newSecond = firstSize + secondSize - newFirst;
 		{
-			CenterFlexScope flex(m);
+			TradeFlexScope flex(m, first, second);
 			/* both docks in one call: Qt satisfies the pair by moving
 			   the space through the (briefly flexible) center */
 			m->resizeDocks({first, second}, {newFirst, newSecond}, orient);
@@ -259,18 +284,43 @@ private:
 				if (m->layout())
 					m->layout()->activate();
 			}
-		} /* center re-pinned to 0x0 here */
+		} /* dock maximums + the center's 0x0 pin restored here */
 		if (m->layout())
 			m->layout()->activate();
 		const int got = sizeOf(first);
-		if (std::abs(got - newFirst) > 4)
+		if (std::abs(got - newFirst) > 4) {
 			obs_log(LOG_WARNING,
 				"divider: drag wanted %d, layout settled at %d (a dock minimum, or Qt refused the trade)",
 				newFirst, got);
+			logAreaDiagnostics(m);
+		}
 		/* follow the real boundary so the cursor stays on the handle */
 		const QRect r = boundaryRect(first->geometry(), second->geometry(), orient);
 		if (r.isValid())
 			setGeometry(r);
+	}
+
+	/* a failed trade means SOME dock in one of the two areas is clamping it;
+	   print every dock in both areas with its constraints so one log read
+	   names the culprit */
+	void logAreaDiagnostics(QMainWindow *m)
+	{
+		const Qt::DockWidgetArea aa = m->dockWidgetArea(first);
+		const Qt::DockWidgetArea ba = m->dockWidgetArea(second);
+		const bool horiz = orient == Qt::Horizontal;
+		const auto docks = m->findChildren<QDockWidget *>(QString(), Qt::FindDirectChildrenOnly);
+		for (QDockWidget *d : docks) {
+			if (!d->isVisible() || d->isFloating())
+				continue;
+			const Qt::DockWidgetArea da = m->dockWidgetArea(d);
+			if (da != aa && da != ba)
+				continue;
+			const QSize mn = d->minimumSize(), mh = d->minimumSizeHint(), mx = d->maximumSize();
+			obs_log(LOG_WARNING, "divider:   area %d dock '%s' %s=%d min=%d minHint=%d max=%d", (int)da,
+				d->objectName().toUtf8().constData(), horiz ? "w" : "h",
+				horiz ? d->width() : d->height(), horiz ? mn.width() : mn.height(),
+				horiz ? mh.width() : mh.height(), horiz ? mx.width() : mx.height());
+		}
 	}
 
 	QPoint pressGlobal;
