@@ -41,8 +41,14 @@ Ranked by demand x feasibility for a Qt frontend plugin. Context: #1 idea sitewi
    weak/Windows-only with UX complaints. MEDIUM.
 2. **Source docks / preview-as-a-dock** -- PHASE 1 SHIPPED v0.7, PHASE 2 SHIPPED v0.9
    (audio docks with mute + cubic volume slider, mic strip docks, browser docks fully
-   clickable via interaction passthrough; remaining: per-dock zoom, scene item editing
-   through a dock). 87 votes; Exeldro's Source Dock has 227k downloads (biggest demand
+   clickable via interaction passthrough). PHASE 3 SHIPPED v0.49.0 (2026-09-10, both
+   remaining gaps closed on Joey's "build it"): per-dock ZOOM on every video dock
+   (wheel zooms, Ctrl+wheel on sources that scroll themselves, drag pans while
+   zoomed, double-click resets, right-click menu; zoom+pan persist per dock; one
+   shared viewRect() keeps interactive clicks accurate while zoomed) and EDIT ANY
+   SCENE through a dock (the DockX Preview bar's "Scene:" button pins the dock to
+   one scene, rendered + editable while a different scene is live; pin persists by
+   scene uuid, auto-unpins if the scene disappears). 87 votes; Exeldro's Source Dock has 227k downloads (biggest demand
    proof found). Unlocks multiview/studio-mode/grid follow-ons.
    CORRECTED competitive read (verified 2026-07-30): Source Dock is ALIVE and healthy
    (updated Mar 2026, OBS 32 support, 79% five star), NOT abandoned. Known gaps: Mac
