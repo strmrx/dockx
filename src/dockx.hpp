@@ -207,6 +207,15 @@ State &state();
 void stateLoad();
 void stateSave();
 
+/* true only while OBS is fully loaded and NOT switching scene collections.
+   Every DockX obs_display draw callback must early-out while this is false:
+   rendering a user scene while OBS is still creating (or tearing down) its
+   sources races the graphics thread against the loader -- the 2026-09-09/10
+   startup crashes (d3d11 access violation in an async source's frame upload,
+   4 for 4 within a minute of launch, none after loading finished). */
+bool obsReady();
+void setObsReady(bool ready);
+
 Layout *findLayout(int id);
 Layout &addLayout(const QString &name, const QByteArray &blob);
 void removeLayout(int id);

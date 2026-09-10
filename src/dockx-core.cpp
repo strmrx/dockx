@@ -33,6 +33,7 @@ if the UI does not look the way we expect, do NOTHING. Never crash OBS.
 #include <QTimer>
 
 #include <algorithm>
+#include <atomic>
 #include <cmath>
 
 namespace dockx {
@@ -60,6 +61,19 @@ static State g_state;
 State &state()
 {
 	return g_state;
+}
+
+/* atomic: written on the Qt thread (frontend events), read on the libobs
+   graphics thread by every draw callback */
+static std::atomic<bool> g_obsReady{false};
+bool obsReady()
+{
+	return g_obsReady.load(std::memory_order_acquire);
+}
+void setObsReady(bool ready)
+{
+	g_obsReady.store(ready, std::memory_order_release);
+	obs_log(LOG_INFO, "video docks %s", ready ? "rendering (OBS ready)" : "paused (OBS loading)");
 }
 
 static QMainWindow *mainWindow()

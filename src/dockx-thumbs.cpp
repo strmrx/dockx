@@ -87,6 +87,10 @@ static QImage grabScene(obs_source_t *scene)
 
 QPixmap render(const QString &uuid)
 {
+	/* never render while OBS is loading or switching collections
+	   (see obsReady() in dockx.hpp: startup crash fix) */
+	if (!obsReady())
+		return QPixmap();
 	obs_source_t *scene = obs_get_source_by_uuid(uuid.toUtf8().constData());
 	if (!scene)
 		return QPixmap();

@@ -31,6 +31,7 @@ static void on_frontend_event(enum obs_frontend_event event, void *)
 {
 	switch (event) {
 	case OBS_FRONTEND_EVENT_FINISHED_LOADING:
+		dockx::setObsReady(true); /* video docks may render now */
 		dockx::panels::initAfterLoad();
 		dockx::filters::rescanSoon();
 		dockx::folders::rebuildSoon();
@@ -54,7 +55,13 @@ static void on_frontend_event(enum obs_frontend_event event, void *)
 		dockx::sourcedocks::refreshAll();
 		dockx::editpreview::refreshAll();
 		break;
+	case OBS_FRONTEND_EVENT_SCENE_COLLECTION_CHANGING:
+		/* same danger window as startup: sources torn down + recreated
+		   while the graphics thread runs; stop rendering user scenes */
+		dockx::setObsReady(false);
+		break;
 	case OBS_FRONTEND_EVENT_SCENE_COLLECTION_CHANGED:
+		dockx::setObsReady(true);
 		dockx::thumbs::invalidateAll(); /* uuids belong to the old collection */
 		dockx::panels::refreshSoon();
 		dockx::filters::rescanSoon();
@@ -74,6 +81,7 @@ static void on_frontend_event(enum obs_frontend_event event, void *)
 		dockx::panels::applyChromeSoon();
 		break;
 	case OBS_FRONTEND_EVENT_EXIT:
+		dockx::setObsReady(false); /* no draws while OBS tears down */
 		dockx::stateSave();
 		dockx::locks::unregisterHotkeys();
 		dockx::editpreview::shutdown(); /* displays first, while graphics lives */

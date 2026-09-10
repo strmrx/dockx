@@ -1571,6 +1571,10 @@ private:
 
 	static void drawCb(void *param, uint32_t cx, uint32_t cy)
 	{
+		/* never render a user scene while OBS is loading or switching
+		   collections (see obsReady() in dockx.hpp: startup crash fix) */
+		if (!obsReady())
+			return;
 		EditWidget *self = static_cast<EditWidget *>(param);
 		obs_source_t *scene = self->lockScene();
 		if (!scene)
