@@ -186,6 +186,23 @@ static bool stretchDock(QMainWindow *m, QDockWidget *strip, QList<QDockWidget *>
 			sibs.append({targets[i], s});
 	}
 
+	/* the ANCHOR is different: it never moves, and every split targets it.
+	   Qt quirk (documented on splitDockWidget): when `after` sits in a tab
+	   group the call ADDS the moved dock to that group instead of
+	   splitting -- a tabbed anchor turned Joey's whole build into one tab
+	   pile and forced the rollback. So the anchor must be PLAIN before
+	   pass 1: park its tab siblings at the area edge (an addDockWidget
+	   move, same call the column repair trusts; nothing paints mid
+	   rebuild) and re-attach them in pass 3 like every other group. */
+	QList<QDockWidget *> anchorSibs = m->tabifiedDockWidgets(targets.first());
+	{
+		Qt::DockWidgetArea parkArea = m->dockWidgetArea(targets.first());
+		if (parkArea == Qt::NoDockWidgetArea)
+			parkArea = Qt::RightDockWidgetArea;
+		for (QDockWidget *s : anchorSibs)
+			m->addDockWidget(parkArea, s);
+	}
+
 	/* constraint relaxer, same two lessons as the divider's
 	   TradeFlexScope: the pinned 0x0 center and any size-capped dock can
 	   both silently veto the resize pass. Lifted for the rebuild,
@@ -234,7 +251,13 @@ static bool stretchDock(QMainWindow *m, QDockWidget *strip, QList<QDockWidget *>
 	if (m->layout())
 		m->layout()->activate();
 
-	/* pass 3: tab siblings back onto their columns */
+	/* pass 3: tab siblings back onto their columns (the anchor's parked
+	   ones first; the strip may have been one of them and stays out) */
+	for (QDockWidget *s : anchorSibs)
+		if (s != strip && !targets.contains(s))
+			m->tabifyDockWidget(anchor, s);
+	if (!anchorSibs.isEmpty())
+		anchor->raise();
 	for (const auto &s : sibs) {
 		for (QDockWidget *t : s.second)
 			m->tabifyDockWidget(s.first, t);
