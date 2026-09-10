@@ -42,6 +42,7 @@ static void on_frontend_event(enum obs_frontend_event event, void *)
 		dockx::missing::autoPopIfNeeded();
 		dockx::monitors::installWatch();
 		dockx::preview::apply();
+		dockx::edges::start();
 		break;
 	case OBS_FRONTEND_EVENT_SCENE_CHANGED:
 		dockx::panels::autoSceneLayout();
@@ -92,6 +93,7 @@ static void on_frontend_event(enum obs_frontend_event event, void *)
 		dockx::stats::shutdown();
 		dockx::divider::shutdown();
 		dockx::thumbs::shutdown();
+		dockx::edges::shutdown();
 		dockx::panels::shutdown();
 		break;
 	default:

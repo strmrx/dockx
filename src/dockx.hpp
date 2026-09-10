@@ -23,6 +23,7 @@ GPL v2, see plugin-main.cpp for the full notice.
 
 #include <vector>
 
+class QDockWidget;
 class QListWidget;
 class QWidget;
 
@@ -164,6 +165,9 @@ struct State {
 	bool alignTools = false;           /* the Align + distribute tab (opt in) */
 	bool autoRescue = true;            /* pull stranded docks home on unplug */
 	bool previewCollapsed = false;     /* main video preview hidden; docks own the window */
+	int edgeTop = 0;                   /* top row corners: 0 = let OBS decide, 1 = row spans
+	                                      the full window, 2 = side columns keep the corners */
+	int edgeBottom = 0;                /* bottom row corners, same values */
 
 	int nextId = 1;
 	std::vector<Layout> layouts;
@@ -492,6 +496,20 @@ namespace divider {
 void setActive(bool on); /* driven by preview::apply(); on = build handles */
 void shutdown();
 } // namespace divider
+
+/* edge row span controls: per-edge corner ownership (does the top/bottom
+   row run the full window width, or do the side columns keep the corners)
+   with a guard that reasserts the choice when OBS's own Full-height docks
+   toggle rewrites the corners; plus "stretch this dock across a row"
+   (rebuild the nesting so one dock spans a chosen row of neighbor docks,
+   above or below them), offered on every dock title bar right-click and
+   from the dialog. Snapshot + verify + rollback, like the column repair */
+namespace edges {
+void start();                                               /* corners + title bar menus; call once after load */
+void applyCorners();                                        /* reassert state().edgeTop/edgeBottom on the window */
+void showStretchDialog(QDockWidget *dock, QWidget *parent); /* null dock = pick in the dialog */
+void shutdown();
+} // namespace edges
 
 /* starter layout templates: one-click dock arrangements for new users (tall
    chat + editable preview + panels, etc). Each detects the docks it can (chat by

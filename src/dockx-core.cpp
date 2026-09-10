@@ -230,6 +230,8 @@ void stateLoad()
 	g_state.alignTools = obs_data_get_bool(d, "align_tools");
 	g_state.autoRescue = obs_data_get_bool(d, "auto_rescue");
 	g_state.previewCollapsed = obs_data_get_bool(d, "preview_collapsed");
+	g_state.edgeTop = (int)obs_data_get_int(d, "edge_top");
+	g_state.edgeBottom = (int)obs_data_get_int(d, "edge_bottom");
 	g_state.nextLoadoutId = (int)obs_data_get_int(d, "next_loadout_id");
 	obs_data_array_t *louts = obs_data_get_array(d, "loadouts");
 	if (louts) {
@@ -501,6 +503,8 @@ void stateSave()
 	obs_data_set_bool(d, "align_tools", g_state.alignTools);
 	obs_data_set_bool(d, "auto_rescue", g_state.autoRescue);
 	obs_data_set_bool(d, "preview_collapsed", g_state.previewCollapsed);
+	obs_data_set_int(d, "edge_top", g_state.edgeTop);
+	obs_data_set_int(d, "edge_bottom", g_state.edgeBottom);
 	obs_data_set_int(d, "next_loadout_id", g_state.nextLoadoutId);
 	obs_data_array_t *louts = obs_data_array_create();
 	for (const SourceLoadout &l : g_state.loadouts) {

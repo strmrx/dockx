@@ -1186,6 +1186,44 @@ void showDialog(const QString &initialTab)
 	});
 	lv->addWidget(dockGroup);
 
+	/* -- edge rows: corner ownership + stretch a dock across a row -- */
+	QGroupBox *edgeBox = new QGroupBox("Edge rows", layoutsTab);
+	QVBoxLayout *eb = new QVBoxLayout(edgeBox);
+	eb->addWidget(groupSub("Decide whether the very top and bottom of the window run the full "
+			       "width or stop at the side columns.",
+			       edgeBox));
+
+	auto edgeCombo = [edgeBox](const char *label, int &field) {
+		QHBoxLayout *row = new QHBoxLayout();
+		row->addWidget(new QLabel(label, edgeBox));
+		QComboBox *cb = new QComboBox(edgeBox);
+		cb->addItem("Let OBS decide");
+		cb->addItem("Runs the full window width");
+		cb->addItem("Side columns keep the corners");
+		cb->setCurrentIndex(field);
+		QObject::connect(cb, &QComboBox::currentIndexChanged, edgeBox, [pf = &field](int idx) {
+			*pf = idx;
+			stateSave();
+			edges::applyCorners();
+		});
+		row->addWidget(cb, 1);
+		return row;
+	};
+	eb->addLayout(edgeCombo("Top row:", state().edgeTop));
+	eb->addLayout(edgeCombo("Bottom row:", state().edgeBottom));
+
+	QPushButton *stretchBtn = new QPushButton("Stretch a dock across a row...", edgeBox);
+	stretchBtn->setToolTip("Pick a dock and the columns it should run under or over (say, the "
+			       "mixer under both chat docks) and DockX rebuilds the arrangement. "
+			       "Right-clicking any dock's title bar offers this too.");
+	QHBoxLayout *sbr = new QHBoxLayout();
+	sbr->addWidget(stretchBtn);
+	sbr->addStretch(1);
+	eb->addLayout(sbr);
+	QObject::connect(stretchBtn, &QPushButton::clicked, &dlg,
+			 [&dlg]() { edges::showStretchDialog(nullptr, &dlg); });
+	lv->addWidget(edgeBox);
+
 	/* -- scene source locking -- */
 	QGroupBox *srcGroup = new QGroupBox("Lock sources in scenes", layoutsTab);
 	QVBoxLayout *sg = new QVBoxLayout(srcGroup);
