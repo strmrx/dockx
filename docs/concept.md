@@ -100,15 +100,20 @@ off-thesis: encoders, multi-output, NDI, VST, replay buffer.
 - **Edge strip span controls** (Joey 2026-09-10: "it would be cool to be able to have a
   tab still span across how i want. at the very least at the full horizontal, and even
   better, allow to choose how many docks across it could span... to the bottom and top
-  as an option"). Two tiers:
-  (a) SMALL: per-edge corner ownership toggles ("Bottom row spans the full window",
-  same for top) via QMainWindow::setCorner -- finer control than OBS's all-or-nothing
-  Full-height docks menu item (which is exactly what blocked his full-width mixer
-  drop). Needs a reapply guard: OBS's own toggle rewrites corners.
-  (b) BIGGER: "stretch this dock under..." on a dock's right-click -- choose how many
-  neighbor columns an edge strip spans (his old mixer spanned exactly the two chat
-  columns). Buildable with the programmatic re-nesting machinery proven by the v0.46.12
-  column repair (addDockWidget/splitDockWidget/tabify + saveState rollback).
+  as an option") -- SHIPPED v0.47.0 (2026-09-10, new file `src/dockx-edges.cpp`). Two
+  tiers, both in the Layouts tab's "Edge rows" box:
+  (a) per-edge corner ownership: top and bottom row each choose "Let OBS decide" /
+  "Runs the full window width" / "Side columns keep the corners"
+  (QMainWindow::setCorner), persisted and reasserted on a 1.5s guard timer because
+  OBS's all-or-nothing Full-height docks menu toggle (which is what blocked Joey's
+  full-width mixer drop) rewrites all four corners whenever it is used.
+  (b) "Stretch a dock across a row": pick a dock plus the neighbor docks it should
+  run under or over (the mixer under exactly the two chat docks) and DockX rebuilds
+  the nesting so the dock becomes one strip spanning that row. Offered on every dock
+  title bar right-click (added to OBS's own dock menu) and from the dialog. Built on
+  the machinery proven by the v0.46.12 column repair: saveState snapshot first, split
+  plain docks, settle sizes, tabify last (the v0.46.13 ordering lesson), verify
+  placement + structure, roll back on any mismatch.
 - **DockX stats dock** (Joey 2026-09-09: "yes build the dockx stats bar please") --
   SHIPPED v0.43.0. New "DockX Stats" dock (new file `src/dockx-stats.cpp`, registered
   at load, opened from the Docks menu): the same health numbers as OBS's Stats panel
@@ -214,6 +219,16 @@ off-thesis: encoders, multi-output, NDI, VST, replay buffer.
   frames; suspect: per-move relayouts resizing every video dock's obs_display). Reverted
   to 0.44.0. Next try lives in handoff.md "LESSONS": ship the zero-size-center half alone
   first; any drag mechanism must throttle relayouts and make sizes stick.
+  RESOLVED in the 0.46.x line (2026-09-10, merged to master same day): the zero-size
+  center shipped (settling fixed); the real divider culprit was Joey's left column being
+  registered in the top/bottom bands where Qt derives its width as leftover space --
+  v0.46.12 offers a one-time column repair (re-dock into the real left area, snapshot +
+  verify + rollback), after which Qt's own native separator drags work again and DockX
+  only bridges seams natives cannot serve (0.46.14). The 0.46.2 crash root cause (a
+  libobs vertex buffer use-after-free our immediate-mode draws exposed;
+  gs_vertexbuffer_destroy clears lastVertexBuffer but not curVertexBuffer) is fixed on
+  our side with gs_load_vertexbuffer(nullptr) after gs_render_stop; upstream report
+  still owed. Full saga: handoff.md 2026-09-10 entries.
 - **Fully interactive (editable) Preview dock** (Joey 2026-08-07) -- FIRST SLICE SHIPPED
   v0.22.0, SECOND SLICE (resize + rotate + snap-to-sources) SHIPPED v0.23.0, THIRD SLICE
   (multi-item group resize + Alt-drag edge crop) SHIPPED v0.24.0 (2026-08-28).
