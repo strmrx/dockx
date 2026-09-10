@@ -68,6 +68,10 @@ static QPointer<QToolButton> g_viewBtn;
 static QPointer<QLabel> g_crumb;
 static QPointer<QTimer> g_timer;
 static bool g_applying = false;
+/* true only while applySearch() itself expands/collapses rows: the tree's
+   itemExpanded/itemCollapsed handlers must not record search peeking as the
+   user's own expand/collapse choices */
+static bool g_searching = false;
 static bool g_shutdown = false;
 static QString g_gridPath; /* folder the grid is inside ("" = root); per session */
 
@@ -381,13 +385,46 @@ static bool applySearchItem(QTreeWidgetItem *it, const QString &q)
 
 static void rebuildGrid();
 
+/* collapse a scene's inner rows (groups) back down */
+static void collapseDescendants(QTreeWidgetItem *it)
+{
+	for (int j = 0; j < it->childCount(); j++) {
+		it->child(j)->setExpanded(false);
+		collapseDescendants(it->child(j));
+	}
+}
+
+/* put every row back to its remembered state: folders follow the persisted
+   collapsed set, scenes follow the session's expanded set, group rows close */
+static void restoreExpansion(QTreeWidgetItem *it)
+{
+	if (isScene(it)) {
+		it->setExpanded(g_expandedScenes.contains(itemKey(it)));
+		collapseDescendants(it);
+		return;
+	}
+	it->setExpanded(!data().collapsed.contains(itemKey(it)));
+	for (int j = 0; j < it->childCount(); j++)
+		restoreExpansion(it->child(j));
+}
+
 static void applySearch()
 {
 	if (!g_tree)
 		return;
 	const QString q = g_search ? g_search->text().trimmed() : QString();
+	/* the search's own expand/collapse must not register as user choices */
+	g_searching = true;
 	for (int i = 0; i < g_tree->topLevelItemCount(); i++)
 		applySearchItem(g_tree->topLevelItem(i), q);
+	/* search cleared: fold everything back the way the user had it (Joey:
+	   after a search every matching scene sat open, annoying to scroll) */
+	static bool wasSearching = false;
+	if (q.isEmpty() && wasSearching)
+		for (int i = 0; i < g_tree->topLevelItemCount(); i++)
+			restoreExpansion(g_tree->topLevelItem(i));
+	wasSearching = !q.isEmpty();
+	g_searching = false;
 	if (state().folderGridMode)
 		rebuildGrid(); /* grid search = flattened matches */
 }
@@ -1741,7 +1778,7 @@ void createDock()
 		obs_source_release(src);
 	});
 	QObject::connect(g_tree, &QTreeWidget::itemExpanded, g_tree, [](QTreeWidgetItem *it) {
-		if (g_applying)
+		if (g_applying || g_searching)
 			return;
 		if (isScene(it)) {
 			g_expandedScenes.insert(itemKey(it));
@@ -1753,7 +1790,7 @@ void createDock()
 		stateSave();
 	});
 	QObject::connect(g_tree, &QTreeWidget::itemCollapsed, g_tree, [](QTreeWidgetItem *it) {
-		if (g_applying)
+		if (g_applying || g_searching)
 			return;
 		if (isScene(it)) {
 			g_expandedScenes.remove(itemKey(it));
