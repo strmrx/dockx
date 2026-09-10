@@ -380,6 +380,7 @@ int importFile(const QString &path)
 			continue;
 		l.id = state().nextLoadoutId++; /* fresh local id; append, never clobber */
 		state().loadouts.push_back(l);
+		registerHotkey(state().loadouts.back());
 		added++;
 	}
 	obs_data_array_release(arr);

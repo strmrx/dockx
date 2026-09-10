@@ -116,6 +116,7 @@ struct SourceLoadout {
 	QString sceneUuid; /* empty = every scene */
 	QString sceneName; /* display only */
 	std::vector<LoadoutItem> items;
+	obs_hotkey_id hotkey = OBS_INVALID_HOTKEY_ID; /* restore hotkey (Joey ask) */
 };
 
 /* a user saved color look: a full snapshot of the Colors tab (dock colors,
@@ -346,6 +347,9 @@ struct RestoreReport {
 	QStringList missing; /* "Scene: Source" rows that no longer exist */
 };
 SourceLoadout capture(const QString &sceneUuid, const QString &sceneName);
+/* register (or re-register after a rename) the loadout's restore hotkey; it
+   shows in OBS Settings > Hotkeys as: DockX: restore loadout "name" */
+void registerHotkey(SourceLoadout &l);
 RestoreReport restore(const SourceLoadout &l);         /* snapshots an undo first */
 bool undoRestore(RestoreReport &report);               /* undo twice = redo */
 void lockScene(const QString &sceneUuid, bool locked); /* incl. group children */

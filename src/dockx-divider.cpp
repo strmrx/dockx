@@ -260,27 +260,65 @@ private:
 		QMainWindow *m = qobject_cast<QMainWindow *>(parentWidget());
 		if (!m || newFirst == firstSize)
 			return;
-		const int newSecond = firstSize + secondSize - newFirst;
+		const int delta = newFirst - firstSize;
+
+		/* resize the WHOLE EDGE, not just the two docks under the handle.
+		   Rig lesson (2026-09-10): a visual column can span MULTIPLE Qt
+		   dock areas (Joey's left column = Controls/stream info in the
+		   LEFT area stacked over stats/preview in the BOTTOM area). Qt
+		   only takes width orders through some areas (left/right for a
+		   horizontal drag); top/bottom area widths are derived. Sending
+		   the same trade to EVERY dock whose edge sits on this boundary
+		   means the order lands through the commandable areas, and the
+		   derived ones follow automatically. */
+		const bool horiz = orient == Qt::Horizontal;
+		const int edgeA = horiz ? first->geometry().right() : first->geometry().bottom();
+		const int edgeB = horiz ? second->geometry().left() : second->geometry().top();
+		QList<QDockWidget *> docks;
+		QList<int> sizes;
+		const auto all = m->findChildren<QDockWidget *>(QString(), Qt::FindDirectChildrenOnly);
+		for (QDockWidget *d : all) {
+			if (!d->isVisible() || d->isFloating() || m->dockWidgetArea(d) == Qt::NoDockWidgetArea)
+				continue;
+			const QRect g = d->geometry();
+			const int dEnd = horiz ? g.right() : g.bottom();
+			const int dStart = horiz ? g.left() : g.top();
+			const int dSize = horiz ? g.width() : g.height();
+			if (std::abs(dEnd - edgeA) <= MAX_GAP) { /* before the boundary: grows with first */
+				docks.append(d);
+				sizes.append(std::max(MIN_DOCK, dSize + delta));
+			} else if (std::abs(dStart - edgeB) <= MAX_GAP) { /* after: shrinks as first grows */
+				docks.append(d);
+				sizes.append(std::max(MIN_DOCK, dSize - delta));
+			}
+		}
 		{
 			TradeFlexScope flex(m, first, second);
-			/* both docks in one call: Qt satisfies the pair by moving
-			   the space through the (briefly flexible) center */
-			m->resizeDocks({first, second}, {newFirst, newSecond}, orient);
+			/* one call for the whole edge: Qt routes the space through
+			   the (briefly flexible) center */
+			m->resizeDocks(docks, sizes, orient);
 			if (m->layout())
 				m->layout()->activate();
 			if (std::abs(sizeOf(first) - newFirst) > 4) {
-				/* combined call refused: route explicitly, shrink
-				   first (center absorbs), grow second (center gives
-				   it back), center still flexible throughout */
-				const bool firstShrinks = newFirst < firstSize;
-				QDockWidget *sh = firstShrinks ? first.data() : second.data();
-				QDockWidget *gr = firstShrinks ? second.data() : first.data();
-				const int shTo = firstShrinks ? newFirst : newSecond;
-				const int grTo = firstShrinks ? newSecond : newFirst;
-				m->resizeDocks({sh}, {shTo}, orient);
+				/* refused in one go: apply the shrinking side first
+				   (the center absorbs the space), the growing side
+				   second (the center hands it back) */
+				QList<QDockWidget *> shD, grD;
+				QList<int> shS, grS;
+				for (int i = 0; i < docks.size(); i++) {
+					const int cur = horiz ? docks[i]->width() : docks[i]->height();
+					if (sizes[i] <= cur) {
+						shD.append(docks[i]);
+						shS.append(sizes[i]);
+					} else {
+						grD.append(docks[i]);
+						grS.append(sizes[i]);
+					}
+				}
+				m->resizeDocks(shD, shS, orient);
 				if (m->layout())
 					m->layout()->activate();
-				m->resizeDocks({gr}, {grTo}, orient);
+				m->resizeDocks(grD, grS, orient);
 				if (m->layout())
 					m->layout()->activate();
 			}
@@ -290,8 +328,8 @@ private:
 		const int got = sizeOf(first);
 		if (std::abs(got - newFirst) > 4) {
 			obs_log(LOG_WARNING,
-				"divider: drag wanted %d, layout settled at %d (a dock minimum, or Qt refused the trade)",
-				newFirst, got);
+				"divider: drag wanted %d, layout settled at %d (%d docks on the edge; a dock minimum, or Qt refused the trade)",
+				newFirst, got, (int)docks.size());
 			logAreaDiagnostics(m);
 		}
 		/* follow the real boundary so the cursor stays on the handle */
