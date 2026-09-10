@@ -437,6 +437,22 @@ private:
 				"divider: drag wanted %d, layout settled at %d (%d docks traded; a dock minimum, or Qt refused)",
 				newFirst, got, (int)docks.size());
 			logAreaDiagnostics(m);
+			/* if a dock minimum is the wall, SAY which (blocker hint) */
+			const bool horiz = orient == Qt::Horizontal;
+			QDockWidget *clamp = nullptr;
+			int clampMin = -1;
+			for (QDockWidget *d : docks) {
+				const int size = horiz ? d->width() : d->height();
+				const int eff =
+					std::max(horiz ? d->minimumWidth() : d->minimumHeight(),
+						 horiz ? d->minimumSizeHint().width() : d->minimumSizeHint().height());
+				if (size <= eff + 6 && eff > clampMin) {
+					clampMin = eff;
+					clamp = d;
+				}
+			}
+			if (clamp)
+				blocker::flashBlocked(clamp);
 		}
 		/* follow the real boundary so the cursor stays on the handle */
 		const QRect r = boundaryRect(first->geometry(), second->geometry(), orient);

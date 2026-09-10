@@ -40,6 +40,7 @@ target_sources(
     src/plugin-main.cpp
     src/dockx-core.cpp
     src/dockx-align.cpp
+    src/dockx-blocker.cpp
     src/dockx-collections.cpp
     src/dockx-dialog.cpp
     src/dockx-edges.cpp

@@ -504,6 +504,17 @@ void shutdown();
    (rebuild the nesting so one dock spans a chosen row of neighbor docks,
    above or below them), offered on every dock title bar right-click and
    from the dialog. Snapshot + verify + rollback, like the column repair */
+/* the resize blocker hint: docks only shrink to the largest minimum in
+   their row/column, and when a separator drag hits that wall OBS silently
+   stops -- the wall is invisible and reads as a bug. A pure observer
+   watches native separator drags and, when one is clearly refused, gives
+   the dock at its minimum a brief amber flash + a small bubble naming it */
+namespace blocker {
+void start();                         /* install the watcher; call once after load */
+void flashBlocked(QDockWidget *dock); /* flash + bubble on one dock (divider reuses it) */
+void shutdown();
+} // namespace blocker
+
 namespace edges {
 void start();               /* corners + title bar menus; call once after load */
 void applyCorners();        /* reassert state().edgeTop/edgeBottom on the window */

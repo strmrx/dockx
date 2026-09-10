@@ -1854,7 +1854,21 @@ void showDialog(const QString &initialTab)
 		{"Gold rush", {"#f5c518", "#d4a017", "#b8860b", "#ffdf6b", "#c9a227"}, "#d4a017"},
 		{"Candy", {"#ff6b6b", "#feca57", "#48dbfb", "#ff9ff3", "#1dd1a1"}, "#feca57"},
 		{"Cherry blossom", {"#ffb7c5", "#ff8fab", "#fb6f92", "#ffc2d1", "#ff4d6d"}, "#fb6f92"},
-		{"Dracula", {"#bd93f9", "#ff79c6", "#8be9fd", "#50fa7b", "#ffb86c"}, "#bd93f9"},
+		/* Joey 2026-09-10: Dracula means the VAMPIRE, not the code theme --
+		   slick dark reds on black with a couple of white accents */
+		{"Dracula", {"#a40000", "#6e0b0b", "#c1121f", "#3d0606", "#e8e6e3"}, "#a40000"},
+		/* Joey's monochrome ask: black and greys, contrast only */
+		{"Graphite", {"#8a8a8a", "#4f4f4f", "#c7c7c7", "#2e2e2e", "#6b6b6b"}, "#5a5a5a"},
+		{"Toxic", {"#39ff14", "#00c853", "#7fff00", "#0aff9d", "#1b5e20"}, "#00c853"},
+		{"Royal", {"#1a237e", "#c9a227", "#283593", "#e0b83d", "#3949ab"}, "#c9a227"},
+		{"Mint", {"#00bfa5", "#1de9b6", "#00897b", "#64ffda", "#00695c"}, "#00bfa5"},
+		{"Copper", {"#b87333", "#8d5524", "#da8a67", "#5c3a21", "#cd7f32"}, "#b87333"},
+		{"Aurora", {"#00e676", "#00bcd4", "#7c4dff", "#18ffff", "#69f0ae"}, "#00bcd4"},
+		{"Coffee", {"#6f4e37", "#a9746e", "#d7ccc8", "#4e342e", "#8d6e63"}, "#6f4e37"},
+		{"Arcade", {"#e53935", "#1e88e5", "#fdd835", "#43a047", "#8e24aa"}, "#1e88e5"},
+		{"Camo", {"#4b5320", "#6b8e23", "#8f9779", "#3d441e", "#a2a569"}, "#6b8e23"},
+		{"Hazard", {"#ffd600", "#3a3a3a", "#ffea00", "#575757", "#ffab00"}, "#ffd600"},
+		{"Rose gold", {"#b76e79", "#d4a5a5", "#e8c4c4", "#9e5a63", "#c98a92"}, "#b76e79"},
 	};
 	auto applyPresetLook = [&dlg, reloadDocks, sepSpin](const Look &lk) {
 		if (QMessageBox::question(&dlg, "DockX",
