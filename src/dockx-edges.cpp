@@ -43,6 +43,7 @@ Two features, both about the top and bottom strips of the window:
 #include <QMessageBox>
 #include <QPointer>
 #include <QPushButton>
+#include <QRadioButton>
 #include <QTimer>
 #include <QVBoxLayout>
 
@@ -57,6 +58,26 @@ static QMainWindow *mainWindow()
 }
 
 /* ---- corner ownership ---- */
+
+/* the corner layout OBS itself chose, captured before DockX's first apply,
+   so unticking a full width box hands that edge straight back instead of
+   leaving DockX's override stuck until the next OBS restart */
+static Qt::DockWidgetArea g_baseCorner[4]; /* indexed by Qt::Corner */
+static bool g_baseKnown = false;
+
+void releaseEdge(bool top)
+{
+	QMainWindow *m = mainWindow();
+	if (!m || !g_baseKnown)
+		return;
+	if (top) {
+		m->setCorner(Qt::TopLeftCorner, g_baseCorner[Qt::TopLeftCorner]);
+		m->setCorner(Qt::TopRightCorner, g_baseCorner[Qt::TopRightCorner]);
+	} else {
+		m->setCorner(Qt::BottomLeftCorner, g_baseCorner[Qt::BottomLeftCorner]);
+		m->setCorner(Qt::BottomRightCorner, g_baseCorner[Qt::BottomRightCorner]);
+	}
+}
 
 void applyCorners()
 {
@@ -133,6 +154,14 @@ static bool stretchDock(QMainWindow *m, QDockWidget *strip, QList<QDockWidget *>
 				kept.append(t);
 		}
 		targets = kept;
+	}
+
+	{
+		QString names;
+		for (QDockWidget *t : targets)
+			names += (names.isEmpty() ? QString() : QString(", ")) + t->objectName();
+		obs_log(LOG_INFO, "edges: stretching '%s' %s [%s]", strip->objectName().toUtf8().constData(),
+			below ? "under" : "over", names.toUtf8().constData());
 	}
 
 	const QByteArray before = m->saveState();
@@ -247,6 +276,9 @@ static bool stretchDock(QMainWindow *m, QDockWidget *strip, QList<QDockWidget *>
 			m->layout()->activate();
 		return false;
 	}
+	/* a stretch that WORKED but was not what the user meant needs a way
+	   back too: the Layouts tab's Undo apply restores this snapshot */
+	state().undoState = before;
 	obs_log(LOG_INFO, "edges: stretched '%s' %s a row of %d dock(s)", strip->objectName().toUtf8().constData(),
 		below ? "under" : "over", (int)targets.size());
 	return true;
@@ -276,33 +308,36 @@ void showStretchDialog(QDockWidget *dock, QWidget *parent)
 	dlg.setWindowTitle("Stretch a dock");
 	QVBoxLayout *v = new QVBoxLayout(&dlg);
 
-	QComboBox *dockPick = nullptr;
-	if (!dock) {
-		QLabel *pl = new QLabel("Which dock becomes the strip?", &dlg);
-		v->addWidget(pl);
-		dockPick = new QComboBox(&dlg);
-		for (QDockWidget *d : candidateDocks(m))
+	/* one flow, always the same: WHICH dock, ACROSS which docks, WHERE.
+	   The right-click path lands here too, with its dock preselected --
+	   Joey's first run never made clear which dock was being stretched */
+	v->addWidget(new QLabel("Stretch this dock:", &dlg));
+	QComboBox *dockPick = new QComboBox(&dlg);
+	int preselect = 0;
+	{
+		const auto cands = candidateDocks(m);
+		for (QDockWidget *d : cands) {
+			if (d == dock)
+				preselect = dockPick->count();
 			dockPick->addItem(d->windowTitle(), QVariant::fromValue((void *)d));
-		v->addWidget(dockPick);
+		}
+		/* a floating dock right-clicked to get here is not in the
+		   candidate list; put it on top so the choice is honored */
+		if (dock && (cands.isEmpty() || !cands.contains(dock))) {
+			dockPick->insertItem(0, dock->windowTitle(), QVariant::fromValue((void *)dock));
+			preselect = 0;
+		}
 	}
+	dockPick->setCurrentIndex(preselect);
+	v->addWidget(dockPick);
 
-	QLabel *intro = new QLabel(&dlg);
-	intro->setWordWrap(true);
-	auto refreshIntro = [intro, dock, dockPick]() {
-		const QString name = dock ? dock->windowTitle()
-					  : (dockPick && dockPick->count() ? dockPick->currentText() : QString());
-		intro->setText(QString("Pick the docks \"%1\" should run across, and it becomes one strip "
-				       "spanning that whole row. If the rebuild does not come together, "
-				       "everything goes back exactly as it was.")
-				       .arg(name));
-	};
-	refreshIntro();
-	v->addWidget(intro);
-
+	v->addWidget(new QLabel("Across these docks:", &dlg));
 	QListWidget *list = new QListWidget(&dlg);
-	auto reloadList = [list, dock, dockPick, m]() {
-		QDockWidget *strip =
-			dock ? dock : (dockPick ? (QDockWidget *)dockPick->currentData().value<void *>() : nullptr);
+	auto pickedStrip = [dockPick]() -> QDockWidget * {
+		return (QDockWidget *)dockPick->currentData().value<void *>();
+	};
+	auto reloadList = [list, pickedStrip, m]() {
+		QDockWidget *strip = pickedStrip();
 		list->clear();
 		for (QDockWidget *d : candidateDocks(m)) {
 			if (d == strip)
@@ -315,20 +350,21 @@ void showStretchDialog(QDockWidget *dock, QWidget *parent)
 	};
 	reloadList();
 	v->addWidget(list, 1);
-	if (dockPick) {
-		QObject::connect(dockPick, &QComboBox::currentIndexChanged, &dlg, [reloadList, refreshIntro]() {
-			reloadList();
-			refreshIntro();
-		});
-	}
 
 	QHBoxLayout *dr = new QHBoxLayout();
-	dr->addWidget(new QLabel("Where does it go?", &dlg));
-	QComboBox *where = new QComboBox(&dlg);
-	where->addItem("Under them (a bottom strip)");
-	where->addItem("Above them (a top strip)");
-	dr->addWidget(where, 1);
+	QRadioButton *underBtn = new QRadioButton("Under them", &dlg);
+	QRadioButton *aboveBtn = new QRadioButton("Above them", &dlg);
+	underBtn->setChecked(true);
+	dr->addWidget(underBtn);
+	dr->addWidget(aboveBtn);
+	dr->addStretch(1);
 	v->addLayout(dr);
+
+	/* the summary says, in plain words, exactly what the button will do;
+	   the button stays off until the sentence makes sense */
+	QLabel *summary = new QLabel(&dlg);
+	summary->setWordWrap(true);
+	v->addWidget(summary);
 
 	QDialogButtonBox *bb = new QDialogButtonBox(&dlg);
 	QPushButton *goBtn = bb->addButton("Stretch", QDialogButtonBox::AcceptRole);
@@ -336,25 +372,49 @@ void showStretchDialog(QDockWidget *dock, QWidget *parent)
 	v->addWidget(bb);
 	QObject::connect(bb, &QDialogButtonBox::accepted, &dlg, &QDialog::accept);
 	QObject::connect(bb, &QDialogButtonBox::rejected, &dlg, &QDialog::reject);
-	Q_UNUSED(goBtn);
+
+	auto checkedNames = [list]() {
+		QStringList names;
+		for (int i = 0; i < list->count(); i++)
+			if (list->item(i)->checkState() == Qt::Checked)
+				names.append(list->item(i)->text());
+		return names;
+	};
+	auto refreshSummary = [summary, goBtn, dockPick, underBtn, checkedNames]() {
+		const QStringList names = checkedNames();
+		if (names.isEmpty()) {
+			summary->setText("Tick at least one dock in the list above.");
+			goBtn->setEnabled(false);
+			return;
+		}
+		summary->setText(QString("\"%1\" becomes one wide strip %2 %3. Undo apply on the "
+					 "Layouts tab reverses it.")
+					 .arg(dockPick->currentText(), underBtn->isChecked() ? "under" : "above",
+					      names.join(" + ")));
+		goBtn->setEnabled(true);
+	};
+	refreshSummary();
+	QObject::connect(dockPick, &QComboBox::currentIndexChanged, &dlg, [reloadList, refreshSummary]() {
+		reloadList();
+		refreshSummary();
+	});
+	QObject::connect(list, &QListWidget::itemChanged, &dlg,
+			 [refreshSummary](QListWidgetItem *) { refreshSummary(); });
+	QObject::connect(underBtn, &QRadioButton::toggled, &dlg, [refreshSummary](bool) { refreshSummary(); });
 
 	if (dlg.exec() != QDialog::Accepted)
 		return;
 
-	QDockWidget *strip = dock ? dock
-				  : (dockPick ? (QDockWidget *)dockPick->currentData().value<void *>() : nullptr);
+	QDockWidget *strip = pickedStrip();
 	QList<QDockWidget *> targets;
 	for (int i = 0; i < list->count(); i++) {
 		QListWidgetItem *it = list->item(i);
 		if (it->checkState() == Qt::Checked)
 			targets.append((QDockWidget *)it->data(Qt::UserRole).value<void *>());
 	}
-	if (!strip || targets.isEmpty()) {
-		QMessageBox::information(parent ? parent : (QWidget *)m, "DockX",
-					 "Pick at least one dock for the strip to run across.");
-		return;
-	}
-	if (!stretchDock(m, strip, targets, where->currentIndex() == 0))
+	if (!strip || targets.isEmpty())
+		return; /* the Stretch button is disabled in this state anyway */
+	if (!stretchDock(m, strip, targets, underBtn->isChecked()))
 		QMessageBox::information(parent ? parent : (QWidget *)m, "DockX",
 					 "That arrangement did not come together, so your docks were put "
 					 "back exactly as they were. The OBS log has the details.");
@@ -426,6 +486,11 @@ void start()
 	if (!m || g_timer)
 		return;
 	g_filter = new TitleMenuFilter(m);
+	g_baseCorner[Qt::TopLeftCorner] = m->corner(Qt::TopLeftCorner);
+	g_baseCorner[Qt::TopRightCorner] = m->corner(Qt::TopRightCorner);
+	g_baseCorner[Qt::BottomLeftCorner] = m->corner(Qt::BottomLeftCorner);
+	g_baseCorner[Qt::BottomRightCorner] = m->corner(Qt::BottomRightCorner);
+	g_baseKnown = true;
 	applyCorners();
 	g_timer = new QTimer(m);
 	g_timer->setInterval(1500);

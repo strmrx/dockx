@@ -1186,42 +1186,50 @@ void showDialog(const QString &initialTab)
 	});
 	lv->addWidget(dockGroup);
 
-	/* -- edge rows: corner ownership + stretch a dock across a row -- */
-	QGroupBox *edgeBox = new QGroupBox("Edge rows", layoutsTab);
+	/* -- wide docks: stretch across a row + full width edges. Joey found
+	   the first cut ("Edge rows" with three-way combos) baffling; now it
+	   is one plainly named box with the stretch action FIRST and two
+	   checkboxes that only exist to unblock full width drops -- */
+	QGroupBox *edgeBox = new QGroupBox("Wide docks", layoutsTab);
 	QVBoxLayout *eb = new QVBoxLayout(edgeBox);
-	eb->addWidget(groupSub("Decide whether the very top and bottom of the window run the full "
-			       "width or stop at the side columns.",
+	eb->addWidget(groupSub("Make one dock run the whole way across several others, like the "
+			       "Audio Mixer under both your chat docks.",
 			       edgeBox));
 
-	auto edgeCombo = [edgeBox](const char *label, int &field) {
-		QHBoxLayout *row = new QHBoxLayout();
-		row->addWidget(new QLabel(label, edgeBox));
-		QComboBox *cb = new QComboBox(edgeBox);
-		cb->addItem("Let OBS decide");
-		cb->addItem("Runs the full window width");
-		cb->addItem("Side columns keep the corners");
-		cb->setCurrentIndex(field);
-		QObject::connect(cb, &QComboBox::currentIndexChanged, edgeBox, [pf = &field](int idx) {
-			*pf = idx;
-			stateSave();
-			edges::applyCorners();
-		});
-		row->addWidget(cb, 1);
-		return row;
-	};
-	eb->addLayout(edgeCombo("Top row:", state().edgeTop));
-	eb->addLayout(edgeCombo("Bottom row:", state().edgeBottom));
-
 	QPushButton *stretchBtn = new QPushButton("Stretch a dock across a row...", edgeBox);
-	stretchBtn->setToolTip("Pick a dock and the columns it should run under or over (say, the "
-			       "mixer under both chat docks) and DockX rebuilds the arrangement. "
-			       "Right-clicking any dock's title bar offers this too.");
+	makePrimary(stretchBtn);
+	stretchBtn->setToolTip("Pick the dock, tick the docks it should run across, and DockX "
+			       "rebuilds the layout. Right-clicking any dock's title bar offers "
+			       "this too. Undo apply above reverses it.");
 	QHBoxLayout *sbr = new QHBoxLayout();
 	sbr->addWidget(stretchBtn);
 	sbr->addStretch(1);
 	eb->addLayout(sbr);
 	QObject::connect(stretchBtn, &QPushButton::clicked, &dlg,
 			 [&dlg]() { edges::showStretchDialog(nullptr, &dlg); });
+
+	auto edgeCheck = [edgeBox](const char *label, const char *tip, int &field, bool top) {
+		QCheckBox *cb = new QCheckBox(label, edgeBox);
+		cb->setChecked(field == 1);
+		cb->setToolTip(tip);
+		QObject::connect(cb, &QCheckBox::toggled, edgeBox, [pf = &field, top](bool on) {
+			*pf = on ? 1 : 0;
+			stateSave();
+			if (on)
+				edges::applyCorners();
+			else
+				edges::releaseEdge(top);
+		});
+		return cb;
+	};
+	eb->addWidget(edgeCheck("Bottom docks may span the full window width",
+				"OBS's Full-height docks setting (Docks menu) hands the window's "
+				"corners to your side columns, which blocks a full width bottom "
+				"strip. Tick this and the bottom row wins the corners back; DockX "
+				"keeps it that way even when OBS changes it.",
+				state().edgeBottom, false));
+	eb->addWidget(edgeCheck("Top docks may span the full window width",
+				"Same as above, for a strip along the top of the window.", state().edgeTop, true));
 	lv->addWidget(edgeBox);
 
 	/* -- scene source locking -- */

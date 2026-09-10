@@ -505,8 +505,9 @@ void shutdown();
    above or below them), offered on every dock title bar right-click and
    from the dialog. Snapshot + verify + rollback, like the column repair */
 namespace edges {
-void start();                                               /* corners + title bar menus; call once after load */
-void applyCorners();                                        /* reassert state().edgeTop/edgeBottom on the window */
+void start();               /* corners + title bar menus; call once after load */
+void applyCorners();        /* reassert state().edgeTop/edgeBottom on the window */
+void releaseEdge(bool top); /* untick: hand the edge's corners back to OBS's own choice */
 void showStretchDialog(QDockWidget *dock, QWidget *parent); /* null dock = pick in the dialog */
 void shutdown();
 } // namespace edges
