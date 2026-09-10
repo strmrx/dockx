@@ -97,6 +97,18 @@ off-thesis: encoders, multi-output, NDI, VST, replay buffer.
 ## Roadmap (in rough order; folds in the validated demand list above -- Joey 2026-07-30:
 ## ALL remaining items from that list stay on this roadmap; DockX is the ONE mega plugin,
 ## every OBS QoL fix ships in this single download, never ten separate plugins)
+- **Edge strip span controls** (Joey 2026-09-10: "it would be cool to be able to have a
+  tab still span across how i want. at the very least at the full horizontal, and even
+  better, allow to choose how many docks across it could span... to the bottom and top
+  as an option"). Two tiers:
+  (a) SMALL: per-edge corner ownership toggles ("Bottom row spans the full window",
+  same for top) via QMainWindow::setCorner -- finer control than OBS's all-or-nothing
+  Full-height docks menu item (which is exactly what blocked his full-width mixer
+  drop). Needs a reapply guard: OBS's own toggle rewrites corners.
+  (b) BIGGER: "stretch this dock under..." on a dock's right-click -- choose how many
+  neighbor columns an edge strip spans (his old mixer spanned exactly the two chat
+  columns). Buildable with the programmatic re-nesting machinery proven by the v0.46.12
+  column repair (addDockWidget/splitDockWidget/tabify + saveState rollback).
 - **DockX stats dock** (Joey 2026-09-09: "yes build the dockx stats bar please") --
   SHIPPED v0.43.0. New "DockX Stats" dock (new file `src/dockx-stats.cpp`, registered
   at load, opened from the Docks menu): the same health numbers as OBS's Stats panel
