@@ -100,7 +100,7 @@ off-thesis: encoders, multi-output, NDI, VST, replay buffer.
 - **Edge strip span controls** (Joey 2026-09-10: "it would be cool to be able to have a
   tab still span across how i want. at the very least at the full horizontal, and even
   better, allow to choose how many docks across it could span... to the bottom and top
-  as an option") -- SHIPPED v0.47.0 (2026-09-10, new file `src/dockx-edges.cpp`). Two
+  as an option") -- SHIPPED v0.47.0, UX reworked same day as v0.47.1 after the first rig pass (guided stretch dialog with a plain-words summary + Undo apply reversal; "Wide docks" box with the stretch button and two plain full-width checkboxes) (2026-09-10, new file `src/dockx-edges.cpp`). Two
   tiers, both in the Layouts tab's "Edge rows" box:
   (a) per-edge corner ownership: top and bottom row each choose "Let OBS decide" /
   "Runs the full window width" / "Side columns keep the corners"
