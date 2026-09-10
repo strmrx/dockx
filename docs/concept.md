@@ -390,6 +390,13 @@ off-thesis: encoders, multi-output, NDI, VST, replay buffer.
   (7) double click = the main action (apply layout / apply template / restore loadout).
   Visible buttons 15 -> 9 on the tab, hint paragraphs 5 -> 0. Apply the same recipe to
   the remaining tabs in later passes.
+- **Purpose-first tab headlines** (Joey 2026-09-10: "click a tab, know immediately what
+  it is for" -- his Mixer and Colors > Docks complaints were both this) -- SHIPPED
+  v0.49.1 (Mixer + App docks) and v0.49.2 (ALL remaining tabs). Every tab now opens
+  with a bold one line purpose headline (`tabHead` helper) + a dim `groupSub` "how"
+  line directly under it; explanations that sat at the bottom of a tab (Find, Profiles)
+  moved up into that sub line. Recipe addendum (8) for all future tabs: purpose first,
+  bold, at the top.
 - **Whole window accent** (Joey 2026-09-09: "lets do the obs chrome opt in restyle") --
   SHIPPED v0.35.0. New "Whole window accent" group in the Colors tab: an opt-in checkbox
   ("Accent OBS itself (experimental)", `chrome_on`, default OFF) + an accent color picker

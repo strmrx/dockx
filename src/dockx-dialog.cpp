@@ -96,6 +96,18 @@ static QLabel *groupSub(const QString &text, QWidget *parent)
 	return l;
 }
 
+/* the bold purpose line at the very top of a tab; every tab leads with one
+   (Joey 2026-09-10: "click a tab, know immediately what it is for") */
+static QLabel *tabHead(const QString &text, QWidget *parent)
+{
+	QLabel *l = new QLabel(text, parent);
+	QFont f = l->font();
+	f.setBold(true);
+	l->setFont(f);
+	l->setWordWrap(true);
+	return l;
+}
+
 /* a small stripe swatch of a look's palette, for the looks dropdown */
 static QIcon paletteIcon(const QStringList &cols)
 {
@@ -410,6 +422,13 @@ void showDialog(const QString &initialTab)
 	QWidget *findTab = new QWidget();
 	QVBoxLayout *findV = new QVBoxLayout(findTab);
 
+	findV->addWidget(tabHead("Find any source in any scene, fast", findTab));
+	findV->addWidget(groupSub("Search every scene in this collection at once. Double-click a result "
+				  "to jump to that scene and select it; right-click for more, like "
+				  "opening its Properties or removing it. Sources marked (unused) are "
+				  "loaded in your project but placed in no scene.",
+				  findTab));
+
 	QLineEdit *findBox = new QLineEdit(findTab);
 	findBox->setPlaceholderText("Search every source in your project by name, type, or scene");
 	findBox->setClearButtonEnabled(true);
@@ -618,21 +637,18 @@ void showDialog(const QString &initialTab)
 								 : QString());
 			 });
 
-	QLabel *findHint = new QLabel("Search every scene in this collection at once. Double-click a "
-				      "result to jump to that scene and select it. Right-click any "
-				      "result for more: open its Properties, remove it from just that "
-				      "scene, or delete it from the whole project. Sources listed as "
-				      "(unused) are loaded in your project but not placed in any scene "
-				      "(OBS can't show these), so right-click to identify or clear them.",
-				      findTab);
-	findHint->setWordWrap(true);
-	findV->addWidget(findHint);
-
 	tabs->addTab(findTab, "Find");
 
 	/* ---------- Layouts tab ---------- */
 	QWidget *layoutsTab = new QWidget();
-	QHBoxLayout *lcols = new QHBoxLayout(layoutsTab);
+	QVBoxLayout *lroot = new QVBoxLayout(layoutsTab);
+	lroot->addWidget(tabHead("Save your setups and jump between them", layoutsTab));
+	lroot->addWidget(groupSub("The left side is your panels: save dock layouts, stretch a dock wide, "
+				  "lock everything in place. The right side is inside your scenes: save "
+				  "which sources are shown, and auto switch layouts by scene.",
+				  layoutsTab));
+	QHBoxLayout *lcols = new QHBoxLayout();
+	lroot->addLayout(lcols, 1);
 	QVBoxLayout *lv = new QVBoxLayout();  /* left: dock layouts + templates */
 	QVBoxLayout *lvR = new QVBoxLayout(); /* right: source loadouts + auto switch */
 	lcols->addLayout(lv, 1);
@@ -1503,6 +1519,10 @@ void showDialog(const QString &initialTab)
 	/* ---------- Colors tab (scene names + docks + one click looks) ---------- */
 	QWidget *colorsTab = new QWidget();
 	QVBoxLayout *cvRoot = new QVBoxLayout(colorsTab);
+	cvRoot->addWidget(tabHead("Make OBS look like YOUR OBS", colorsTab));
+	cvRoot->addWidget(groupSub("Color code your scene names, style any dock, or restyle the whole "
+				   "window with a one click look.",
+				   colorsTab));
 	QHBoxLayout *ccols = new QHBoxLayout();
 	cvRoot->addLayout(ccols, 1);
 
@@ -2143,8 +2163,9 @@ void showDialog(const QString &initialTab)
 	QWidget *sdTab = new QWidget();
 	QVBoxLayout *sdv = new QVBoxLayout(sdTab);
 
+	sdv->addWidget(tabHead("Keep an eye on anything while you stream", sdTab));
 	sdv->addWidget(groupSub("Small live video windows you can dock anywhere in your layout, each "
-				"showing one thing.",
+				"showing one thing: a camera, a chat, a scene, or your Program feed.",
 				sdTab));
 
 	QListWidget *sdListW = new HintList("No video docks yet.\n\nAdd one below: keep an eye on a camera "
@@ -2321,14 +2342,7 @@ void showDialog(const QString &initialTab)
 	QWidget *phTab = new QWidget();
 	QVBoxLayout *phv = new QVBoxLayout(phTab);
 
-	/* purpose first, bold (same treatment as the Mixer tab, Joey 2026-09-10) */
-	QLabel *phHead = new QLabel("Put other apps (or your own art) inside your OBS layout", phTab);
-	{
-		QFont pf = phHead->font();
-		pf.setBold(true);
-		phHead->setFont(pf);
-	}
-	phv->addWidget(phHead);
+	phv->addWidget(tabHead("Put other apps (or your own art) inside your OBS layout", phTab));
 	QLabel *phIntro =
 		new QLabel("An app dock reserves a spot in your layout for a window OBS can't own, like a "
 			   "TikTok Live Studio chat. Give it a label and a color, then float the real window "
@@ -2525,16 +2539,7 @@ void showDialog(const QString &initialTab)
 	QWidget *mixTab = new QWidget();
 	QVBoxLayout *mxv = new QVBoxLayout(mixTab);
 
-	/* purpose FIRST, bold, before the wall of sources (Joey 2026-09-10:
-	   "people should click on it and know immediately what this tab is
-	   about" -- the one explaining line sat tiny at the bottom) */
-	QLabel *mixHead = new QLabel("Put your Audio Mixer in the order YOU want", mixTab);
-	{
-		QFont mf = mixHead->font();
-		mf.setBold(true);
-		mixHead->setFont(mf);
-	}
-	mxv->addWidget(mixHead);
+	mxv->addWidget(tabHead("Put your Audio Mixer in the order YOU want", mixTab));
 	mxv->addWidget(groupSub("Drag the sources below into your order. It sticks: OBS reapplies it "
 				"every time it rebuilds the mixer, across scenes and restarts.",
 				mixTab));
@@ -2590,13 +2595,12 @@ void showDialog(const QString &initialTab)
 		QWidget *alignTab = new QWidget();
 		QVBoxLayout *alv = new QVBoxLayout(alignTab);
 
-		QLabel *alIntro = new QLabel("Select two or more sources on the canvas (Ctrl click them in the "
-					     "preview, or drag a box around them), then line them up or space "
-					     "them out. It lines up the visible edges, so scaled, cropped, or "
-					     "rotated sources still land right. Locked sources are left alone.",
-					     alignTab);
-		alIntro->setWordWrap(true);
-		alv->addWidget(alIntro);
+		alv->addWidget(tabHead("Line your sources up perfectly", alignTab));
+		alv->addWidget(groupSub("Select two or more sources on the canvas (Ctrl click them in the "
+					"preview, or drag a box around them), then line them up or space "
+					"them out. It lines up the visible edges, so scaled, cropped, or "
+					"rotated sources still land right. Locked sources are left alone.",
+					alignTab));
 
 		auto doAlign = [&dlg](align::Op op) {
 			if (align::selectedCount() < 2) {
@@ -2686,6 +2690,13 @@ void showDialog(const QString &initialTab)
 	/* ---------- Switch tab (profiles + collections, live guarded) ---------- */
 	QWidget *swTab = new QWidget();
 	QVBoxLayout *swv = new QVBoxLayout(swTab);
+	swv->addWidget(tabHead("Switch your OBS profile or scene collection without risking the stream",
+			       swTab));
+	swv->addWidget(groupSub("Switching either is instant when you are offline. When you are live or "
+				"recording, DockX blocks profile changes (OBS cannot do them) and warns "
+				"before a collection change, because rebuilding scenes can hiccup the "
+				"stream.",
+				swTab));
 	QHBoxLayout *swCols = new QHBoxLayout();
 
 	QVBoxLayout *profCol = new QVBoxLayout();
@@ -2709,13 +2720,6 @@ void showDialog(const QString &initialTab)
 	swCols->addLayout(collCol, 1);
 
 	swv->addLayout(swCols, 1);
-	QLabel *swHint = new QLabel("Switching either is instant when you are offline. When you are live "
-				    "or recording, DockX blocks profile changes (OBS cannot do them) and "
-				    "warns before a collection change, because rebuilding scenes can "
-				    "hiccup the stream.",
-				    swTab);
-	swHint->setWordWrap(true);
-	swv->addWidget(swHint);
 
 	auto fillNameList = [](QListWidget *list, char **names, char *current) {
 		list->clear();
@@ -2791,13 +2795,12 @@ void showDialog(const QString &initialTab)
 	QWidget *monTab = new QWidget();
 	QVBoxLayout *mv = new QVBoxLayout(monTab);
 
-	QLabel *monIntro = new QLabel("Send docks to any monitor and DockX tiles them there. Save a layout "
-				      "afterward and your multi monitor setup rides along with it. If a "
-				      "monitor gets unplugged, DockX brings any stranded dock back onto your "
-				      "main screen so you never lose one.",
-				      monTab);
-	monIntro->setWordWrap(true);
-	mv->addWidget(monIntro);
+	mv->addWidget(tabHead("Spread your docks across every monitor you own", monTab));
+	mv->addWidget(groupSub("Send docks to any monitor and DockX tiles them there. Save a layout "
+			       "afterward and your multi monitor setup rides along with it. If a "
+			       "monitor gets unplugged, DockX brings any stranded dock back onto your "
+			       "main screen so you never lose one.",
+			       monTab));
 
 	QHBoxLayout *monCols = new QHBoxLayout();
 
@@ -2885,7 +2888,12 @@ void showDialog(const QString &initialTab)
 	QWidget *settingsTab = new QWidget();
 	QVBoxLayout *sv = new QVBoxLayout(settingsTab);
 
-	auto addCheck = [settingsTab, sv](const QString &label, bool value, std::function<void(bool)> onChange) {
+	sv->addWidget(tabHead("Turn DockX features on or off", settingsTab));
+	sv->addWidget(groupSub("Every switch applies right away, no restart needed. Turn off anything "
+			       "you do not use and DockX stays out of your way.",
+			       settingsTab));
+
+	auto addCheck =[settingsTab, sv](const QString &label, bool value, std::function<void(bool)> onChange) {
 		QCheckBox *c = new QCheckBox(label, settingsTab);
 		c->setChecked(value);
 		QObject::connect(c, &QCheckBox::toggled, settingsTab, [onChange](bool v) {
