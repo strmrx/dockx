@@ -38,7 +38,9 @@ covered. The center's 0x0 pin is restored on every exit path of the apply.
 #include <obs-frontend-api.h>
 #include <plugin-support.h>
 
+#include <QApplication>
 #include <QDockWidget>
+#include <QEventLoop>
 #include <QLayout>
 #include <QMainWindow>
 #include <QMouseEvent>
@@ -48,6 +50,7 @@ covered. The center's 0x0 pin is restored on every exit path of the apply.
 
 #include <algorithm>
 #include <cmath>
+#include <functional>
 
 namespace dockx {
 namespace divider {
@@ -157,6 +160,33 @@ private:
 	QList<QPair<QPointer<QDockWidget>, QSize>> saved;
 };
 
+/* Drive Qt's OWN separator-drag machinery with synthetic mouse events sent
+   straight to the QMainWindow. This is the one code path guaranteed to move
+   dock AREA boundaries durably -- it is exactly what happens when the user
+   drags a divider with the preview visible (proven working on the rig).
+   QMainWindow::event -> QMainWindowLayoutSeparatorHelper::windowEvent
+   hit-tests the position against the separator regions only, so a miss is a
+   no-op and the events never reach any dock (sendEvent does not propagate
+   to children). Subtlety from the Qt source: the helper applies the move
+   from a ZERO-DELAY TIMER, and the release cancels a pending move -- so the
+   event loop must run between move and release (user input excluded). */
+static bool dragNativeSeparator(QMainWindow *m, const QPoint &from, const QPoint &to)
+{
+	const QPointF gFrom = m->mapToGlobal(from), gTo = m->mapToGlobal(to);
+	QMouseEvent press(QEvent::MouseButtonPress, QPointF(from), gFrom, Qt::LeftButton, Qt::LeftButton,
+			  Qt::NoModifier);
+	QApplication::sendEvent(m, &press);
+	if (!press.isAccepted())
+		return false; /* not on a separator; nothing grabbed, nothing to release */
+	QMouseEvent move(QEvent::MouseMove, QPointF(to), gTo, Qt::NoButton, Qt::LeftButton, Qt::NoModifier);
+	QApplication::sendEvent(m, &move);
+	/* let the helper's 0ms timer apply the move before the release clears it */
+	QCoreApplication::processEvents(QEventLoop::ExcludeUserInputEvents);
+	QMouseEvent rel(QEvent::MouseButtonRelease, QPointF(to), gTo, Qt::LeftButton, Qt::NoButton, Qt::NoModifier);
+	QApplication::sendEvent(m, &rel);
+	return true;
+}
+
 class BoundaryHandle : public QWidget {
 public:
 	QPointer<QDockWidget> first, second;
@@ -225,11 +255,13 @@ protected:
 	{
 		if (e->button() != Qt::LeftButton)
 			return;
-		const bool apply = dragging && first && second;
+		/* dragging stays true THROUGH the apply: applyTrade pumps the event
+		   loop (see dragNativeSeparator) and rebuild() must keep treating
+		   this handle as live so it cannot delete us mid-apply */
+		if (dragging && first && second)
+			applyTrade(targetFirstSize(e->globalPosition().toPoint()));
 		dragging = false;
 		update();
-		if (apply)
-			applyTrade(targetFirstSize(e->globalPosition().toPoint()));
 		e->accept();
 		QTimer::singleShot(0, [] { rebuild(); });
 	}
@@ -272,64 +304,61 @@ private:
 		   means the order lands through the commandable areas, and the
 		   derived ones follow automatically. */
 		const bool horiz = orient == Qt::Horizontal;
-		const int edgeA = horiz ? first->geometry().right() : first->geometry().bottom();
-		const int edgeB = horiz ? second->geometry().left() : second->geometry().top();
-		QList<QDockWidget *> docks;
-		QList<int> sizes;
-		const auto all = m->findChildren<QDockWidget *>(QString(), Qt::FindDirectChildrenOnly);
-		for (QDockWidget *d : all) {
-			if (!d->isVisible() || d->isFloating() || m->dockWidgetArea(d) == Qt::NoDockWidgetArea)
-				continue;
-			const QRect g = d->geometry();
-			const int dEnd = horiz ? g.right() : g.bottom();
-			const int dStart = horiz ? g.left() : g.top();
-			const int dSize = horiz ? g.width() : g.height();
-			if (std::abs(dEnd - edgeA) <= MAX_GAP) { /* before the boundary: grows with first */
-				docks.append(d);
-				sizes.append(std::max(MIN_DOCK, dSize + delta));
-			} else if (std::abs(dStart - edgeB) <= MAX_GAP) { /* after: shrinks as first grows */
-				docks.append(d);
-				sizes.append(std::max(MIN_DOCK, dSize - delta));
-			}
-		}
 		{
 			TradeFlexScope flex(m, first, second);
-			/* one call for the whole edge: Qt routes the space through
-			   the (briefly flexible) center */
-			m->resizeDocks(docks, sizes, orient);
+			/* PRIMARY (v0.46.10): simulate the native separator drags a
+			   user would do with the preview visible. While the center is
+			   flexible the two between-area separators come alive; drag
+			   the one that OPENS the center gap first, then the one that
+			   closes it, and Qt's own machinery records the sizes durably
+			   (setGrid), which resizeDocks never managed across bands.
+			   Press points walk the boundary gap until one lands on the
+			   right separator (verified by watching the edge move). */
+			const QPoint mid = pressRect.center();
+			const int gapL = horiz ? first->geometry().right() + 1 : first->geometry().bottom() + 1;
+			const int gapR = horiz ? second->geometry().left() - 1 : second->geometry().top() - 1;
+			auto edgeOfFirst = [&]() {
+				return horiz ? first->geometry().right() : first->geometry().bottom();
+			};
+			auto edgeOfSecond = [&]() {
+				return horiz ? second->geometry().left() : second->geometry().top();
+			};
+			auto at = [&](int along) {
+				return horiz ? QPoint(along, mid.y()) : QPoint(mid.x(), along);
+			};
+			/* one separator drag: press at each candidate spot in the gap
+			   until the watched edge actually moves */
+			auto dragUntil = [&](int fromLo, int fromHi, const std::function<int()> &watch) {
+				const int before = watch();
+				const int step = fromLo <= fromHi ? 1 : -1;
+				for (int x = fromLo; step > 0 ? x <= fromHi : x >= fromHi; x += step) {
+					dragNativeSeparator(m, at(x), at(x + delta));
+					if (std::abs(watch() - before) >= std::abs(delta) / 2)
+						return true;
+				}
+				return false;
+			};
+			if (delta > 0) {
+				/* first grows: push the far separator away (center opens),
+				   then move the near one into the gap (center closes) */
+				dragUntil(gapR, gapL, edgeOfSecond);
+				dragUntil(gapL, gapR, edgeOfFirst);
+			} else {
+				/* first shrinks: pull the near separator back (center
+				   opens), then the far one follows (center closes) */
+				dragUntil(gapL, gapR, edgeOfFirst);
+				dragUntil(gapR, gapL, edgeOfSecond);
+			}
 			if (m->layout())
 				m->layout()->activate();
-			if (std::abs(sizeOf(first) - newFirst) > 4) {
-				/* refused in one go: apply the shrinking side first
-				   (the center absorbs the space), the growing side
-				   second (the center hands it back) */
-				QList<QDockWidget *> shD, grD;
-				QList<int> shS, grS;
-				for (int i = 0; i < docks.size(); i++) {
-					const int cur = horiz ? docks[i]->width() : docks[i]->height();
-					if (sizes[i] <= cur) {
-						shD.append(docks[i]);
-						shS.append(sizes[i]);
-					} else {
-						grD.append(docks[i]);
-						grS.append(sizes[i]);
-					}
-				}
-				m->resizeDocks(shD, shS, orient);
-				if (m->layout())
-					m->layout()->activate();
-				m->resizeDocks(grD, grS, orient);
-				if (m->layout())
-					m->layout()->activate();
-			}
 		} /* dock maximums + the center's 0x0 pin restored here */
 		if (m->layout())
 			m->layout()->activate();
 		const int got = sizeOf(first);
 		if (std::abs(got - newFirst) > 4) {
 			obs_log(LOG_WARNING,
-				"divider: drag wanted %d, layout settled at %d (%d docks on the edge; a dock minimum, or Qt refused the trade)",
-				newFirst, got, (int)docks.size());
+				"divider: drag wanted %d, layout settled at %d (native separator sim; a dock minimum, or no separator found in the gap)",
+				newFirst, got);
 			logAreaDiagnostics(m);
 		}
 		/* follow the real boundary so the cursor stays on the handle */
