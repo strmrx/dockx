@@ -8,19 +8,29 @@ the central widget is pinned to zero size, so the boundary between opposite
 dock areas (a left column against a right column) has no mediator: Qt's own
 separator there freezes in both directions. This module finds exactly those
 boundaries (two visible docked docks from DIFFERENT dock areas sitting edge
-to edge), lays a thin invisible handle widget over each, and performs the
-drag itself: while the mouse is down the near-side dock's size is PINNED
-(min = max = the drag target) so the layout has no choice but to move the
-area boundary, and the pin is released the moment the drag ends. (First
-attempt used QMainWindow::resizeDocks -- proven on-rig 2026-09-09 that it
-silently refuses to trade space ACROSS dock areas; it only redistributes
-inside one. The pin is a hard constraint Qt cannot refuse.)
+to edge) and lays a thin handle widget over each.
 
-Defensive by design: handles are plain transparent widgets on top of the
-separator gap; they intercept nothing else, never touch Qt layout internals,
-and are torn down the moment the preview expands (Qt's native separators work
-again then). Separators BETWEEN docks in the same area stay native and are
-never covered.
+The drag itself (v0.46.0, third design -- the first two failed on the rig):
+- While the mouse is down NOTHING in the layout moves. The handle paints
+  itself as a ghost bar and follows the mouse. (v0.45.1 forced a relayout
+  per mouse move; every video dock's obs_display resized every few ms, the
+  UI glitched, and the layout stormed. Never again.)
+- On release the trade is applied ONCE, routed through the center: the
+  central widget's 0x0 pin is lifted for one moment, the shrinking dock is
+  resized first (the center absorbs the space), the growing dock second
+  (the center gives it straight back), then the center is pinned to 0x0
+  again. Both calls are QMainWindow::resizeDocks trading with the CENTER,
+  which is the one trade it never refuses (proven on-rig 2026-09-09: a
+  direct cross-area resizeDocks is silently ignored). resizeDocks writes
+  the result into Qt's own dock layout state, so the new sizes stick --
+  unlike the v0.45.1 min=max pin, which Qt reverted on release (the
+  snap-back).
+
+Defensive by design: handles are plain widgets on top of the separator gap;
+they intercept nothing else, never touch Qt layout internals, and are torn
+down the moment the preview expands (Qt's native separators work again
+then). Separators BETWEEN docks in the same area stay native and are never
+covered. The center's 0x0 pin is restored on every exit path of the apply.
 */
 
 #include "dockx.hpp"
@@ -32,6 +42,7 @@ never covered.
 #include <QLayout>
 #include <QMainWindow>
 #include <QMouseEvent>
+#include <QPainter>
 #include <QPointer>
 #include <QTimer>
 
@@ -91,6 +102,29 @@ static QRect boundaryRect(const QRect &a, const QRect &b, Qt::Orientation o)
 	return QRect(left, y, right - left + 1, h);
 }
 
+/* resize one dock, letting the pinned-to-0x0 central widget flex for just
+   this call so Qt has a mediator to route the space through. The pin is
+   ALWAYS restored before returning. No-op when the center is not pinned
+   (defensive: handles only exist while the preview is collapsed). */
+static void resizeThroughCenter(QMainWindow *m, QDockWidget *d, int size, Qt::Orientation o)
+{
+	QWidget *c = m->centralWidget();
+	const bool pinned = c && c->maximumWidth() == 0 && c->maximumHeight() == 0;
+	if (pinned) {
+		c->setMinimumSize(0, 0);
+		c->setMaximumSize(QWIDGETSIZE_MAX, QWIDGETSIZE_MAX);
+	}
+	m->resizeDocks({d}, {size}, o);
+	if (m->layout())
+		m->layout()->activate();
+	if (pinned) {
+		c->setMinimumSize(0, 0);
+		c->setMaximumSize(0, 0);
+		if (m->layout())
+			m->layout()->activate();
+	}
+}
+
 class BoundaryHandle : public QWidget {
 public:
 	QPointer<QDockWidget> first, second;
@@ -104,22 +138,26 @@ public:
 		  orient(o)
 	{
 		setObjectName("dockxBoundaryHandle");
-		/* stay invisible no matter what the theme styles plain QWidgets to */
-		setStyleSheet("background: transparent;");
+		/* the widget paints nothing at rest (see paintEvent); no
+		   stylesheet, the theme must not restyle it */
+		setAttribute(Qt::WA_NoSystemBackground);
 		setCursor(o == Qt::Horizontal ? Qt::SplitHCursor : Qt::SplitVCursor);
 		setGeometry(r);
 		show();
 		raise();
 	}
 
-	~BoundaryHandle() override
+protected:
+	void paintEvent(QPaintEvent *) override
 	{
-		/* never leave a dock pinned (expand-by-hotkey mid drag, shutdown) */
-		if (dragging)
-			unpinFirst();
+		/* invisible at rest; while dragging, a soft ghost bar shows where
+		   the boundary will land on release */
+		if (!dragging)
+			return;
+		QPainter p(this);
+		p.fillRect(rect(), QColor(140, 140, 140, 150));
 	}
 
-protected:
 	void mousePressEvent(QMouseEvent *e) override
 	{
 		if (e->button() != Qt::LeftButton || !first || !second) {
@@ -128,16 +166,10 @@ protected:
 		}
 		dragging = true;
 		pressGlobal = e->globalPosition().toPoint();
+		pressRect = geometry();
 		firstSize = sizeOf(first);
 		secondSize = sizeOf(second);
-		/* the pin overwrites these for the drag; put back exactly after */
-		if (orient == Qt::Horizontal) {
-			savedMin = first->minimumWidth();
-			savedMax = first->maximumWidth();
-		} else {
-			savedMin = first->minimumHeight();
-			savedMax = first->maximumHeight();
-		}
+		update();
 		e->accept();
 	}
 
@@ -145,33 +177,15 @@ protected:
 	{
 		if (!dragging || !first || !second)
 			return;
-		QMainWindow *m = qobject_cast<QMainWindow *>(parentWidget());
-		if (!m)
-			return;
-		const QPoint g = e->globalPosition().toPoint();
-		const int delta = orient == Qt::Horizontal ? g.x() - pressGlobal.x() : g.y() - pressGlobal.y();
-		int a = firstSize + delta;
-		/* keep both sides usable and respect the dock content's true minimum:
-		   pinning below it would clip the content until release */
-		a = std::max(a, MIN_DOCK);
-		a = std::max(a, orient == Qt::Horizontal ? first->minimumSizeHint().width()
-							 : first->minimumSizeHint().height());
-		a = std::min(a, firstSize + secondSize - MIN_DOCK);
-		/* pin = min and max forced to the target; the top-level layout must
-		   honor it, so the area boundary moves and the far side absorbs */
-		if (orient == Qt::Horizontal) {
-			first->setMinimumWidth(a);
-			first->setMaximumWidth(a);
-		} else {
-			first->setMinimumHeight(a);
-			first->setMaximumHeight(a);
-		}
-		if (m->layout())
-			m->layout()->activate();
-		/* ride along so the cursor stays on the handle */
-		const QRect r = boundaryRect(first->geometry(), second->geometry(), orient);
-		if (r.isValid())
-			setGeometry(r);
+		/* layout untouched during the drag: only the ghost bar moves */
+		const int a = targetFirstSize(e->globalPosition().toPoint());
+		QRect r = pressRect;
+		if (orient == Qt::Horizontal)
+			r.moveLeft(pressRect.left() + (a - firstSize));
+		else
+			r.moveTop(pressRect.top() + (a - firstSize));
+		setGeometry(r);
+		update();
 		e->accept();
 	}
 
@@ -179,16 +193,11 @@ protected:
 	{
 		if (e->button() != Qt::LeftButton)
 			return;
-		if (dragging && first && second) {
-			const QPoint g = e->globalPosition().toPoint();
-			const int delta = orient == Qt::Horizontal ? g.x() - pressGlobal.x() : g.y() - pressGlobal.y();
-			if (sizeOf(first) == firstSize && std::abs(delta) > 8)
-				obs_log(LOG_WARNING,
-					"divider: drag moved nothing (the neighbor at its minimum, or the pin was overridden)");
-		}
-		if (dragging)
-			unpinFirst();
+		const bool apply = dragging && first && second;
 		dragging = false;
+		update();
+		if (apply)
+			applyTrade(targetFirstSize(e->globalPosition().toPoint()));
 		e->accept();
 		QTimer::singleShot(0, [] { rebuild(); });
 	}
@@ -196,22 +205,55 @@ protected:
 private:
 	int sizeOf(QDockWidget *d) const { return orient == Qt::Horizontal ? d->width() : d->height(); }
 
-	void unpinFirst()
+	int minOf(QDockWidget *d) const
 	{
-		if (!first)
+		const QSize h = d->minimumSizeHint();
+		return std::max(MIN_DOCK, orient == Qt::Horizontal ? h.width() : h.height());
+	}
+
+	/* where the drag wants the first dock's size, clamped so both docks stay
+	   at or above their true minimums (an honest ghost: it never shows a
+	   position the release could not deliver) */
+	int targetFirstSize(const QPoint &g) const
+	{
+		const int delta = orient == Qt::Horizontal ? g.x() - pressGlobal.x() : g.y() - pressGlobal.y();
+		int a = firstSize + delta;
+		a = std::max(a, minOf(first));
+		a = std::min(a, firstSize + secondSize - minOf(second));
+		return a;
+	}
+
+	void applyTrade(int newFirst)
+	{
+		QMainWindow *m = qobject_cast<QMainWindow *>(parentWidget());
+		if (!m || newFirst == firstSize)
 			return;
-		if (orient == Qt::Horizontal) {
-			first->setMinimumWidth(savedMin);
-			first->setMaximumWidth(savedMax > 0 ? savedMax : QWIDGETSIZE_MAX);
+		const int newSecond = firstSize + secondSize - newFirst;
+		/* shrink first, grow second: the shrinking dock hands its space to
+		   the (briefly flexible) center, the growing dock takes it back out.
+		   Growing before shrinking would ask the 0-size center for space it
+		   does not have, and Qt would refuse the whole trade. */
+		if (newFirst < firstSize) {
+			resizeThroughCenter(m, first, newFirst, orient);
+			resizeThroughCenter(m, second, newSecond, orient);
 		} else {
-			first->setMinimumHeight(savedMin);
-			first->setMaximumHeight(savedMax > 0 ? savedMax : QWIDGETSIZE_MAX);
+			resizeThroughCenter(m, second, newSecond, orient);
+			resizeThroughCenter(m, first, newFirst, orient);
 		}
+		const int got = sizeOf(first);
+		if (std::abs(got - newFirst) > 4)
+			obs_log(LOG_WARNING,
+				"divider: drag wanted %d, layout settled at %d (a dock minimum, or Qt refused the trade)",
+				newFirst, got);
+		/* follow the real boundary so the cursor stays on the handle */
+		const QRect r = boundaryRect(first->geometry(), second->geometry(), orient);
+		if (r.isValid())
+			setGeometry(r);
 	}
 
 	QPoint pressGlobal;
+	QRect pressRect;
 	int firstSize = 0, secondSize = 0;
-	int savedMin = 0, savedMax = QWIDGETSIZE_MAX;
 };
 
 static QList<QPointer<BoundaryHandle>> g_handles;
