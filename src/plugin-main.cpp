@@ -70,6 +70,10 @@ static void on_frontend_event(enum obs_frontend_event event, void *)
 		dockx::sourcedocks::refreshAll();
 		dockx::editpreview::refreshAll();
 		break;
+	case OBS_FRONTEND_EVENT_PROFILE_CHANGED:
+		/* super-profiles: bring the paired scene collection along */
+		dockx::panels::followProfileLink();
+		break;
 	case OBS_FRONTEND_EVENT_STUDIO_MODE_ENABLED:
 		dockx::preview::onStudioModeEnabled();
 		[[fallthrough]];

@@ -1453,10 +1453,32 @@ void showDialog(const QString &initialTab)
 	QWidget *filtersTab = new QWidget();
 	QVBoxLayout *fv = new QVBoxLayout(filtersTab);
 
+	fv->addWidget(tabHead("Give any source filter its own on/off hotkey", filtersTab));
+	fv->addWidget(groupSub("Every filter on every source is listed here. Pick one and bind a key, then "
+			       "press it live (or from a Stream Deck) to toggle that filter on or off. "
+			       "Bindings are saved with your scene collection.",
+			       filtersTab));
+
+	QLineEdit *filterSearch = new QLineEdit(filtersTab);
+	filterSearch->setPlaceholderText("Filter this list by source or filter name");
+	filterSearch->setClearButtonEnabled(true);
+	fv->addWidget(filterSearch);
+
 	QListWidget *filterListW = new QListWidget(filtersTab);
 	fv->addWidget(filterListW, 1);
 
-	auto reloadFilters = [filterListW]() {
+	/* hide rows that do not match the search box (matches on source + filter
+	   name only, so the hotkey text in brackets never affects the filter) */
+	auto applyFilterSearch = [filterListW, filterSearch]() {
+		const QString q = filterSearch->text().trimmed();
+		for (int i = 0; i < filterListW->count(); i++) {
+			QListWidgetItem *it = filterListW->item(i);
+			it->setHidden(!q.isEmpty() &&
+				      !it->data(Qt::UserRole + 1).toString().contains(q, Qt::CaseInsensitive));
+		}
+	};
+
+	auto reloadFilters = [filterListW, applyFilterSearch]() {
 		filterListW->clear();
 		for (const filters::Entry &e : filters::entries()) {
 			QString text = QString("%1 · %2").arg(e.sourceName, e.filterName);
@@ -1465,9 +1487,14 @@ void showDialog(const QString &initialTab)
 				text += QString("   [%1]").arg(hk);
 			QListWidgetItem *it = new QListWidgetItem(text, filterListW);
 			it->setData(Qt::UserRole, (qulonglong)e.hotkey);
+			it->setData(Qt::UserRole + 1, QString("%1 %2").arg(e.sourceName, e.filterName));
 		}
+		applyFilterSearch();
 	};
 	reloadFilters();
+
+	QObject::connect(filterSearch, &QLineEdit::textChanged, filtersTab,
+			 [applyFilterSearch](const QString &) { applyFilterSearch(); });
 
 	QHBoxLayout *fb = new QHBoxLayout();
 	QPushButton *filterKeyBtn = new QPushButton("Set hotkey", filtersTab);
@@ -1507,14 +1534,214 @@ void showDialog(const QString &initialTab)
 		reloadFilters();
 	});
 
-	QLabel *fhint = new QLabel("Every filter on every source gets its own on/off hotkey, saved with your "
-				   "scene collection. Bind keys here, and press them live (or from a Stream "
-				   "Deck) to toggle the filter.",
-				   filtersTab);
-	fhint->setWordWrap(true);
-	fv->addWidget(fhint);
-
 	tabs->addTab(filtersTab, "Filters");
+
+	/* ---------- Tags tab (label sources + bulk actions) ---------- */
+	QWidget *tagsTab = new QWidget();
+	QVBoxLayout *tgv = new QVBoxLayout(tagsTab);
+
+	tgv->addWidget(tabHead("Tag your sources, then act on a whole group at once", tagsTab));
+	tgv->addWidget(groupSub("Give sources your own labels, like cam, alert, or brb. Then show, hide, "
+				"lock, or mute everything with a tag in one click, across every scene it is "
+				"in. Tags stick to a source even if you rename it, and are saved with DockX.",
+				tagsTab));
+
+	QHBoxLayout *tgFilterRow = new QHBoxLayout();
+	QLineEdit *tgSearch = new QLineEdit(tagsTab);
+	tgSearch->setPlaceholderText("Filter by source name, type, or tag");
+	tgSearch->setClearButtonEnabled(true);
+	tgFilterRow->addWidget(tgSearch, 1);
+	tgFilterRow->addWidget(new QLabel("Tag:", tagsTab));
+	QComboBox *tgTagFilter = new QComboBox(tagsTab);
+	tgTagFilter->addItem("All tags");
+	tgFilterRow->addWidget(tgTagFilter);
+	tgv->addLayout(tgFilterRow);
+
+	QTreeWidget *tgTree = new QTreeWidget(tagsTab);
+	tgTree->setColumnCount(3);
+	tgTree->setHeaderLabels({"Source", "Type", "Tags"});
+	tgTree->setRootIsDecorated(false);
+	tgTree->setAlternatingRowColors(true);
+	tgTree->setSelectionMode(QAbstractItemView::ExtendedSelection);
+	tgTree->setSortingEnabled(true);
+	tgTree->sortByColumn(0, Qt::AscendingOrder);
+	tgTree->header()->setStretchLastSection(true);
+	tgv->addWidget(tgTree, 1);
+
+	QLabel *tgStatus = new QLabel(tagsTab);
+	tgv->addWidget(tgStatus);
+
+	auto tgScan = std::make_shared<QList<tags::SourceInfo>>();
+
+	auto tgRepopulate = [tgTree, tgStatus, tgScan, tgSearch, tgTagFilter]() {
+		const QString q = tgSearch->text().trimmed();
+		const QString tagPick = tgTagFilter->currentIndex() <= 0 ? QString() : tgTagFilter->currentText();
+		tgTree->setSortingEnabled(false);
+		tgTree->clear();
+		int shown = 0, tagged = 0;
+		for (const tags::SourceInfo &si : *tgScan) {
+			if (!tagPick.isEmpty() && !si.tags.contains(tagPick, Qt::CaseInsensitive))
+				continue;
+			const QString tagStr = si.tags.join("  ·  ");
+			if (!q.isEmpty() && !si.name.contains(q, Qt::CaseInsensitive) &&
+			    !si.type.contains(q, Qt::CaseInsensitive) && !tagStr.contains(q, Qt::CaseInsensitive))
+				continue;
+			QTreeWidgetItem *it = new QTreeWidgetItem(tgTree);
+			it->setText(0, si.name);
+			it->setText(1, si.type);
+			it->setText(2, tagStr);
+			it->setData(0, Qt::UserRole, si.uuid);
+			if (si.tags.isEmpty())
+				it->setForeground(2, QBrush(QColor(150, 150, 150, 140)));
+			else
+				tagged++;
+			shown++;
+		}
+		tgTree->setSortingEnabled(true);
+		for (int c = 0; c < 3; c++)
+			tgTree->resizeColumnToContents(c);
+		tgStatus->setText(
+			QString("%1 source%2 shown · %3 tagged").arg(shown).arg(shown == 1 ? "" : "s").arg(tagged));
+	};
+
+	auto tgRefreshTagFilter = [tgTagFilter]() {
+		const QString prev = tgTagFilter->currentText();
+		tgTagFilter->blockSignals(true);
+		tgTagFilter->clear();
+		tgTagFilter->addItem("All tags");
+		for (const QString &t : tags::allTags())
+			tgTagFilter->addItem(t);
+		const int idx = tgTagFilter->findText(prev);
+		tgTagFilter->setCurrentIndex(idx >= 0 ? idx : 0);
+		tgTagFilter->blockSignals(false);
+	};
+
+	auto tgRescan = [tgScan, tgRepopulate, tgRefreshTagFilter]() {
+		*tgScan = tags::listSources();
+		tgRefreshTagFilter();
+		tgRepopulate();
+	};
+	tgRescan();
+
+	QObject::connect(tgSearch, &QLineEdit::textChanged, tagsTab, [tgRepopulate](const QString &) { tgRepopulate(); });
+	QObject::connect(tgTagFilter, &QComboBox::currentIndexChanged, tagsTab, [tgRepopulate](int) { tgRepopulate(); });
+
+	auto tgSelectedUuids = [tgTree]() {
+		QStringList uuids;
+		for (QTreeWidgetItem *it : tgTree->selectedItems())
+			uuids << it->data(0, Qt::UserRole).toString();
+		return uuids;
+	};
+
+	QHBoxLayout *tgTagBtns = new QHBoxLayout();
+	QPushButton *tgAddBtn = new QPushButton("Add tag...", tagsTab);
+	QPushButton *tgRemoveBtn = new QPushButton("Remove tag...", tagsTab);
+	QPushButton *tgSelectAllBtn = new QPushButton("Select all shown", tagsTab);
+	makePrimary(tgAddBtn);
+	tgTagBtns->addWidget(tgAddBtn);
+	tgTagBtns->addWidget(tgRemoveBtn);
+	tgTagBtns->addStretch(1);
+	tgTagBtns->addWidget(tgSelectAllBtn);
+	tgv->addLayout(tgTagBtns);
+
+	QObject::connect(tgSelectAllBtn, &QPushButton::clicked, tagsTab, [tgTree]() { tgTree->selectAll(); });
+
+	QObject::connect(tgAddBtn, &QPushButton::clicked, &dlg, [&dlg, tgSelectedUuids, tgRescan]() {
+		const QStringList uuids = tgSelectedUuids();
+		if (uuids.isEmpty()) {
+			QMessageBox::information(&dlg, "DockX", "Pick one or more sources first, then add a tag.");
+			return;
+		}
+		bool ok = false;
+		const QString tag = QInputDialog::getItem(
+			&dlg, "Add tag",
+			QString("Tag %1 source%2 with:").arg(uuids.size()).arg(uuids.size() == 1 ? "" : "s"),
+			tags::allTags(), 0, true, &ok);
+		if (!ok || tag.trimmed().isEmpty())
+			return;
+		tags::addTagToSources(uuids, tag.trimmed());
+		tgRescan();
+	});
+
+	QObject::connect(tgRemoveBtn, &QPushButton::clicked, &dlg, [&dlg, tgSelectedUuids, tgRescan]() {
+		const QStringList uuids = tgSelectedUuids();
+		if (uuids.isEmpty()) {
+			QMessageBox::information(&dlg, "DockX", "Pick one or more sources first.");
+			return;
+		}
+		QStringList opts;
+		for (const QString &u : uuids)
+			for (const QString &t : tags::tagsForSource(u))
+				if (!opts.contains(t, Qt::CaseInsensitive))
+					opts << t;
+		if (opts.isEmpty()) {
+			QMessageBox::information(&dlg, "DockX", "The selected sources have no tags to remove.");
+			return;
+		}
+		opts.sort(Qt::CaseInsensitive);
+		bool ok = false;
+		const QString tag = QInputDialog::getItem(&dlg, "Remove tag",
+							  "Remove which tag from the selected sources?", opts, 0,
+							  false, &ok);
+		if (!ok || tag.isEmpty())
+			return;
+		tags::removeTagFromSources(uuids, tag);
+		tgRescan();
+	});
+
+	QGroupBox *tgBulk = new QGroupBox("Do this to the selected sources", tagsTab);
+	QVBoxLayout *tgBulkV = new QVBoxLayout(tgBulk);
+	tgBulkV->addWidget(groupSub("Acts on every scene the selected sources appear in. Mute and unmute "
+				    "affect only sources that have audio.",
+				    tgBulk));
+	QHBoxLayout *tgBulkBtns = new QHBoxLayout();
+	QPushButton *tgShow = new QPushButton("Show", tgBulk);
+	QPushButton *tgHide = new QPushButton("Hide", tgBulk);
+	QPushButton *tgLock = new QPushButton("Lock", tgBulk);
+	QPushButton *tgUnlock = new QPushButton("Unlock", tgBulk);
+	QPushButton *tgMute = new QPushButton("Mute", tgBulk);
+	QPushButton *tgUnmute = new QPushButton("Unmute", tgBulk);
+	for (QPushButton *b : {tgShow, tgHide, tgLock, tgUnlock, tgMute, tgUnmute})
+		tgBulkBtns->addWidget(b);
+	tgBulkBtns->addStretch(1);
+	tgBulkV->addLayout(tgBulkBtns);
+	tgv->addWidget(tgBulk);
+
+	auto tgRunBulk = [&dlg, tgSelectedUuids, tgStatus, tgRepopulate](tags::Op op, const QString &verb) {
+		const QStringList uuids = tgSelectedUuids();
+		if (uuids.isEmpty()) {
+			QMessageBox::information(&dlg, "DockX", "Pick one or more sources first.");
+			return;
+		}
+		const tags::BulkResult r = tags::applyBulk(uuids, op);
+		if (op == tags::MUTE || op == tags::UNMUTE) {
+			if (r.affected == 0)
+				tgStatus->setText("None of the selected sources have audio.");
+			else
+				tgStatus->setText(QString("%1 %2 source%3.")
+							  .arg(verb)
+							  .arg(r.affected)
+							  .arg(r.affected == 1 ? "" : "s"));
+		} else {
+			if (r.affected == 0)
+				tgStatus->setText("The selected sources are not placed in any scene.");
+			else
+				tgStatus->setText(QString("%1 the selection across %2 scene%3.")
+							  .arg(verb)
+							  .arg(r.scenes)
+							  .arg(r.scenes == 1 ? "" : "s"));
+		}
+		tgRepopulate();
+	};
+
+	QObject::connect(tgShow, &QPushButton::clicked, &dlg, [tgRunBulk]() { tgRunBulk(tags::SHOW, "Showed"); });
+	QObject::connect(tgHide, &QPushButton::clicked, &dlg, [tgRunBulk]() { tgRunBulk(tags::HIDE, "Hid"); });
+	QObject::connect(tgLock, &QPushButton::clicked, &dlg, [tgRunBulk]() { tgRunBulk(tags::LOCK, "Locked"); });
+	QObject::connect(tgUnlock, &QPushButton::clicked, &dlg, [tgRunBulk]() { tgRunBulk(tags::UNLOCK, "Unlocked"); });
+	QObject::connect(tgMute, &QPushButton::clicked, &dlg, [tgRunBulk]() { tgRunBulk(tags::MUTE, "Muted"); });
+	QObject::connect(tgUnmute, &QPushButton::clicked, &dlg, [tgRunBulk]() { tgRunBulk(tags::UNMUTE, "Unmuted"); });
+
+	tabs->addTab(tagsTab, "Tags");
 
 	/* ---------- Colors tab (scene names + docks + one click looks) ---------- */
 	QWidget *colorsTab = new QWidget();
@@ -2788,6 +3015,119 @@ void showDialog(const QString &initialTab)
 			 [switchProfile](QListWidgetItem *) { switchProfile(); });
 	QObject::connect(collList, &QListWidget::itemDoubleClicked, &dlg,
 			 [switchCollection](QListWidgetItem *) { switchCollection(); });
+
+	/* Super-Profiles: pair a profile with a scene collection so they travel together */
+	QGroupBox *spBox = new QGroupBox("Super-Profiles: link a profile to a scene collection", swTab);
+	QVBoxLayout *spV = new QVBoxLayout(spBox);
+	spV->addWidget(groupSub("Pair a profile with a scene collection so they travel together. Pick a "
+				"pair below and switch to both in one click, and when you change profiles in "
+				"OBS, DockX can load its paired collection for you.",
+				spBox));
+
+	QListWidget *spList = new QListWidget(spBox);
+	spV->addWidget(spList, 1);
+
+	auto spReload = [spList]() {
+		spList->clear();
+		for (const SuperProfile &sp : state().superProfiles) {
+			QListWidgetItem *it =
+				new QListWidgetItem(QString("%1   →   %2").arg(sp.profile, sp.collection), spList);
+			it->setData(Qt::UserRole, sp.profile);
+		}
+	};
+	spReload();
+
+	QHBoxLayout *spBtns = new QHBoxLayout();
+	QPushButton *spLinkBtn = new QPushButton("Link current profile + collection", spBox);
+	QPushButton *spSwitchBtn = new QPushButton("Switch to this set", spBox);
+	QPushButton *spUnlinkBtn = new QPushButton("Unlink", spBox);
+	makePrimary(spSwitchBtn);
+	spBtns->addWidget(spLinkBtn);
+	spBtns->addWidget(spSwitchBtn);
+	spBtns->addStretch(1);
+	spBtns->addWidget(spUnlinkBtn);
+	spV->addLayout(spBtns);
+
+	QCheckBox *spAuto =
+		new QCheckBox("When I change profiles in OBS, load its paired collection automatically", spBox);
+	spAuto->setChecked(state().superProfileAutoFollow);
+	spV->addWidget(spAuto);
+	QObject::connect(spAuto, &QCheckBox::toggled, spBox, [](bool on) {
+		state().superProfileAutoFollow = on;
+		stateSave();
+	});
+
+	swv->addWidget(spBox);
+
+	QObject::connect(spLinkBtn, &QPushButton::clicked, &dlg, [&dlg, spReload]() {
+		char *cp = obs_frontend_get_current_profile();
+		char *cc = obs_frontend_get_current_scene_collection();
+		const QString prof = QString::fromUtf8(cp ? cp : "");
+		const QString coll = QString::fromUtf8(cc ? cc : "");
+		bfree(cp);
+		bfree(cc);
+		if (prof.isEmpty() || coll.isEmpty())
+			return;
+		bool replaced = false;
+		for (SuperProfile &sp : state().superProfiles)
+			if (sp.profile == prof) {
+				sp.collection = coll;
+				replaced = true;
+				break;
+			}
+		if (!replaced) {
+			SuperProfile sp;
+			sp.profile = prof;
+			sp.collection = coll;
+			state().superProfiles.push_back(sp);
+		}
+		stateSave();
+		spReload();
+	});
+
+	QObject::connect(spUnlinkBtn, &QPushButton::clicked, &dlg, [&dlg, spList, spReload]() {
+		QListWidgetItem *it = spList->currentItem();
+		if (!it) {
+			QMessageBox::information(&dlg, "DockX", "Pick a Super-Profile to unlink first.");
+			return;
+		}
+		const QString prof = it->data(Qt::UserRole).toString();
+		auto &v = state().superProfiles;
+		for (auto i = v.begin(); i != v.end(); ++i)
+			if (i->profile == prof) {
+				v.erase(i);
+				break;
+			}
+		stateSave();
+		spReload();
+	});
+
+	QObject::connect(spSwitchBtn, &QPushButton::clicked, &dlg, [&dlg, spList, reloadSwitch, anyOutputActive]() {
+		QListWidgetItem *it = spList->currentItem();
+		if (!it) {
+			QMessageBox::information(&dlg, "DockX", "Pick a Super-Profile to switch to first.");
+			return;
+		}
+		const QString prof = it->data(Qt::UserRole).toString();
+		QString coll;
+		for (const SuperProfile &sp : state().superProfiles)
+			if (sp.profile == prof) {
+				coll = sp.collection;
+				break;
+			}
+		if (coll.isEmpty())
+			return;
+		if (anyOutputActive()) {
+			QMessageBox::information(&dlg, "DockX",
+						 "OBS cannot change profiles while you are streaming, "
+						 "recording, or running the virtual camera. Stop first, "
+						 "then switch.");
+			return;
+		}
+		obs_frontend_set_current_profile(prof.toUtf8().constData());
+		obs_frontend_set_current_scene_collection(coll.toUtf8().constData());
+		reloadSwitch();
+	});
 
 	tabs->addTab(swTab, "Profiles"); /* renamed from "Switch" (Joey 2026-09-10) */
 

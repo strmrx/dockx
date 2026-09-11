@@ -413,6 +413,38 @@ void stateLoad()
 		obs_data_release(autoRules);
 	}
 
+	/* source tags: uuid -> newline-joined tag list (survives source renames) */
+	obs_data_t *stags = obs_data_get_obj(d, "source_tags");
+	if (stags) {
+		for (obs_data_item_t *item = obs_data_first(stags); item; obs_data_item_next(&item)) {
+			const char *uuid = obs_data_item_get_name(item);
+			const char *joined = obs_data_item_get_string(item);
+			if (uuid && *uuid && joined && *joined) {
+				QStringList tags = QString::fromUtf8(joined).split('\n', Qt::SkipEmptyParts);
+				if (!tags.isEmpty())
+					g_state.sourceTags[QString::fromUtf8(uuid)] = tags;
+			}
+		}
+		obs_data_release(stags);
+	}
+
+	obs_data_set_default_bool(d, "super_profile_autofollow", true);
+	g_state.superProfileAutoFollow = obs_data_get_bool(d, "super_profile_autofollow");
+	obs_data_array_t *sprofs = obs_data_get_array(d, "super_profiles");
+	if (sprofs) {
+		const size_t n = obs_data_array_count(sprofs);
+		for (size_t i = 0; i < n; i++) {
+			obs_data_t *o = obs_data_array_item(sprofs, i);
+			SuperProfile sp;
+			sp.profile = QString::fromUtf8(obs_data_get_string(o, "profile"));
+			sp.collection = QString::fromUtf8(obs_data_get_string(o, "collection"));
+			if (!sp.profile.isEmpty() && !sp.collection.isEmpty())
+				g_state.superProfiles.push_back(sp);
+			obs_data_release(o);
+		}
+		obs_data_array_release(sprofs);
+	}
+
 	obs_data_t *folders = obs_data_get_obj(d, "folders");
 	if (folders) {
 		for (obs_data_item_t *item = obs_data_first(folders); item; obs_data_item_next(&item)) {
@@ -642,6 +674,28 @@ void stateSave()
 		obs_data_set_int(autoRules, it.key().toUtf8().constData(), it.value());
 	obs_data_set_obj(d, "scene_layouts", autoRules);
 	obs_data_release(autoRules);
+
+	obs_data_t *stags = obs_data_create();
+	for (auto it = g_state.sourceTags.constBegin(); it != g_state.sourceTags.constEnd(); ++it) {
+		if (it.value().isEmpty())
+			continue;
+		obs_data_set_string(stags, it.key().toUtf8().constData(),
+				    it.value().join(QChar('\n')).toUtf8().constData());
+	}
+	obs_data_set_obj(d, "source_tags", stags);
+	obs_data_release(stags);
+
+	obs_data_set_bool(d, "super_profile_autofollow", g_state.superProfileAutoFollow);
+	obs_data_array_t *sprofs = obs_data_array_create();
+	for (const SuperProfile &sp : g_state.superProfiles) {
+		obs_data_t *o = obs_data_create();
+		obs_data_set_string(o, "profile", sp.profile.toUtf8().constData());
+		obs_data_set_string(o, "collection", sp.collection.toUtf8().constData());
+		obs_data_array_push_back(sprofs, o);
+		obs_data_release(o);
+	}
+	obs_data_set_array(d, "super_profiles", sprofs);
+	obs_data_array_release(sprofs);
 
 	obs_data_t *folders = obs_data_create();
 	for (auto it = g_state.folders.constBegin(); it != g_state.folders.constEnd(); ++it) {
@@ -1427,6 +1481,59 @@ void autoSceneLayout()
 		return;
 	/* never rebuild docks from inside the frontend event callback */
 	QMetaObject::invokeMethod(m, [id]() { applyLayout(id); }, Qt::QueuedConnection);
+}
+
+void followProfileLink()
+{
+	if (!state().superProfileAutoFollow)
+		return;
+	/* ignore the profile events that fire while OBS is still loading; only
+	   follow a real, user-driven profile change once the app is up */
+	if (!obsReady())
+		return;
+	char *cp = obs_frontend_get_current_profile();
+	const QString prof = QString::fromUtf8(cp ? cp : "");
+	bfree(cp);
+	if (prof.isEmpty())
+		return;
+	QString target;
+	for (const SuperProfile &sp : state().superProfiles)
+		if (sp.profile == prof) {
+			target = sp.collection;
+			break;
+		}
+	if (target.isEmpty())
+		return;
+	char *cc = obs_frontend_get_current_scene_collection();
+	const QString coll = QString::fromUtf8(cc ? cc : "");
+	bfree(cc);
+	if (coll == target)
+		return; /* already on the paired collection */
+	/* the paired collection may have been renamed or deleted in OBS */
+	bool exists = false;
+	char **colls = obs_frontend_get_scene_collections();
+	for (char **c = colls; c && *c; c++)
+		if (QString::fromUtf8(*c) == target) {
+			exists = true;
+			break;
+		}
+	bfree(colls);
+	if (!exists) {
+		obs_log(LOG_WARNING, "super-profile: collection \"%s\" for profile \"%s\" is gone",
+			target.toUtf8().constData(), prof.toUtf8().constData());
+		return;
+	}
+	obs_log(LOG_INFO, "super-profile: profile \"%s\" -> collection \"%s\"", prof.toUtf8().constData(),
+		target.toUtf8().constData());
+	/* never switch a collection from inside the frontend event callback */
+	const QByteArray t = target.toUtf8();
+	QMainWindow *m = mainWindow();
+	if (m)
+		QMetaObject::invokeMethod(
+			m, [t]() { obs_frontend_set_current_scene_collection(t.constData()); },
+			Qt::QueuedConnection);
+	else
+		obs_frontend_set_current_scene_collection(t.constData());
 }
 
 bool applyLayout(int id)

@@ -149,6 +149,15 @@ struct FolderData {
 	QHash<QString, QString> colors; /* folder name -> "#rrggbb" */
 };
 
+/* a Super-Profile: an OBS profile paired with a scene collection so switching to
+   the profile brings its collection along (extends Auto switch to the profile +
+   collection axis). Keyed by profile name; the frontend API gives profiles and
+   collections no stable id, so a rename in OBS means the pair must be re-made */
+struct SuperProfile {
+	QString profile;
+	QString collection;
+};
+
 struct State {
 	/* settings (all user visible, defaults ON) */
 	bool nesting = true;
@@ -204,6 +213,13 @@ struct State {
 	SourceLoadout loadoutUndo; /* pre-restore snapshot; undo twice = redo */
 	bool hasLoadoutUndo = false;
 
+	/* source tags: user labels kept by source uuid so they survive a rename */
+	QHash<QString, QStringList> sourceTags;
+
+	/* super-profiles: profile <-> scene collection pairings */
+	std::vector<SuperProfile> superProfiles;
+	bool superProfileAutoFollow = true; /* a profile change in OBS loads its paired collection */
+
 	/* lock tools */
 	QByteArray lockPoint;  /* dock arrangement to snap back to (soft lock) */
 	bool hardLock = false; /* docks frozen: can't be dragged or floated */
@@ -240,7 +256,8 @@ void applyDockColors(); /* colored border + title bar per tagged dock */
 void applySeparators(); /* thickness/tint of the lines between docks */
 void applyChrome();     /* opt in accent color over OBS's own controls */
 void applyChromeSoon(); /* delayed reapply, for right after OBS swaps its theme */
-void autoSceneLayout(); /* apply the layout mapped to the current scene, if any */
+void autoSceneLayout();   /* apply the layout mapped to the current scene, if any */
+void followProfileLink(); /* on a profile change, load its paired scene collection */
 bool applyLayout(int id);
 bool undoLayout();
 void shutdown();
@@ -476,6 +493,31 @@ bool removeFromScene(const QString &sceneUuid, long long itemId); /* drop just t
 bool deleteSource(const QString &sourceName);                     /* remove from whole project; true if fully gone */
 QString describeHolders(const QString &sourceName);               /* best-effort: what still holds it live */
 } // namespace search
+
+/* source tags + bulk operations: give sources user labels (kept by uuid so they
+   survive a rename), then act on a whole group at once -- show/hide/lock/unlock
+   every scene item of a set of sources across every scene, and mute/unmute the
+   audio ones. Tags persist in dockx.json (source_tags) */
+namespace tags {
+struct SourceInfo {
+	QString uuid;
+	QString name;
+	QString type;     /* friendly type: "Browser", "Image", ... */
+	QStringList tags; /* this source's tags, sorted */
+	bool hasAudio = false;
+};
+enum Op { SHOW, HIDE, LOCK, UNLOCK, MUTE, UNMUTE };
+struct BulkResult {
+	int affected = 0; /* scene items toggled, or sources muted */
+	int scenes = 0;   /* distinct scenes touched (visibility/lock only) */
+};
+QList<SourceInfo> listSources();     /* every taggable source in the current collection, sorted by name */
+QStringList allTags();               /* tags in use on the current sources, sorted */
+QStringList tagsForSource(const QString &uuid);
+void addTagToSources(const QStringList &uuids, const QString &tag);
+void removeTagFromSources(const QStringList &uuids, const QString &tag);
+BulkResult applyBulk(const QStringList &uuids, Op op);
+} // namespace tags
 
 /* collapse the main video preview: OBS's canvas is the QMainWindow central
    widget (docks can only ring it); hiding it hands the whole window to the

@@ -89,11 +89,12 @@ Ranked by demand x feasibility for a Qt frontend plugin. Context: #1 idea sitewi
    tie projectors into saved layouts = very on-brand. MEDIUM.
 10. **Studio mode QoL** -- resizable split (35), hide transition panel (28). MEDIUM.
 11. **Scene collection zip export/import** with media (38 votes). MEDIUM, overlaps #3.
-12. **Profile + collection linked switching** ("Super-Profile", 32+23 votes). EASY;
-    extends our Auto switch naturally.
-13. **Source tagging + bulk ops + find-usages** -- low votes but constant forum pain;
-    compounds our search bars. EASY-MEDIUM.
+12. **Profile + collection linked switching** ("Super-Profile", 32+23 votes) -- SHIPPED
+    v0.51.0. Extends Auto switch to the profile + collection axis.
+13. **Source tagging + bulk ops + find-usages** -- SHIPPED. find-usages v0.20; tagging +
+    bulk ops v0.50.0. Constant forum pain; compounds our search bars.
 14. **Managed dock container on a second monitor** (21 votes). MEDIUM; deepens the moat.
+    NEXT PICK (Joey 2026-09-11): build fresh in a new session.
 
 Strategic reads: folders+thumbnails (#1+#7) = most wanted organization feature in OBS
 history with a beatable incumbent; #2 is proven at 227k downloads and unlocks 6/8/10;
@@ -163,11 +164,11 @@ off-thesis: encoders, multi-output, NDI, VST, replay buffer.
   Pairs with scene thumbnails = the visual scene browser.
 - Nested folders -- SHIPPED v0.10 (paths under the hood, drag folder into folder,
   optional via Settings toggle, subtree safe rename/delete).
-- Profile + collection linked switching (demand #12, EASY, extends Auto switch)
+- Profile + collection linked switching -- SHIPPED v0.51.0 (demand #12)
 - Cross-collection copy of scenes/sources (demand #3, 149 votes)
 - Reorderable audio mixer (demand #4)
 - Source tagging / bulk ops / find-usages (demand #13) -- find-usages SHIPPED v0.20
-  (project-wide source search); tagging + bulk ops still open
+  (project-wide source search); tagging + bulk ops SHIPPED v0.50.0
 - Align + distribute tools -- SHIPPED v0.18 (align edges + space evenly + center on
   canvas, Align tab, dockx-align.cpp; snap-grid overlay still open)
 - Multi-monitor dock manager -- SHIPPED v0.19 (2026-08-01, demand #14 + Joey ask).
@@ -397,6 +398,33 @@ off-thesis: encoders, multi-output, NDI, VST, replay buffer.
   line directly under it; explanations that sat at the bottom of a tab (Find, Profiles)
   moved up into that sub line. Recipe addendum (8) for all future tabs: purpose first,
   bold, at the top.
+- **Source tags + bulk ops** (demand #13, Joey 2026-09-11: "Source tagging is awesome,
+  especially with the bulk ops") -- SHIPPED v0.50.0 (new file `src/dockx-tags.cpp`, new
+  "Tags" tab next to Filters). Give any source your own labels (kept by source UUID in
+  `dockx.json` `source_tags`, so a tag survives a rename), filter the source list by text
+  or by one tag, then act on a whole selection at once: Show / Hide / Lock / Unlock every
+  scene item of those sources across EVERY scene (one walk of all scenes, groups descended,
+  matched by UUID in `tags::applyBulk`), and Mute / Unmute the ones that carry audio. Tags
+  persist across scene collections -- an unresolved UUID simply is not listed and is never
+  auto-pruned, so another collection's tags are safe. UI reuses the Find tab pattern
+  (search box + multi-select tree + status line).
+- **Super-Profile linked switching** (demand #12) -- SHIPPED v0.51.0. A Super-Profile pairs
+  an OBS profile with a scene collection (state `superProfiles`, saved as `super_profiles`).
+  New section in the Profiles tab: "Link current profile + collection", "Switch to this set"
+  (one click sets both, guarded by `anyOutputActive()` exactly like the profile switcher --
+  blocked while live because OBS cannot change profiles then), and "Unlink". Plus an
+  auto-follow checkbox (default ON, `super_profile_autofollow`): when the profile changes in
+  OBS, `panels::followProfileLink()` (fired from the new OBS_FRONTEND_EVENT_PROFILE_CHANGED
+  case in plugin-main.cpp) queues a switch to the paired collection -- gated on `obsReady()`
+  so it never fires mid-load, skips if already on the target or if the collection was
+  deleted, and cannot loop (a collection change never switches the profile back).
+- **Filters tab UX pass** (Joey 2026-09-11: "the filters tab didnt get the quality UX pass
+  ... no way on top to see what this page is, its just a HUGE screen of filters") -- SHIPPED
+  v0.51.0. The v0.49.2 headline sweep counted 10 tabs and MISSED Filters (it is a bare list,
+  no group box). Now it opens with the `tabHead` + `groupSub` purpose headline like every
+  other tab (the old bottom hint paragraph moved up into it), and a search box filters the
+  long flat list by source or filter name (matches the plain source + filter text, never the
+  hotkey text in brackets).
 - **Whole window accent** (Joey 2026-09-09: "lets do the obs chrome opt in restyle") --
   SHIPPED v0.35.0. New "Whole window accent" group in the Colors tab: an opt-in checkbox
   ("Accent OBS itself (experimental)", `chrome_on`, default OFF) + an accent color picker
