@@ -29,6 +29,7 @@ if the UI does not look the way we expect, do NOTHING. Never crash OBS.
 #include <QMainWindow>
 #include <QMetaObject>
 #include <QPointer>
+#include <QSet>
 #include <QSlider>
 #include <QTimer>
 
@@ -145,6 +146,161 @@ void registerHotkey(SourceLoadout &l)
 	}
 }
 } // namespace loadouts
+
+/* ---------- per-tag Hide/Show hotkeys ----------
+   A tag has no stable id (it is just a string), so hotkeys are keyed by the
+   lowercased tag; the display casing rides along in a heap QString handed to the
+   callback. Bindings persist in dockx.json (tag_hotkeys) exactly like loadout
+   hotkeys, so they survive restarts and even a tag being removed then re-added. */
+namespace tags {
+
+static void tagHideCb(void *data, obs_hotkey_id, obs_hotkey_t *, bool pressed)
+{
+	if (!pressed || !data)
+		return;
+	const QString tag = *static_cast<QString *>(data);
+	QMainWindow *m = mainWindow();
+	if (!m)
+		return;
+	/* hotkeys can fire off the UI thread; source edits must not */
+	QMetaObject::invokeMethod(
+		m,
+		[tag]() {
+			const BulkResult r = applyBulkByTag(tag, HIDE);
+			obs_log(LOG_INFO, "hotkey hid tag '%s' (%d items in %d scenes)", tag.toUtf8().constData(),
+				r.affected, r.scenes);
+		},
+		Qt::QueuedConnection);
+}
+
+static void tagShowCb(void *data, obs_hotkey_id, obs_hotkey_t *, bool pressed)
+{
+	if (!pressed || !data)
+		return;
+	const QString tag = *static_cast<QString *>(data);
+	QMainWindow *m = mainWindow();
+	if (!m)
+		return;
+	QMetaObject::invokeMethod(
+		m,
+		[tag]() {
+			const BulkResult r = applyBulkByTag(tag, SHOW);
+			obs_log(LOG_INFO, "hotkey showed tag '%s' (%d items in %d scenes)", tag.toUtf8().constData(),
+				r.affected, r.scenes);
+		},
+		Qt::QueuedConnection);
+}
+
+static void registerOne(const QString &display)
+{
+	const QString key = display.toLower();
+	if (g_state.tagHotkeys.contains(key))
+		return;
+	TagHotkey th;
+	th.name = new QString(display);
+	const QByteArray hn = ("dockx_tag_hide_" + key).toUtf8();
+	const QByteArray hd = QString("DockX: hide everything tagged \"%1\"").arg(display).toUtf8();
+	th.hide = obs_hotkey_register_frontend(hn.constData(), hd.constData(), tagHideCb, th.name);
+	const QByteArray sn = ("dockx_tag_show_" + key).toUtf8();
+	const QByteArray sd = QString("DockX: show everything tagged \"%1\"").arg(display).toUtf8();
+	th.show = obs_hotkey_register_frontend(sn.constData(), sd.constData(), tagShowCb, th.name);
+	if (g_state.tagHotkeyBinds) {
+		obs_data_t *entry = obs_data_get_obj(g_state.tagHotkeyBinds, key.toUtf8().constData());
+		if (entry) {
+			obs_data_array_t *ha = obs_data_get_array(entry, "hide");
+			if (ha) {
+				obs_hotkey_load(th.hide, ha);
+				obs_data_array_release(ha);
+			}
+			obs_data_array_t *sa = obs_data_get_array(entry, "show");
+			if (sa) {
+				obs_hotkey_load(th.show, sa);
+				obs_data_array_release(sa);
+			}
+			obs_data_release(entry);
+		}
+	}
+	g_state.tagHotkeys.insert(key, th);
+}
+
+static void unregisterOne(const QString &key)
+{
+	auto it = g_state.tagHotkeys.find(key);
+	if (it == g_state.tagHotkeys.end())
+		return;
+	if (it->hide != OBS_INVALID_HOTKEY_ID)
+		obs_hotkey_unregister(it->hide);
+	if (it->show != OBS_INVALID_HOTKEY_ID)
+		obs_hotkey_unregister(it->show);
+	delete it->name;
+	g_state.tagHotkeys.erase(it);
+}
+
+void reconcileHotkeys()
+{
+	const QStringList tags = allTagsEverUsed();
+	QSet<QString> want;
+	for (const QString &t : tags) {
+		want.insert(t.toLower());
+		registerOne(t);
+	}
+	/* retire hotkeys for tags no longer used anywhere (binding stays parked in
+	   tag_hotkeys, so re-creating the tag restores its key) */
+	const QList<QString> have = g_state.tagHotkeys.keys();
+	for (const QString &k : have)
+		if (!want.contains(k))
+			unregisterOne(k);
+}
+
+void loadHotkeys(obs_data_t *d)
+{
+	if (g_state.tagHotkeyBinds) {
+		obs_data_release(g_state.tagHotkeyBinds);
+		g_state.tagHotkeyBinds = nullptr;
+	}
+	g_state.tagHotkeyBinds = obs_data_get_obj(d, "tag_hotkeys"); /* may be null */
+}
+
+void saveHotkeys(obs_data_t *d)
+{
+	if (!g_state.tagHotkeyBinds)
+		g_state.tagHotkeyBinds = obs_data_create();
+	obs_data_t *binds = g_state.tagHotkeyBinds;
+	for (auto it = g_state.tagHotkeys.constBegin(); it != g_state.tagHotkeys.constEnd(); ++it) {
+		obs_data_t *entry = obs_data_create();
+		if (it->hide != OBS_INVALID_HOTKEY_ID) {
+			obs_data_array_t *ha = obs_hotkey_save(it->hide);
+			obs_data_set_array(entry, "hide", ha);
+			obs_data_array_release(ha);
+		}
+		if (it->show != OBS_INVALID_HOTKEY_ID) {
+			obs_data_array_t *sa = obs_hotkey_save(it->show);
+			obs_data_set_array(entry, "show", sa);
+			obs_data_array_release(sa);
+		}
+		obs_data_set_obj(binds, it.key().toUtf8().constData(), entry);
+		obs_data_release(entry);
+	}
+	obs_data_set_obj(d, "tag_hotkeys", binds); /* d takes its own ref */
+}
+
+void shutdownHotkeys()
+{
+	for (auto it = g_state.tagHotkeys.begin(); it != g_state.tagHotkeys.end(); ++it) {
+		if (it->hide != OBS_INVALID_HOTKEY_ID)
+			obs_hotkey_unregister(it->hide);
+		if (it->show != OBS_INVALID_HOTKEY_ID)
+			obs_hotkey_unregister(it->show);
+		delete it->name;
+	}
+	g_state.tagHotkeys.clear();
+	if (g_state.tagHotkeyBinds) {
+		obs_data_release(g_state.tagHotkeyBinds);
+		g_state.tagHotkeyBinds = nullptr;
+	}
+}
+
+} // namespace tags
 
 static char *configFilePath()
 {
@@ -331,6 +487,7 @@ void stateLoad()
 			e.pinW = (int)obs_data_get_int(o, "pin_w");
 			e.pinH = (int)obs_data_get_int(o, "pin_h");
 			e.seamless = obs_data_get_bool(o, "seamless");
+			e.hideTitleBar = obs_data_get_bool(o, "hide_title_bar");
 			e.mediaPath = QString::fromUtf8(obs_data_get_string(o, "media_path"));
 			e.mediaMode = QString::fromUtf8(obs_data_get_string(o, "media_mode"));
 			if (e.id > 0)
@@ -523,6 +680,8 @@ void stateLoad()
 	g_state.lockPoint = QByteArray::fromBase64(obs_data_get_string(d, "lock_point"));
 	locks::registerHotkeys();
 	locks::loadHotkeys(d);
+	tags::loadHotkeys(d);      /* stash saved per-tag key bindings */
+	tags::reconcileHotkeys();  /* register a Hide/Show hotkey for every saved tag */
 
 	obs_data_release(d);
 	obs_log(LOG_INFO, "config loaded: %d layouts, %d scene colors", (int)g_state.layouts.size(),
@@ -629,6 +788,7 @@ void stateSave()
 		obs_data_set_int(o, "pin_w", e.pinW);
 		obs_data_set_int(o, "pin_h", e.pinH);
 		obs_data_set_bool(o, "seamless", e.seamless);
+		obs_data_set_bool(o, "hide_title_bar", e.hideTitleBar);
 		obs_data_set_string(o, "media_path", e.mediaPath.toUtf8().constData());
 		obs_data_set_string(o, "media_mode", e.mediaMode.toUtf8().constData());
 		obs_data_array_push_back(phs, o);
@@ -759,6 +919,7 @@ void stateSave()
 	obs_data_set_bool(d, "hard_lock", g_state.hardLock);
 	obs_data_set_string(d, "lock_point", g_state.lockPoint.toBase64().constData());
 	locks::saveHotkeys(d);
+	tags::saveHotkeys(d);
 
 	char *dir = obs_module_config_path("");
 	if (dir) {

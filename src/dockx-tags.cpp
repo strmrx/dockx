@@ -153,6 +153,38 @@ QStringList tagsForSource(const QString &uuid)
 	return state().sourceTags.value(uuid);
 }
 
+/* every distinct tag ever assigned, across ALL scene collections. Derived from
+   saved state (no OBS enum), so it is valid at load time before sources exist --
+   used to register the per-tag hotkeys */
+QStringList allTagsEverUsed()
+{
+	QStringList out;
+	for (auto it = state().sourceTags.constBegin(); it != state().sourceTags.constEnd(); ++it)
+		for (const QString &t : it.value()) {
+			bool dup = false;
+			for (const QString &x : out)
+				if (x.compare(t, Qt::CaseInsensitive) == 0) {
+					dup = true;
+					break;
+				}
+			if (!dup)
+				out << t;
+		}
+	out.sort(Qt::CaseInsensitive);
+	return out;
+}
+
+QStringList uuidsForTag(const QString &tag)
+{
+	QStringList out;
+	if (tag.trimmed().isEmpty())
+		return out;
+	for (const SourceInfo &si : listSources())
+		if (si.tags.contains(tag, Qt::CaseInsensitive))
+			out << si.uuid;
+	return out;
+}
+
 void addTagToSources(const QStringList &uuids, const QString &tag)
 {
 	const QString t = tag.trimmed();
@@ -166,6 +198,8 @@ void addTagToSources(const QStringList &uuids, const QString &tag)
 		state().sourceTags[u] = normalize(cur);
 	}
 	stateSave();
+	reconcileHotkeys();
+	tagdock::refresh();
 }
 
 void removeTagFromSources(const QStringList &uuids, const QString &tag)
@@ -186,6 +220,8 @@ void removeTagFromSources(const QStringList &uuids, const QString &tag)
 			state().sourceTags[u] = kept;
 	}
 	stateSave();
+	reconcileHotkeys();
+	tagdock::refresh();
 }
 
 BulkResult applyBulk(const QStringList &uuids, Op op)
@@ -229,6 +265,11 @@ BulkResult applyBulk(const QStringList &uuids, Op op)
 	obs_frontend_source_list_free(&scenes);
 	r.scenes = (int)touchedScenes.size();
 	return r;
+}
+
+BulkResult applyBulkByTag(const QString &tag, Op op)
+{
+	return applyBulk(uuidsForTag(tag), op);
 }
 
 } // namespace tags

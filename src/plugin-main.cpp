@@ -70,6 +70,7 @@ static void on_frontend_event(enum obs_frontend_event event, void *)
 		dockx::filters::rescanSoon();
 		dockx::sourcedocks::refreshAll();
 		dockx::editpreview::refreshAll();
+		dockx::tagdock::refresh(); /* tags belong to the new collection */
 		break;
 	case OBS_FRONTEND_EVENT_PROFILE_CHANGED:
 		/* super-profiles: bring the paired scene collection along */
@@ -92,6 +93,8 @@ static void on_frontend_event(enum obs_frontend_event event, void *)
 		dockx::container::shutdown(); /* hand panels home + capture layout, before stateSave */
 		dockx::stateSave();
 		dockx::locks::unregisterHotkeys();
+		dockx::tags::shutdownHotkeys(); /* after stateSave, which persists the bindings */
+		dockx::tagdock::shutdown();
 		dockx::editpreview::shutdown(); /* displays first, while graphics lives */
 		dockx::sourcedocks::shutdown(); /* displays first, while graphics lives */
 		dockx::filters::shutdown();
@@ -124,6 +127,7 @@ bool obs_module_load(void)
 	dockx::sourcedocks::createFromState();
 	dockx::editpreview::createFromState();
 	dockx::placeholders::createFromState();
+	dockx::tagdock::createDock();
 	obs_frontend_add_event_callback(on_frontend_event, nullptr);
 	obs_frontend_add_tools_menu_item("DockX", tools_menu_clicked, nullptr);
 	return true;

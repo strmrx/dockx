@@ -92,7 +92,11 @@ Ranked by demand x feasibility for a Qt frontend plugin. Context: #1 idea sitewi
 12. **Profile + collection linked switching** ("Super-Profile", 32+23 votes) -- SHIPPED
     v0.51.0. Extends Auto switch to the profile + collection axis.
 13. **Source tagging + bulk ops + find-usages** -- SHIPPED. find-usages v0.20; tagging +
-    bulk ops v0.50.0. Constant forum pain; compounds our search bars.
+    bulk ops v0.50.0. Constant forum pain; compounds our search bars. v0.53.0 (2026-09-11)
+    pushes tags into OBS itself: a dockable "DockX Tags" panel (one-click Hide / Show per
+    tag, Lock / Unlock / Mute / Unmute on right-click) opened from the Tags tab, plus a
+    per-tag Hide/Show hotkey pair in OBS Settings > Hotkeys. (OBS's own source right-click
+    menu cannot be extended by a plugin without replacing it, so tags get their own surface.)
 14. **Managed dock container on a second monitor** (21 votes). MEDIUM; deepens the moat.
     -- SHIPPED v0.52.0 (2026-09-11). One DockX-owned window with dock nesting on that
     lives on another screen; panels assigned to it nest / tab / split freely (the
@@ -354,6 +358,11 @@ off-thesis: encoders, multi-output, NDI, VST, replay buffer.
   minimum the app provably dropped -- the old blind 15s forget made the whole layout visibly
   breathe (shrink/regrow) after applying a layout that squeezed the dock below the window's
   real minimum (Joey's shifting-layout report, 2026-09-09).
+  v0.53.0 (2026-09-11, Joey feedback): the "Seamless" button is now a real toggle -- it
+  lights up + reads "Seamless: ON/off" for the selected dock (was a blind toggle) -- and a
+  new per-dock **HIDE TITLE BAR** option (button + right-click, `hide_title_bar`) drops the
+  app dock's OWN OBS title bar so a photo/video sits snug with no header. Warned in the copy:
+  no title bar = no drag handle, so moving the dock gets fiddly until toggled back on.
 - **Visible preview canvas** (Joey 2026-09-09: camera off = "no indicator that a screen
   is there") -- SHIPPED v0.41.0. The DockX Preview now paints its canvas as a real
   screen: pure black backdrop + a dim frame around the canvas edge, drawn before/after

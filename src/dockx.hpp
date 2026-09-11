@@ -89,7 +89,8 @@ struct PlaceholderEntry {
 	                          tell between an app's panel and its MAIN window when both
 	                          share a title (0 = pinned before this was stored) */
 	int pinH = 0;
-	bool seamless = false; /* strip the pinned window's title bar + border while pinned */
+	bool seamless = false;     /* strip the pinned window's title bar + border while pinned */
+	bool hideTitleBar = false; /* hide this dock's OWN title bar so media/content sits snug (no drag handle) */
 	QString mediaPath;     /* local image/GIF/video shown in the spot; empty = none.
 	                           Mutually exclusive with a pinned window */
 	QString mediaMode;     /* how the media fills the spot: "fit" (default), "fill", "tile" */
@@ -158,6 +159,13 @@ struct SuperProfile {
 	QString collection;
 };
 
+/* a per-tag pair of Hide/Show frontend hotkeys (see tags::reconcileHotkeys) */
+struct TagHotkey {
+	obs_hotkey_id hide = OBS_INVALID_HOTKEY_ID;
+	obs_hotkey_id show = OBS_INVALID_HOTKEY_ID;
+	QString *name = nullptr; /* heap copy of the display tag, handed to the callbacks */
+};
+
 struct State {
 	/* settings (all user visible, defaults ON) */
 	bool nesting = true;
@@ -215,6 +223,8 @@ struct State {
 
 	/* source tags: user labels kept by source uuid so they survive a rename */
 	QHash<QString, QStringList> sourceTags;
+	QHash<QString, TagHotkey> tagHotkeys;  /* active per-tag hide/show hotkeys, keyed by lowercased tag */
+	obs_data_t *tagHotkeyBinds = nullptr;  /* saved key bindings (tag -> {hide,show}); keeps parked ones */
 
 	/* super-profiles: profile <-> scene collection pairings */
 	std::vector<SuperProfile> superProfiles;
@@ -367,6 +377,7 @@ bool pinningSupported();                     /* true on Windows */
 void pinWindow(int id, QWidget *parent);     /* pick a running window to pin */
 void unpinWindow(int id);
 void setSeamless(int id, bool on);         /* hide/restore the pinned window's own frame */
+void setHideTitleBar(int id, bool on);     /* hide/restore this app dock's OWN title bar (snug media) */
 void chooseMedia(int id, QWidget *parent); /* pick a local image/GIF/video to show in the spot */
 void clearMedia(int id);
 void setMediaMode(int id, const QString &mode); /* "fit" | "fill" | "tile" */
@@ -539,10 +550,33 @@ struct BulkResult {
 QList<SourceInfo> listSources();     /* every taggable source in the current collection, sorted by name */
 QStringList allTags();               /* tags in use on the current sources, sorted */
 QStringList tagsForSource(const QString &uuid);
+QStringList allTagsEverUsed(); /* distinct tags across ALL collections (from saved state, no OBS enum) */
+QStringList uuidsForTag(const QString &tag); /* current-collection source uuids carrying this tag */
 void addTagToSources(const QStringList &uuids, const QString &tag);
 void removeTagFromSources(const QStringList &uuids, const QString &tag);
 BulkResult applyBulk(const QStringList &uuids, Op op);
+BulkResult applyBulkByTag(const QString &tag, Op op); /* act on every current source carrying the tag */
+
+/* per-tag Hide/Show hotkeys, shown in OBS Settings > Hotkeys as
+   DockX: hide/show everything tagged "X". Reconciled from the saved tag set;
+   bindings persist in dockx.json (tag_hotkeys) like the loadout hotkeys */
+void reconcileHotkeys(); /* register missing / retire vanished tag hotkeys */
+void loadHotkeys(obs_data_t *d);
+void saveHotkeys(obs_data_t *d);
+void shutdownHotkeys(); /* free heap tag names + hotkeys at EXIT */
 } // namespace tags
+
+/* the DockX Tags dock: a panel inside OBS listing every tag with one-click
+   Hide / Show for the whole tag across every scene (Lock / Unlock / Mute /
+   Unmute on right-click). Registered at load, hidden until opened from the
+   Tags tab. The clean in-OBS home for tag actions, since OBS's own source
+   right-click menu cannot be safely extended by a plugin */
+namespace tagdock {
+void createDock(); /* register the dock; call once at module load */
+void showDock();   /* open + raise it (the Tags tab button) */
+void refresh();    /* rebuild the tag rows after tags change */
+void shutdown();
+} // namespace tagdock
 
 /* collapse the main video preview: OBS's canvas is the QMainWindow central
    widget (docks can only ring it); hiding it hands the whole window to the

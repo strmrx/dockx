@@ -647,6 +647,16 @@ protected:
 		}
 
 		menu.addSeparator();
+		{
+			QAction *htb = menu.addAction("Hide this dock's title bar (snug)");
+			htb->setCheckable(true);
+			htb->setChecked(e->hideTitleBar);
+			htb->setToolTip("No title bar means no drag handle, so moving this dock gets fiddly. "
+					"Turn it back off to move the dock.");
+			QObject::connect(htb, &QAction::triggered, this, [this](bool on) { setHideTitleBar(id, on); });
+		}
+
+		menu.addSeparator();
 		QObject::connect(menu.addAction("Remove this placeholder"), &QAction::triggered, this,
 				 [this]() { QTimer::singleShot(0, [pid = id]() { removeDock(pid); }); });
 
@@ -993,6 +1003,25 @@ static PlaceholderPanel *panelFor(int id)
 	return nullptr;
 }
 
+/* hide/restore the dock's OWN title bar. An empty title-bar widget collapses it
+   to nothing; passing null restores OBS's default. A title-bar-less dock has no
+   drag handle, so this is the opt-in "snug media" look warned about in the
+   dialog. */
+static void applyTitleBarHide(int id, bool on)
+{
+	QMainWindow *m = mainWindow();
+	QDockWidget *dock = m ? m->findChild<QDockWidget *>(dockIdFor(id)) : nullptr;
+	if (!dock)
+		return;
+	if (on) {
+		if (!dock->titleBarWidget())
+			dock->setTitleBarWidget(new QWidget(dock));
+	} else if (QWidget *old = dock->titleBarWidget()) {
+		dock->setTitleBarWidget(nullptr);
+		old->deleteLater();
+	}
+}
+
 static PlaceholderPanel *registerPanel(const PlaceholderEntry &e)
 {
 	PlaceholderPanel *p = new PlaceholderPanel(e.id);
@@ -1002,6 +1031,8 @@ static PlaceholderPanel *registerPanel(const PlaceholderEntry &e)
 		return nullptr;
 	}
 	g_panels.push_back(p);
+	if (e.hideTitleBar)
+		applyTitleBarHide(e.id, true);
 	return p;
 }
 
@@ -1174,6 +1205,16 @@ void setSeamless(int id, bool on)
 	stateSave();
 	if (PlaceholderPanel *p = panelFor(id))
 		p->update(); /* the follower applies the style on its next tick */
+}
+
+void setHideTitleBar(int id, bool on)
+{
+	PlaceholderEntry *e = entryFor(id);
+	if (!e)
+		return;
+	e->hideTitleBar = on;
+	stateSave();
+	applyTitleBarHide(id, on);
 }
 
 void unpinWindow(int id)

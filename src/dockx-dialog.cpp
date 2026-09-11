@@ -1546,6 +1546,13 @@ void showDialog(const QString &initialTab)
 				"in. Tags stick to a source even if you rename it, and are saved with DockX.",
 				tagsTab));
 
+	QPushButton *tgOpenDock =
+		new QPushButton("Open the DockX Tags dock (hide or show tags right inside OBS)", tagsTab);
+	tgOpenDock->setToolTip("Adds a panel to OBS that lists every tag with one-click Hide and Show. Dock it "
+			       "anywhere. Per-tag Hide and Show hotkeys are also in OBS Settings, Hotkeys.");
+	QObject::connect(tgOpenDock, &QPushButton::clicked, tagsTab, []() { tagdock::showDock(); });
+	tgv->addWidget(tgOpenDock);
+
 	QHBoxLayout *tgFilterRow = new QHBoxLayout();
 	QLineEdit *tgSearch = new QLineEdit(tagsTab);
 	tgSearch->setPlaceholderText("Filter by source name, type, or tag");
@@ -2616,15 +2623,46 @@ void showDialog(const QString &initialTab)
 		return it ? it->data(Qt::UserRole).toInt() : 0;
 	};
 
+	/* reflect the selected dock's seamless state on the button (lit + labeled) so
+	   it reads as a real on/off, not a blind toggle */
+	auto phUpdateSeam = [phTab, phSelected]() -> void {
+		const int id = phSelected();
+		bool seam = false, hideBar = false;
+		for (const PlaceholderEntry &e : state().placeholders)
+			if (e.id == id) {
+				seam = e.seamless;
+				hideBar = e.hideTitleBar;
+				break;
+			}
+		if (QPushButton *b = phTab->findChild<QPushButton *>("phSeamBtn")) {
+			b->setChecked(seam);
+			b->setText(seam ? "Seamless: ON" : "Seamless: off");
+		}
+		if (QPushButton *b = phTab->findChild<QPushButton *>("phTitleBtn")) {
+			b->setChecked(hideBar);
+			b->setText(hideBar ? "Title bar: HIDDEN" : "Title bar: shown");
+		}
+	};
+
 	QHBoxLayout *phBtns = new QHBoxLayout();
 	QPushButton *phAdd = new QPushButton("Add app dock", phTab);
 	QPushButton *phLabelBtn = new QPushButton("Set label", phTab);
 	QPushButton *phColorBtn = new QPushButton("Set color", phTab);
 	QPushButton *phPinBtn = new QPushButton("Pin a window", phTab);
 	QPushButton *phUnpinBtn = new QPushButton("Unpin", phTab);
-	QPushButton *phSeamBtn = new QPushButton("Seamless on/off", phTab);
+	QPushButton *phSeamBtn = new QPushButton("Seamless: off", phTab);
+	phSeamBtn->setObjectName("phSeamBtn");
+	phSeamBtn->setCheckable(true);
+	phSeamBtn->setToolTip("Hides the pinned window's own title bar and border so it sits snug in OBS, "
+			      "with no floating-window frame. Only affects an app dock that has a window pinned.");
 	QPushButton *phMediaBtn = new QPushButton("Show image/video", phTab);
 	QPushButton *phMediaClearBtn = new QPushButton("Clear image/video", phTab);
+	QPushButton *phTitleBtn = new QPushButton("Title bar: shown", phTab);
+	phTitleBtn->setObjectName("phTitleBtn");
+	phTitleBtn->setCheckable(true);
+	phTitleBtn->setToolTip("Hide this app dock's own title bar so a photo or video sits snug with no header. "
+			       "Heads up: no title bar means no drag handle, so moving the dock gets fiddly. "
+			       "Turn it back on to move the dock.");
 	QPushButton *phRemoveBtn = new QPushButton("Remove", phTab);
 	phBtns->addWidget(phAdd);
 	phBtns->addWidget(phLabelBtn);
@@ -2640,6 +2678,7 @@ void showDialog(const QString &initialTab)
 	}
 	phBtns->addWidget(phMediaBtn);
 	phBtns->addWidget(phMediaClearBtn);
+	phBtns->addWidget(phTitleBtn);
 	phBtns->addWidget(phRemoveBtn);
 	phBtns->addStretch(1);
 	phv->addLayout(phBtns);
@@ -2697,7 +2736,7 @@ void showDialog(const QString &initialTab)
 		placeholders::unpinWindow(id);
 		phReload();
 	});
-	QObject::connect(phSeamBtn, &QPushButton::clicked, phTab, [phSelected, phReload]() {
+	QObject::connect(phSeamBtn, &QPushButton::clicked, phTab, [phSelected, phReload, phUpdateSeam]() {
 		const int id = phSelected();
 		if (!id)
 			return;
@@ -2708,7 +2747,23 @@ void showDialog(const QString &initialTab)
 			}
 		}
 		phReload();
+		phUpdateSeam();
 	});
+	QObject::connect(phTitleBtn, &QPushButton::clicked, phTab, [phSelected, phReload, phUpdateSeam]() {
+		const int id = phSelected();
+		if (!id)
+			return;
+		for (const PlaceholderEntry &e : state().placeholders) {
+			if (e.id == id) {
+				placeholders::setHideTitleBar(id, !e.hideTitleBar);
+				break;
+			}
+		}
+		phReload();
+		phUpdateSeam();
+	});
+	QObject::connect(phList, &QListWidget::itemSelectionChanged, phTab, [phUpdateSeam]() { phUpdateSeam(); });
+	phUpdateSeam();
 	QObject::connect(phMediaBtn, &QPushButton::clicked, phTab, [phTab, phSelected, phReload]() {
 		const int id = phSelected();
 		if (!id)
