@@ -3178,8 +3178,21 @@ void showDialog(const QString &initialTab)
 			it->setData(Qt::UserRole, di.key);
 		}
 	};
+	/* panels currently living in the second-screen container (created here so the
+	   Refresh button can reload it too; added to the layout further down) */
+	QListWidget *monContained = new QListWidget(monTab);
+	monContained->setSelectionMode(QAbstractItemView::ExtendedSelection);
+	monContained->setMaximumHeight(96);
+	auto monReloadContained = [monContained]() {
+		monContained->clear();
+		for (const panels::DockInfo &di : container::contained()) {
+			QListWidgetItem *it = new QListWidgetItem(di.title, monContained);
+			it->setData(Qt::UserRole, di.key);
+		}
+	};
 	monReloadScreens();
 	monReloadDocks();
+	monReloadContained();
 
 	QHBoxLayout *monBtns = new QHBoxLayout();
 	QPushButton *monSend = new QPushButton("Send docks to monitor", monTab);
@@ -3191,10 +3204,12 @@ void showDialog(const QString &initialTab)
 	monBtns->addWidget(monRefresh);
 	mv->addLayout(monBtns);
 
-	QObject::connect(monRefresh, &QPushButton::clicked, monTab, [monReloadScreens, monReloadDocks]() {
-		monReloadScreens();
-		monReloadDocks();
-	});
+	QObject::connect(monRefresh, &QPushButton::clicked, monTab,
+			 [monReloadScreens, monReloadDocks, monReloadContained]() {
+				 monReloadScreens();
+				 monReloadDocks();
+				 monReloadContained();
+			 });
 	QObject::connect(monSend, &QPushButton::clicked, monTab, [monScreens, monDocks]() {
 		QListWidgetItem *si = monScreens->currentItem();
 		if (!si)
@@ -3221,6 +3236,64 @@ void showDialog(const QString &initialTab)
 				     monTab);
 	monHint->setWordWrap(true);
 	mv->addWidget(monHint);
+
+	/* ---- Second-screen managed container (demand #14) ---- */
+	QFrame *monLine = new QFrame(monTab);
+	monLine->setFrameShape(QFrame::HLine);
+	monLine->setStyleSheet("color: rgba(140,30,255,90);");
+	mv->addWidget(monLine);
+
+	mv->addWidget(tabHead("Or gather panels into one managed window on another screen", monTab));
+	mv->addWidget(groupSub("A single container with full nesting: a tall chat column plus a stacked "
+			       "column beside it, tabs and splits, all on your second monitor. Pick a monitor "
+			       "and one or more docks above, then send them in. It reopens exactly how you left "
+			       "it, and closing it hands every panel back to OBS so nothing is ever lost.",
+			       monTab));
+
+	QPushButton *conAdd = new QPushButton("Put selected docks on the second screen", monTab);
+	makePrimary(conAdd);
+	mv->addWidget(conAdd);
+
+	mv->addWidget(new QLabel("In the container:", monTab));
+	mv->addWidget(monContained);
+
+	QHBoxLayout *conBtns = new QHBoxLayout();
+	QPushButton *conBack = new QPushButton("Send selected back to OBS", monTab);
+	QPushButton *conClose = new QPushButton("Close container", monTab);
+	conBtns->addWidget(conBack);
+	conBtns->addStretch(1);
+	conBtns->addWidget(conClose);
+	mv->addLayout(conBtns);
+
+	QObject::connect(conAdd, &QPushButton::clicked, monTab,
+			 [monScreens, monDocks, monReloadDocks, monReloadContained]() {
+				 QListWidgetItem *si = monScreens->currentItem();
+				 if (!si)
+					 return;
+				 QStringList keys;
+				 for (QListWidgetItem *it : monDocks->selectedItems())
+					 keys << it->data(Qt::UserRole).toString();
+				 if (keys.isEmpty())
+					 return;
+				 container::assign(keys, si->data(Qt::UserRole).toInt());
+				 monReloadDocks();
+				 monReloadContained();
+			 });
+	QObject::connect(conBack, &QPushButton::clicked, monTab, [monContained, monReloadDocks, monReloadContained]() {
+		QStringList keys;
+		for (QListWidgetItem *it : monContained->selectedItems())
+			keys << it->data(Qt::UserRole).toString();
+		if (keys.isEmpty())
+			return;
+		container::sendBack(keys);
+		monReloadDocks();
+		monReloadContained();
+	});
+	QObject::connect(conClose, &QPushButton::clicked, monTab, [monReloadDocks, monReloadContained]() {
+		container::close();
+		monReloadDocks();
+		monReloadContained();
+	});
 
 	tabs->addTab(monTab, "Monitors");
 

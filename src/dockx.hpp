@@ -220,6 +220,13 @@ struct State {
 	std::vector<SuperProfile> superProfiles;
 	bool superProfileAutoFollow = true; /* a profile change in OBS loads its paired collection */
 
+	/* second-monitor managed dock container */
+	bool containerOpen = false;   /* the container was open last session -> reopen it */
+	int containerScreen = -1;     /* screen the container last sat on (index hint) */
+	QStringList containerDocks;   /* stable keys of the panels assigned to the container */
+	QByteArray containerGeometry; /* the window's position + size (saveGeometry) */
+	QByteArray containerLayout;   /* the inner nesting arrangement (saveState) */
+
 	/* lock tools */
 	QByteArray lockPoint;  /* dock arrangement to snap back to (soft lock) */
 	bool hardLock = false; /* docks frozen: can't be dragged or floated */
@@ -470,6 +477,24 @@ int rescueStrayDocks(); /* reflow every off screen dock home; returns moved */
 void validateVisible(); /* call after restoreState so no dock lands off screen */
 void installWatch();    /* listen for monitor unplug; call once after load */
 } // namespace monitors
+
+/* second-monitor managed dock container: ONE DockX-owned window (dock nesting
+   on) that lives on another screen. Panels assigned to it are reparented in and
+   can be nested / tabbed / split freely, exactly like the OBS main window -- a
+   full-height chat column plus a stacked column beside it, on the second screen,
+   as one managed surface. The window's screen + size, its inner arrangement, and
+   which panels it holds all restore each launch. On close (and on OBS exit) every
+   panel is handed back to the OBS main window first, so a dock is never lost. */
+namespace container {
+bool isOpen();
+void openOn(int screenIndex);               /* create + show the container on that screen */
+void close();                               /* hand panels back to the main window, hide it */
+void assign(const QStringList &dockKeys, int screenIndex); /* pull these panels into it */
+void sendBack(const QStringList &dockKeys); /* return these panels to the main window */
+QList<panels::DockInfo> contained();        /* key + title of the panels it holds now */
+void restoreFromState();                    /* reopen at launch if it was open (call after load) */
+void shutdown();                            /* release panels + destroy the window (OBS exit) */
+} // namespace container
 
 /* project-wide source search: one index of every source across every scene in
    the collection (group children + nested scenes included), so a single box can

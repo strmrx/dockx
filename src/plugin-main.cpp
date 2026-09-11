@@ -41,6 +41,7 @@ static void on_frontend_event(enum obs_frontend_event event, void *)
 		dockx::editpreview::refreshAll();
 		dockx::missing::autoPopIfNeeded();
 		dockx::monitors::installWatch();
+		dockx::container::restoreFromState();
 		dockx::preview::apply();
 		dockx::edges::start();
 		dockx::blocker::start();
@@ -87,7 +88,8 @@ static void on_frontend_event(enum obs_frontend_event event, void *)
 		dockx::panels::applyChromeSoon();
 		break;
 	case OBS_FRONTEND_EVENT_EXIT:
-		dockx::setObsReady(false); /* no draws while OBS tears down */
+		dockx::setObsReady(false);   /* no draws while OBS tears down */
+		dockx::container::shutdown(); /* hand panels home + capture layout, before stateSave */
 		dockx::stateSave();
 		dockx::locks::unregisterHotkeys();
 		dockx::editpreview::shutdown(); /* displays first, while graphics lives */

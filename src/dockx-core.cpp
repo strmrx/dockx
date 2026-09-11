@@ -201,6 +201,7 @@ void stateLoad()
 	obs_data_set_default_bool(d, "align_tools", false);
 	obs_data_set_default_bool(d, "auto_rescue", true);
 	obs_data_set_default_bool(d, "preview_collapsed", false);
+	obs_data_set_default_int(d, "container_screen", -1);
 	obs_data_set_default_int(d, "next_id", 1);
 	obs_data_set_default_int(d, "next_source_dock_id", 1);
 	obs_data_set_default_int(d, "next_loadout_id", 1);
@@ -232,6 +233,14 @@ void stateLoad()
 	g_state.previewCollapsed = obs_data_get_bool(d, "preview_collapsed");
 	g_state.edgeTop = (int)obs_data_get_int(d, "edge_top");
 	g_state.edgeBottom = (int)obs_data_get_int(d, "edge_bottom");
+	g_state.containerOpen = obs_data_get_bool(d, "container_open");
+	g_state.containerScreen = (int)obs_data_get_int(d, "container_screen");
+	g_state.containerGeometry = QByteArray::fromBase64(obs_data_get_string(d, "container_geometry"));
+	g_state.containerLayout = QByteArray::fromBase64(obs_data_get_string(d, "container_layout"));
+	{
+		const QString cd = QString::fromUtf8(obs_data_get_string(d, "container_docks"));
+		g_state.containerDocks = cd.isEmpty() ? QStringList() : cd.split(QChar('\n'));
+	}
 	g_state.nextLoadoutId = (int)obs_data_get_int(d, "next_loadout_id");
 	obs_data_array_t *louts = obs_data_get_array(d, "loadouts");
 	if (louts) {
@@ -547,6 +556,11 @@ void stateSave()
 	obs_data_set_bool(d, "preview_collapsed", g_state.previewCollapsed);
 	obs_data_set_int(d, "edge_top", g_state.edgeTop);
 	obs_data_set_int(d, "edge_bottom", g_state.edgeBottom);
+	obs_data_set_bool(d, "container_open", g_state.containerOpen);
+	obs_data_set_int(d, "container_screen", g_state.containerScreen);
+	obs_data_set_string(d, "container_geometry", g_state.containerGeometry.toBase64().constData());
+	obs_data_set_string(d, "container_layout", g_state.containerLayout.toBase64().constData());
+	obs_data_set_string(d, "container_docks", g_state.containerDocks.join(QChar('\n')).toUtf8().constData());
 	obs_data_set_int(d, "next_loadout_id", g_state.nextLoadoutId);
 	obs_data_array_t *louts = obs_data_array_create();
 	for (const SourceLoadout &l : g_state.loadouts) {

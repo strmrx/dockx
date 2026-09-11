@@ -94,7 +94,11 @@ Ranked by demand x feasibility for a Qt frontend plugin. Context: #1 idea sitewi
 13. **Source tagging + bulk ops + find-usages** -- SHIPPED. find-usages v0.20; tagging +
     bulk ops v0.50.0. Constant forum pain; compounds our search bars.
 14. **Managed dock container on a second monitor** (21 votes). MEDIUM; deepens the moat.
-    NEXT PICK (Joey 2026-09-11): build fresh in a new session.
+    -- SHIPPED v0.52.0 (2026-09-11). One DockX-owned window with dock nesting on that
+    lives on another screen; panels assigned to it nest / tab / split freely (the
+    step up from v0.19's "send docks to monitor" free-floating tiles). Window screen +
+    size, inner arrangement, and panel set all restore each launch; on close (and OBS
+    exit) every panel is handed back to the OBS main window so one is never lost.
 
 Strategic reads: folders+thumbnails (#1+#7) = most wanted organization feature in OBS
 history with a beatable incumbent; #2 is proven at 227k downloads and unlocks 6/8/10;
@@ -183,6 +187,23 @@ off-thesis: encoders, multi-output, NDI, VST, replay buffer.
   demand -- the elegant recovery for someone with no saved layout to fall back on.
   Auto rescue has a Settings toggle (default ON). Handles 2, 3, N monitors. New file
   dockx-monitors.cpp; setting auto_rescue persisted in dockx.json.
+- Second-screen managed dock container -- SHIPPED v0.52.0 (2026-09-11, demand #14, the
+  step up from the v0.19 send-to-monitor tiles). New file dockx-container.cpp (namespace
+  dockx::container). A DockX-owned top-level QMainWindow ("DockX Panels") with dock
+  nesting on (AllowNestedDocks | AllowTabbedDocks | GroupedDragging, zero-size central
+  widget so dock areas fill it) that lives on another screen. From the Monitors tab, pick
+  a screen + docks, "Put selected docks on the second screen" reparents them in
+  (addDockWidget); inside, they nest / tab / split like the main window -- the full-height
+  chat + stacked column, but on monitor 2 as ONE managed surface. An "In the container"
+  list + "Send selected back to OBS" + "Close container" round it out. Persists
+  container_open / container_screen / container_docks (keys) / container_geometry
+  (saveGeometry) / container_layout (saveState) in dockx.json; restoreFromState() reopens
+  it on FINISHED_LOADING exactly as left (unresolved dock keys skipped, never fails).
+  HARD SAFETY RULE: on user close AND on OBS exit (container::shutdown() runs before
+  stateSave in the EXIT case, draws already stopped) every panel is handed back to the
+  OBS main window first, so OBS never destroys a dock our window still holds and nothing
+  is stranded off screen. User close also returns panels + clears the assignment (Joey's
+  2026-09-11 call); OBS exit keeps the assignment so it reopens identically next launch.
 - Project-wide source search -- SHIPPED v0.20 (2026-08-03, demand #13 find-usages +
   Joey ask). New Find tab (first tab in Tools > DockX) + a "DockX: Find source" Tools
   menu item that opens straight to it. One search box scans every scene in the collection
