@@ -1550,11 +1550,17 @@ void showDialog(const QString &initialTab)
 	QLineEdit *tgSearch = new QLineEdit(tagsTab);
 	tgSearch->setPlaceholderText("Filter by source name, type, or tag");
 	tgSearch->setClearButtonEnabled(true);
-	tgFilterRow->addWidget(tgSearch, 1);
+	tgSearch->setMaximumWidth(320);
+	tgFilterRow->addWidget(tgSearch, 0);
 	tgFilterRow->addWidget(new QLabel("Tag:", tagsTab));
 	QComboBox *tgTagFilter = new QComboBox(tagsTab);
 	tgTagFilter->addItem("All tags");
-	tgFilterRow->addWidget(tgTagFilter);
+	tgTagFilter->setMinimumWidth(200);
+	tgTagFilter->setSizeAdjustPolicy(QComboBox::AdjustToContents);
+	// widen the drop-down list itself so long tags are not clipped to "pla...und"
+	tgTagFilter->view()->setMinimumWidth(200);
+	tgTagFilter->view()->setTextElideMode(Qt::ElideNone);
+	tgFilterRow->addWidget(tgTagFilter, 1);
 	tgv->addLayout(tgFilterRow);
 
 	QTreeWidget *tgTree = new QTreeWidget(tagsTab);
