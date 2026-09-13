@@ -3028,8 +3028,29 @@ void showDialog(const QString &initialTab)
 	/* ---------- Switch tab (profiles + collections, live guarded) ---------- */
 	QWidget *swTab = new QWidget();
 	QVBoxLayout *swv = new QVBoxLayout(swTab);
-	swv->addWidget(tabHead("Switch your OBS profile or scene collection without risking the stream",
-			       swTab));
+	/* headline + a hover (?) that teaches "profile" vs "scene collection", the two
+	   OBS terms this tab leans on the hardest (Joey 2026-09-13) */
+	QHBoxLayout *swHead = new QHBoxLayout();
+	swHead->setSpacing(6);
+	swHead->addWidget(tabHead("Switch your OBS profile or scene collection without risking the stream",
+				  swTab));
+	QLabel *swHelp = new QLabel("(?)", swTab);
+	swHelp->setCursor(Qt::WhatsThisCursor);
+	{
+		QColor hc = swHelp->palette().color(QPalette::Text);
+		swHelp->setStyleSheet(
+			QString("color: rgba(%1,%2,%3,150);").arg(hc.red()).arg(hc.green()).arg(hc.blue()));
+	}
+	swHelp->setToolTip("OBS terms, quickly:\n"
+			   "• A \"profile\" is your output settings: encoder, resolution, bitrate, and "
+			   "your stream keys. Which service you go live to lives here.\n"
+			   "• A \"scene collection\" is all your scenes and sources together (your whole "
+			   "on-screen setup).\n\n"
+			   "They are independent: you can keep one profile and swap collections, or "
+			   "vice versa. OBS switches each under its own top menu.");
+	swHead->addWidget(swHelp);
+	swHead->addStretch(1);
+	swv->addLayout(swHead);
 	swv->addWidget(groupSub("Switching either is instant when you are offline. When you are live or "
 				"recording, DockX blocks profile changes (OBS cannot do them) and warns "
 				"before a collection change, because rebuilding scenes can hiccup the "
