@@ -408,6 +408,12 @@ off-thesis: encoders, multi-output, NDI, VST, replay buffer.
   docks (chat) draw their own scroll bars inside the web page; the Windows title bar
   belongs to Windows. Same version: the "Lines between docks" controls in Colors > Docks
   got their own divider + bold heading (they blended into the dock color pile).
+  v0.53.1 (2026-09-11, Joey bug): the accent's flat button background hid OBS's own
+  active-state coloring on the live-control buttons (Start Streaming / Start Recording /
+  Replay / Virtual Cam / Studio Mode / broadcast), so you could not tell what was live.
+  `chromeBlock` now mirrors OBS's exact `.state-active` selectors for those buttons and
+  paints them the FULL accent when active (lighter accent on hover), idle keeps the faint
+  tint -- a clear on/off contrast in the brand color. Only emitted while the accent is on.
 - **Layouts tab de-wording pass** (Joey 2026-09-09: "this is a scary page... a LOT of
   words, small print, not a great UX") -- SHIPPED v0.36.0, the MODEL for restyling the
   other tabs. The recipe: (1) empty lists explain themselves (new `HintList` widget
@@ -427,7 +433,12 @@ off-thesis: encoders, multi-output, NDI, VST, replay buffer.
   with a bold one line purpose headline (`tabHead` helper) + a dim `groupSub` "how"
   line directly under it; explanations that sat at the bottom of a tab (Find, Profiles)
   moved up into that sub line. Recipe addendum (8) for all future tabs: purpose first,
-  bold, at the top.
+  bold, at the top. v0.53.2 (2026-09-13, Joey): on the Layouts tab the headline is now
+  larger + centered over both columns, and its explanation sentence is SPLIT into two --
+  the panels half sits over the left (dock layouts) column, the scenes half over the
+  right (source loadouts) column -- so each half describes the section beneath it. Same
+  version: in the right column "Lock sources in scenes" now sits ABOVE "Auto switch dock
+  layouts by scene".
 - **Source tags + bulk ops** (demand #13, Joey 2026-09-11: "Source tagging is awesome,
   especially with the bulk ops") -- SHIPPED v0.50.0 (new file `src/dockx-tags.cpp`, new
   "Tags" tab next to Filters). Give any source your own labels (kept by source UUID in

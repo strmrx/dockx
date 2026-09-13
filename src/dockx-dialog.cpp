@@ -422,15 +422,39 @@ void showDialog(const QString &initialTab)
 	QWidget *findTab = new QWidget();
 	QVBoxLayout *findV = new QVBoxLayout(findTab);
 
-	findV->addWidget(tabHead("Find any source in any scene, fast", findTab));
-	findV->addWidget(groupSub("Search every scene in this collection at once. Double-click a result "
+	/* headline + a hover (?) that teaches the OBS terms a new user may not know
+	   (Joey 2026-09-13: OBS itself calls them "scene collections", so name it) */
+	QHBoxLayout *findHead = new QHBoxLayout();
+	findHead->setSpacing(6);
+	findHead->addWidget(tabHead("Find any source in any scene, fast", findTab));
+	QLabel *findHelp = new QLabel("(?)", findTab);
+	findHelp->setCursor(Qt::WhatsThisCursor);
+	{
+		QColor hc = findHelp->palette().color(QPalette::Text);
+		findHelp->setStyleSheet(
+			QString("color: rgba(%1,%2,%3,150);").arg(hc.red()).arg(hc.green()).arg(hc.blue()));
+	}
+	findHelp->setToolTip("OBS terms, quickly:\n"
+			     "• A \"scene\" is one arrangement on your canvas (camera, game, chat overlay).\n"
+			     "• All the scenes you have loaded together are a \"scene collection\" "
+			     "(your whole setup). You switch between them in OBS under Scene Collection.\n\n"
+			     "This tab searches every scene in the collection you have loaded, all at once.");
+	findHead->addWidget(findHelp);
+	findHead->addStretch(1);
+	findV->addLayout(findHead);
+
+	findV->addWidget(groupSub("Search all the scenes you have loaded, in one shot. Double-click a result "
 				  "to jump to that scene and select it; right-click for more, like "
 				  "opening its Properties or removing it. Sources marked (unused) are "
-				  "loaded in your project but placed in no scene.",
+				  "loaded in OBS but placed in no scene.",
+				  findTab));
+	findV->addWidget(groupSub("New to OBS? All the scenes you have loaded together are called a "
+				  "\"scene collection\" (your whole OBS setup). This searches the whole thing "
+				  "at once.",
 				  findTab));
 
 	QLineEdit *findBox = new QLineEdit(findTab);
-	findBox->setPlaceholderText("Search every source in your project by name, type, or scene");
+	findBox->setPlaceholderText("Search all your sources by name, type, or scene");
 	findBox->setClearButtonEnabled(true);
 	findV->addWidget(findBox);
 
@@ -642,11 +666,37 @@ void showDialog(const QString &initialTab)
 	/* ---------- Layouts tab ---------- */
 	QWidget *layoutsTab = new QWidget();
 	QVBoxLayout *lroot = new QVBoxLayout(layoutsTab);
-	lroot->addWidget(tabHead("Save your setups and jump between them", layoutsTab));
-	lroot->addWidget(groupSub("The left side is your panels: save dock layouts, stretch a dock wide, "
-				  "lock everything in place. The right side is inside your scenes: save "
-				  "which sources are shown, and auto switch layouts by scene.",
-				  layoutsTab));
+	/* grow a label's font by a factor, robust to point- vs pixel-sized fonts */
+	auto growFont = [](QLabel *l, double f) {
+		QFont ft = l->font();
+		if (ft.pointSizeF() > 0)
+			ft.setPointSizeF(ft.pointSizeF() * f);
+		else
+			ft.setPixelSize(qMax(1, (int)(ft.pixelSize() * f)));
+		l->setFont(ft);
+	};
+
+	/* bigger, centered headline over both columns */
+	QLabel *lHead = tabHead("Save your setups and jump between them", layoutsTab);
+	growFont(lHead, 1.35);
+	lHead->setAlignment(Qt::AlignHCenter);
+	lroot->addWidget(lHead);
+
+	/* the explanation is split so each half sits over the column it describes:
+	   left = the panels/dock-layouts column, right = the source-loadouts column */
+	QHBoxLayout *lsub = new QHBoxLayout();
+	QLabel *lSubL = groupSub("Your panels: save dock layouts, stretch a dock wide, "
+				 "and lock everything in place.",
+				 layoutsTab);
+	QLabel *lSubR = groupSub("Inside your scenes: save which sources are shown, "
+				 "and auto switch layouts by scene.",
+				 layoutsTab);
+	growFont(lSubL, 1.1);
+	growFont(lSubR, 1.1);
+	lsub->addWidget(lSubL, 1);
+	lsub->addWidget(lSubR, 1);
+	lroot->addLayout(lsub);
+
 	QHBoxLayout *lcols = new QHBoxLayout();
 	lroot->addLayout(lcols, 1);
 	QVBoxLayout *lv = new QVBoxLayout();  /* left: dock layouts + templates */
@@ -1446,8 +1496,8 @@ void showDialog(const QString &initialTab)
 		reloadRules();
 	});
 
-	lvR->addWidget(autoTab, 1);
 	lvR->addWidget(srcGroup);
+	lvR->addWidget(autoTab, 1);
 
 	/* ---------- Filters tab ---------- */
 	QWidget *filtersTab = new QWidget();

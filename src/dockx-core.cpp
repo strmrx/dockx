@@ -1283,8 +1283,36 @@ static QString chromeBlock(const QColor &c)
 		       " QLineEdit:focus, QSpinBox:focus, QDoubleSpinBox:focus, QComboBox:focus"
 		       " { border: 1px solid %1; }"
 		       " QGroupBox::title { color: %1; }"
-		       " QDockWidget::title { background-color: %6; } ")
-		       .arg(hex, onAccent, tint(60), tint(140), c.darker(120).name(), tint(35)) +
+		       " QDockWidget::title { background-color: %6; }"
+		       /* OBS's live-control buttons (Start Streaming, Start Recording,
+			  Replay, Virtual Cam, Studio Mode, broadcast) must still CLEARLY
+			  change color when they go active, or you cannot tell what is
+			  live. Our flat "%3" background above overrides OBS's own active
+			  coloring, so mirror OBS's exact active-state selectors here and
+			  paint them with the FULL accent when active (idle keeps the faint
+			  tint) -- a strong, readable on/off contrast in the brand color. */
+		       " #streamButton:!hover:!pressed.state-active,"
+		       " #recordButton:!hover:!pressed.state-active,"
+		       " #pauseRecordButton:!hover:!pressed.state-active,"
+		       " #replayBufferButton:!hover:!pressed.state-active,"
+		       " #saveReplayButton:!hover:!pressed.state-active,"
+		       " #virtualCamButton:!hover:!pressed.state-active,"
+		       " #virtualCamConfigButton:!hover:!pressed.state-active,"
+		       " #modeSwitch:!hover:!pressed.state-active,"
+		       " #broadcastButton:!hover:!pressed.state-active"
+		       " { background: %1; color: %2; }"
+		       " #streamButton:hover:!pressed.state-active,"
+		       " #recordButton:hover:!pressed.state-active,"
+		       " #pauseRecordButton:hover:!pressed.state-active,"
+		       " #replayBufferButton:hover:!pressed.state-active,"
+		       " #saveReplayButton:hover:!pressed.state-active,"
+		       " #virtualCamButton:hover:!pressed.state-active,"
+		       " #virtualCamConfigButton:hover:!pressed.state-active,"
+		       " #modeSwitch:hover:!pressed.state-active,"
+		       " #broadcastButton:hover:!pressed.state-active"
+		       " { background: %7; color: %2; } ")
+		       .arg(hex, onAccent, tint(60), tint(140), c.darker(120).name(), tint(35),
+			    c.lighter(135).name()) +
 	       CHROME_MARK_END;
 }
 
