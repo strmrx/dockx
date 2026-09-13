@@ -174,6 +174,7 @@ protected:
 private:
 	void evaluate(QMainWindow *m, int delta, const QPoint &globalPos)
 	{
+		Q_UNUSED(m); /* kept for signature symmetry; GCC/Clang -Werror flags it */
 		/* the shrinking side is the one the mouse moves toward; find the
 		   column/row of docks whose press-time near edge lined up with
 		   the separator, then check whether that edge actually moved */
