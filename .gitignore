@@ -30,3 +30,6 @@
 !CLAUDE.md
 !handoff.md
 !/docs
+
+# Packaged release artifacts (built by installer/package.ps1)
+/release/
