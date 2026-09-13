@@ -438,7 +438,16 @@ off-thesis: encoders, multi-output, NDI, VST, replay buffer.
   the panels half sits over the left (dock layouts) column, the scenes half over the
   right (source loadouts) column -- so each half describes the section beneath it. Same
   version: in the right column "Lock sources in scenes" now sits ABOVE "Auto switch dock
-  layouts by scene".
+  layouts by scene". v0.53.2 also added a hover `(?)` badge (QLabel + WhatsThisCursor +
+  multi-line tooltip) next to the Find headline that DEFINES the OBS terms a new user meets
+  ("scene" vs "scene collection") rather than scrubbing them -- OBS's own menus use the term,
+  so naming it makes it click. v0.53.3 (2026-09-13, Joey) reused that same `(?)`-badge pattern
+  on the Profiles tab to define "profile" (output settings) vs "scene collection". This pattern
+  is the standing way to carry OBS jargon on any tab.
+- **Empty-locale warning fix** (v0.53.3): `data/locale/en-US.ini` shipped as a 0-byte file, so
+  OBS logged an empty-locale warning on load. It now carries one real key (`dockx="DockX"`);
+  all user-facing strings remain hardcoded in the C++ (single source of truth), the file exists
+  only to satisfy OBS's locale loader.
 - **Source tags + bulk ops** (demand #13, Joey 2026-09-11: "Source tagging is awesome,
   especially with the bulk ops") -- SHIPPED v0.50.0 (new file `src/dockx-tags.cpp`, new
   "Tags" tab next to Filters). Give any source your own labels (kept by source UUID in
