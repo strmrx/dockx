@@ -1,59 +1,82 @@
-# OBS Plugin Template
+# DockX
 
-## Introduction
+**Flexible dock layouts for OBS Studio. Your OBS, your way.**
 
-The plugin template is meant to be used as a starting point for OBS Studio plugin development. It includes:
+DockX is a free, native OBS Studio plugin that unlocks the dock layouts OBS never let you
+build, then piles on the layout tools OBS always needed. It lives inside OBS under
+**Tools > DockX**.
 
-* Boilerplate plugin source code
-* A CMake project file
-* GitHub Actions workflows and repository actions
+> **[Download DockX](https://strmrx.com/dockx)** &nbsp;·&nbsp; [Guides](https://strmrx.com/dockx) &nbsp;·&nbsp; [Support on Ko-fi](https://ko-fi.com/strmrx) &nbsp;·&nbsp; by [StrmrX](https://strmrx.com)
 
-## Supported Build Environments
+Free, with every feature unlocked, and it stays that way.
 
-| Platform  | Tool   |
-|-----------|--------|
-| Windows   | Visual Studio 17 2022 |
-| macOS     | XCode 16.0 |
-| Windows, macOS  | CMake 3.30.5 |
-| Ubuntu 24.04 | CMake 3.28.3 |
-| Ubuntu 24.04 | `ninja-build` |
-| Ubuntu 24.04 | `pkg-config`
-| Ubuntu 24.04 | `build-essential` |
+---
 
-## Quick Start
+## Why DockX
 
-An absolute bare-bones [Quick Start Guide](https://github.com/obsproject/obs-plugintemplate/wiki/Quick-Start-Guide) is available in the wiki.
+OBS's dock system is row based: you cannot put a full-height chat column next to a second
+column of stacked panels. The window framework OBS is built on has supported nested docks
+for years. OBS just never turned it on. DockX turns it on from inside OBS, and makes the
+whole thing a product.
 
-## Documentation
+## Features
 
-All documentation can be found in the [Plugin Template Wiki](https://github.com/obsproject/obs-plugintemplate/wiki).
+- **Flexible dock nesting** - full-height columns beside stacked panels; build the layout OBS never allowed.
+- **DockX Preview** - a live, editable canvas inside a dock. Move, resize, rotate and crop sources from a panel, with snapping and studio-mode support. Per-dock zoom and pan.
+- **Scene Folders** - a collapsible, searchable folder tree over your scene list, with live thumbnails and a grid view.
+- **Saved layouts and hotkeys** - snapshot any dock arrangement and bring it back with a hotkey, or auto-switch it with the scene. Lock a layout so it never drifts mid stream.
+- **Source loadouts** - save where every source sits and snap them all back in one click.
+- **Find any source** - one search box scans every scene at once; jump to a source, open its properties, clean up orphans.
+- **Source tags + bulk actions** - label sources, then Show / Hide / Lock / Mute a whole group across every scene at once.
+- **Wide docks** - stretch a dock across a whole row.
+- **Pin any window** - dock an outside app (a TikTok Live Studio chat, a browser, a music player) into your OBS layout (Windows).
+- **Second-screen container** - gather panels into one managed, nestable window on another monitor.
+- **Colors and themes** - recolor OBS to your brand, with one-click looks.
+- **Align and distribute** - line up, space evenly, and center on canvas from a proper Align tab.
 
-Suggested reading to get up and running:
+## Install (Windows)
 
-* [Getting started](https://github.com/obsproject/obs-plugintemplate/wiki/Getting-Started)
-* [Build system requirements](https://github.com/obsproject/obs-plugintemplate/wiki/Build-System-Requirements)
-* [Build system options](https://github.com/obsproject/obs-plugintemplate/wiki/CMake-Build-System-Options)
+DockX is a Windows plugin for now. Two ways to install:
 
-## GitHub Actions & CI
+1. **Installer (recommended):** download the `.exe` from [strmrx.com/dockx](https://strmrx.com/dockx)
+   or the [Releases page](https://github.com/strmrx/dockx/releases). Close OBS, run it, done.
+   It finds OBS for you and adds an uninstaller.
+2. **Zip (manual):** download the `.zip`, close OBS, and run `install.bat` as administrator
+   (or copy `dockx.dll` into `obs-plugins\64bit\` and `locale\en-US.ini` into
+   `data\obs-plugins\dockx\locale\` inside your OBS folder).
 
-Default GitHub Actions workflows are available for the following repository actions:
+Then open OBS and look under **Tools > DockX**.
 
-* `push`: Run for commits or tags pushed to `master` or `main` branches.
-* `pr-pull`: Run when a Pull Request has been pushed or synchronized.
-* `dispatch`: Run when triggered by the workflow dispatch in GitHub's user interface.
-* `build-project`: Builds the actual project and is triggered by other workflows.
-* `check-format`: Checks CMake and plugin source code formatting and is triggered by other workflows.
+### About the Windows security warning
 
-The workflows make use of GitHub repository actions (contained in `.github/actions`) and build scripts (contained in `.github/scripts`) which are not needed for local development, but might need to be adjusted if additional/different steps are required to build the plugin.
+Windows may show a blue "Windows protected your PC" box, and antivirus may pause to scan the
+files. This is normal for new software from a small publisher without an expensive code
+signing certificate. It does not mean anything is wrong. DockX is open source (you are
+reading its repo), and the installer only copies the plugin into your OBS folder. Click
+"More info" then "Run anyway" to continue.
 
-### Retrieving build artifacts
+## Support development
 
-Successful builds on GitHub Actions will produce build artifacts that can be downloaded for testing. These artifacts are commonly simple archives and will not contain package installers or installation programs.
+DockX is free and every feature is unlocked. If it earns a spot in your setup, a tip keeps
+the updates coming: **[Support on Ko-fi](https://ko-fi.com/strmrx)**. No pressure, and
+nothing is ever locked behind it.
 
-### Building a Release
+## Build from source
 
-To create a release, an appropriately named tag needs to be pushed to the `main`/`master` branch using semantic versioning (e.g., `12.3.4`, `23.4.5-beta2`). A draft release will be created on the associated repository with generated installer packages or installation programs attached as release artifacts.
+DockX is based on the official [obs-plugintemplate](https://github.com/obsproject/obs-plugintemplate).
+Dependencies (libobs, obs-frontend-api, Qt6) are downloaded at configure time.
 
-## Signing and Notarizing on macOS
+```sh
+cmake --preset windows-x64
+cmake --build build_x64 --config RelWithDebInfo
+```
 
-Basic concepts of codesigning and notarization on macOS are explained in the correspodning [Wiki article](https://github.com/obsproject/obs-plugintemplate/wiki/Codesigning-On-macOS) which has a specific section for the [GitHub Actions setup](https://github.com/obsproject/obs-plugintemplate/wiki/Codesigning-On-macOS#setting-up-code-signing-for-github-actions).
+Output is `dockx.dll`. See `CLAUDE.md` and `docs/concept.md` for architecture and roadmap.
+
+## License
+
+GPL v2, inherited from OBS Studio and the plugin template. See [LICENSE](LICENSE).
+
+---
+
+Made by [StrmrX](https://strmrx.com) - tools built by streamers, for streamers.
