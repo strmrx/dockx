@@ -1,4 +1,8 @@
-# DockX
+<picture>
+  <source media="(prefers-color-scheme: dark)" srcset="brand/dockx-logo.png">
+  <source media="(prefers-color-scheme: light)" srcset="brand/dockx-logo-light.png">
+  <img src="brand/dockx-logo.png" alt="DockX" width="280">
+</picture>
 
 **Flexible dock layouts for OBS Studio. Your OBS, your way.**
 

@@ -1,0 +1,31 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 257 72" width="257" height="72" role="img" aria-label="DockX">
+  <defs>
+    <linearGradient id="dxg" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0" stop-color="#ff8a3d"/><stop offset="0.55" stop-color="#ff7828"/><stop offset="1" stop-color="#ff3d2e"/>
+    </linearGradient>
+    <linearGradient id="sxXG" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0" stop-color="#ff9d5c"/><stop offset="0.5" stop-color="#ff7828"/><stop offset="1" stop-color="#ff3d2e"/>
+    </linearGradient>
+    <linearGradient id="dxglow" x1="0.5" y1="0" x2="0.5" y2="1">
+      <stop offset="0" stop-color="#ffffff" stop-opacity="0.06"/><stop offset="0.4" stop-color="#ffffff" stop-opacity="0"/>
+    </linearGradient>
+    <filter id="xglow" x="-60%" y="-60%" width="220%" height="220%">
+      <feDropShadow dx="0" dy="0" stdDeviation="6" flood-color="#ff7828" flood-opacity="0.45"/>
+    </filter>
+  </defs>
+  <g transform="translate(4,4)">
+    <rect x="0" y="0" width="64" height="64" rx="15" fill="#0b0b0f"/>
+    <rect x="0.75" y="0.75" width="62.5" height="62.5" rx="14.25" fill="url(#dxglow)"/>
+    <rect x="0.75" y="0.75" width="62.5" height="62.5" rx="14.25" fill="none" stroke="#ff7828" stroke-opacity="0.18" stroke-width="1.5"/>
+    <rect x="13" y="13" width="12" height="38" rx="3.5" fill="url(#dxg)"/>
+    <rect x="28.5" y="13" width="22.5" height="10.5" rx="3" fill="url(#dxg)"/>
+    <rect x="28.5" y="26.75" width="22.5" height="10.5" rx="3" fill="url(#dxg)"/>
+    <rect x="28.5" y="40.5" width="22.5" height="10.5" rx="3" fill="url(#dxg)"/>
+  </g>
+  <path transform="translate(82, 54.20)" d="M3.38 0L3.38-36.40L26.68-36.40L32.92-30.16L32.92-6.24L26.68 0L3.38 0M10.45-6.03L23.19-6.03L25.84-8.68L25.84-27.72L23.19-30.37L10.45-30.37L10.45-6.03M43.73 0L38.38-5.41L38.38-20.49L43.73-25.90L58.60-25.90L63.96-20.49L63.96-5.41L58.60 0L43.73 0M47.06-5.72L55.28-5.72L57.10-7.54L57.10-18.36L55.28-20.18L47.06-20.18L45.24-18.36L45.24-7.54L47.06-5.72M74.41 0L69.16-5.30L69.16-20.59L74.41-25.90L88.66-25.90L94.02-20.49L94.02-15.70L87.15-15.70L87.15-18.25L85.33-20.07L77.84-20.07L76.02-18.25L76.02-7.64L77.84-5.82L85.33-5.82L87.15-7.64L87.15-10.19L94.02-10.19L94.02-5.41L88.66 0L74.41 0M98.70 0L98.70-37.13L105.56-37.13L105.56-16.38L110.08-16.38L116.69-25.90L124.28-25.90L115.65-13.42L124.80 0L117.21 0L109.93-10.56L105.56-10.56L105.56 0" fill="#f4f5f7"/>
+  <g transform="translate(212.06, 54.20) scale(0.7913) translate(-12.5, -55)" filter="url(#xglow)">
+    <g transform="translate(32 32) skewX(-8) translate(-32 -32)" fill="none" stroke="url(#sxXG)" stroke-width="9" stroke-linecap="round">
+      <path d="M20 14 44 50M44 14 20 50"/>
+    </g>
+  </g>
+</svg>

@@ -31,6 +31,7 @@
 !handoff.md
 !/docs
 !/installer
+!/brand
 
 # Packaged release artifacts (built by installer/package.ps1)
 /release/
