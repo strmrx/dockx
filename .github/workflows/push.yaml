@@ -55,6 +55,25 @@ jobs:
             *) echo 'validTag=false' >> $GITHUB_OUTPUT ;;
           esac
 
+      - name: Check out sources 📥
+        if: fromJSON(steps.check.outputs.validTag)
+        uses: actions/checkout@v4
+
+      - name: Verify tag matches buildspec version 🔒
+        if: fromJSON(steps.check.outputs.validTag)
+        run: |
+          : Verify tag matches buildspec version 🔒
+          # SINGLE SOURCE OF TRUTH pin: the plugin version lives in buildspec.json (baked
+          # into the DLL); the git tag is what BuildX + releases read. They MUST agree, or
+          # BuildX drifts from the real version (as happened between v0.28.0 and 0.54.0).
+          spec_version="$(jq -r .version buildspec.json)"
+          tag_version="${GITHUB_REF_NAME#v}"
+          echo "buildspec.json: ${spec_version}  |  tag: ${tag_version}"
+          if [[ "${spec_version}" != "${tag_version}" ]]; then
+            echo "::error::Release tag ${tag_version} does not match buildspec.json version ${spec_version}. Bump buildspec.json and re-tag so they agree."
+            exit 1
+          fi
+
       - name: Download Build Artifacts 📥
         uses: actions/download-artifact@v4
         if: fromJSON(steps.check.outputs.validTag)
