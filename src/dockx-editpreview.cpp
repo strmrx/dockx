@@ -34,6 +34,8 @@ overlay. Sources are held as weak references and resolved on the UI thread.
 #include <QDockWidget>
 #include <QHBoxLayout>
 #include <QHideEvent>
+#include <QKeyEvent>
+#include <QKeySequence>
 #include <QLabel>
 #include <QMainWindow>
 #include <QMenu>
@@ -112,7 +114,7 @@ public:
 		setAttribute(Qt::WA_NativeWindow);
 		setMinimumSize(160, 90);
 		setMouseTracking(true);
-		setFocusPolicy(Qt::ClickFocus);
+		setFocusPolicy(Qt::StrongFocus); /* so Ctrl+Z reaches keyPressEvent */
 	}
 
 	~EditWidget() override { teardown(); }
@@ -160,10 +162,30 @@ public:
 
 	void setScene(obs_weak_source_t *w)
 	{
-		std::lock_guard<std::mutex> lock(mtx);
-		if (sceneWeak)
-			obs_weak_source_release(sceneWeak);
-		sceneWeak = w;
+		/* refresh() re-resolves the scene on EVERY frontend event (often the same
+		   scene), so only treat an actual source change as a scene switch -- else a
+		   stray event would wipe the user's undo history mid-edit. */
+		bool changed;
+		{
+			std::lock_guard<std::mutex> lock(mtx);
+			obs_source_t *cur = sceneWeak ? obs_weak_source_get_source(sceneWeak) : nullptr;
+			obs_source_t *nw = w ? obs_weak_source_get_source(w) : nullptr;
+			changed = (cur != nw);
+			if (cur)
+				obs_source_release(cur);
+			if (nw)
+				obs_source_release(nw);
+			if (!changed) {
+				if (w)
+					obs_weak_source_release(w); /* redundant re-resolve: drop the extra ref */
+				return;
+			}
+			if (sceneWeak)
+				obs_weak_source_release(sceneWeak);
+			sceneWeak = w;
+		}
+		/* real scene change: don't keep undo refs to the old scene's items */
+		clearUndo();
 	}
 
 	/* caller releases; safe from any thread */
@@ -284,12 +306,13 @@ protected:
 		if (e->buttons() & Qt::LeftButton) {
 			if (!ok)
 				return;
+			const bool keepAspect = (e->modifiers() & Qt::ShiftModifier) != 0;
 			if (mode == Mode::Resize)
-				resizeTo(cx, cy);
+				resizeTo(cx, cy, keepAspect);
 			else if (mode == Mode::Crop)
 				cropTo(cx, cy);
 			else if (mode == Mode::GroupResize)
-				groupResizeTo(cx, cy);
+				groupResizeTo(cx, cy, keepAspect);
 			else if (mode == Mode::GroupRotate)
 				groupRotateTo(cx, cy, (e->modifiers() & Qt::ControlModifier) != 0);
 			else if (mode == Mode::Rotate)
@@ -305,6 +328,17 @@ protected:
 	{
 		if (e->button() == Qt::LeftButton)
 			endInteraction();
+	}
+
+	/* Ctrl+Z (Cmd+Z on macOS) undoes the last transform in this dock */
+	void keyPressEvent(QKeyEvent *e) override
+	{
+		if (e->matches(QKeySequence::Undo)) {
+			undo();
+			e->accept();
+			return;
+		}
+		QWidget::keyPressEvent(e);
 	}
 
 private:
@@ -377,6 +411,92 @@ private:
 	   graphics thread; a benign one-frame race at worst, no crash) */
 	bool snapX = false, snapY = false;
 	float snapXpos = 0, snapYpos = 0;
+
+	/* ---- undo (per-dock, transforms only) ----
+	   Each interaction snapshots the affected items' transforms at drag START
+	   into pendingSnap; on end, if the drag actually mutated anything, the
+	   snapshot is committed onto undoStack. Ctrl+Z restores the last one. Each
+	   snapshot holds its own ref to every item, so restoring a since-removed
+	   item is harmless (we keep it alive). */
+	struct ItemXf {
+		obs_sceneitem_t *item;
+		vec2 pos;
+		vec2 scale;
+		vec2 bounds;
+		float rot;
+		enum obs_bounds_type bt;
+		obs_sceneitem_crop crop;
+	};
+	std::vector<std::vector<ItemXf>> undoStack;
+	std::vector<ItemXf> pendingSnap;
+	bool mutated = false;
+	static constexpr size_t kMaxUndo = 50;
+
+	/* addref `it` and read its transform into an ItemXf */
+	ItemXf snapshotItem(obs_sceneitem_t *it)
+	{
+		ItemXf snap;
+		obs_sceneitem_addref(it);
+		snap.item = it;
+		obs_sceneitem_get_pos(it, &snap.pos);
+		obs_sceneitem_get_scale(it, &snap.scale);
+		obs_sceneitem_get_bounds(it, &snap.bounds);
+		snap.rot = obs_sceneitem_get_rot(it);
+		snap.bt = obs_sceneitem_get_bounds_type(it);
+		obs_sceneitem_get_crop(it, &snap.crop);
+		return snap;
+	}
+
+	/* snapshot the items the active interaction is about to change */
+	void capturePending()
+	{
+		for (ItemXf &s : pendingSnap)
+			obs_sceneitem_release(s.item);
+		pendingSnap.clear();
+		if (!held.empty()) {
+			for (Held &h : held)
+				pendingSnap.push_back(snapshotItem(h.item));
+		} else if (xfItem) {
+			pendingSnap.push_back(snapshotItem(xfItem));
+		} else if (!groupItems.empty()) {
+			for (GItem &gi : groupItems)
+				pendingSnap.push_back(snapshotItem(gi.item));
+		}
+	}
+
+	/* restore the most recent committed snapshot */
+	void undo()
+	{
+		endInteraction(); /* finish any in-progress drag first */
+		if (undoStack.empty())
+			return;
+		std::vector<ItemXf> snap = std::move(undoStack.back());
+		undoStack.pop_back();
+		for (ItemXf &s : snap) {
+			obs_sceneitem_defer_update_begin(s.item);
+			obs_sceneitem_set_bounds_type(s.item, s.bt);
+			obs_sceneitem_set_bounds(s.item, &s.bounds);
+			obs_sceneitem_set_scale(s.item, &s.scale);
+			obs_sceneitem_set_rot(s.item, s.rot);
+			obs_sceneitem_set_pos(s.item, &s.pos);
+			obs_sceneitem_set_crop(s.item, &s.crop);
+			obs_sceneitem_defer_update_end(s.item);
+			obs_sceneitem_release(s.item);
+		}
+	}
+
+	/* release every held ref and drop all undo history */
+	void clearUndo()
+	{
+		for (std::vector<ItemXf> &snap : undoStack)
+			for (ItemXf &s : snap)
+				obs_sceneitem_release(s.item);
+		undoStack.clear();
+		for (ItemXf &s : pendingSnap)
+			obs_sceneitem_release(s.item);
+		pendingSnap.clear();
+		mutated = false;
+	}
 
 	/* ---- display lifecycle ---- */
 
@@ -694,12 +814,14 @@ private:
 		axX = kHandles[h].sx;
 		axY = kHandles[h].sy;
 		buildSnapTargets();
+		capturePending();
 	}
 
-	void resizeTo(float cx, float cy)
+	void resizeTo(float cx, float cy, bool keepAspect)
 	{
 		if (!xfItem)
 			return;
+		mutated = true;
 		const float dX = cx - ancX, dY = cy - ancY;
 		float spanX = axX ? (dX * uxX + dY * uxY) : span0X;
 		float spanY = axY ? (dX * uyX + dY * uyY) : span0Y;
@@ -727,6 +849,13 @@ private:
 		spanY = (gpx - ancX) * uyX + (gpy - ancY) * uyY;
 		float rX = axX ? spanX / span0X : 1.0f;
 		float rY = axY ? spanY / span0Y : 1.0f;
+		/* Shift on a corner locks aspect: unify to the ratio that deviates
+		   more from 1, so the re-anchor below still pins the opposite corner.
+		   Edge handles (one axis) ignore Shift. */
+		if (keepAspect && axX && axY) {
+			const float r = (fabsf(rX - 1.0f) >= fabsf(rY - 1.0f)) ? rX : rY;
+			rX = rY = r;
+		}
 		const float minR = 0.02f; /* never zero/flip the item */
 		if (rX < minR)
 			rX = minR;
@@ -875,12 +1004,14 @@ private:
 			return;
 		mode = Mode::GroupResize;
 		buildSnapTargets();
+		capturePending();
 	}
 
-	void groupResizeTo(float cx, float cy)
+	void groupResizeTo(float cx, float cy, bool keepAspect)
 	{
 		if (groupItems.empty())
 			return;
+		mutated = true;
 		float spanX = axX ? (cx - ancX) : span0X;
 		float spanY = axY ? (cy - ancY) : span0Y;
 		float gpx = ancX + spanX; /* group axes are canvas x/y */
@@ -904,6 +1035,11 @@ private:
 		}
 		float rX = axX ? (gpx - ancX) / span0X : 1.0f;
 		float rY = axY ? (gpy - ancY) / span0Y : 1.0f;
+		/* Shift on a corner locks the group's aspect ratio (edges ignore it) */
+		if (keepAspect && axX && axY) {
+			const float r = (fabsf(rX - 1.0f) >= fabsf(rY - 1.0f)) ? rX : rY;
+			rX = rY = r;
+		}
 		const float minR = 0.02f;
 		if (rX < minR)
 			rX = minR;
@@ -955,6 +1091,7 @@ private:
 		if (groupItems.empty())
 			return;
 		mode = Mode::GroupRotate;
+		capturePending();
 	}
 
 	/* soft angular assist for FREE (non-Ctrl) rotation: if the angle lands
@@ -971,6 +1108,7 @@ private:
 	{
 		if (groupItems.empty())
 			return;
+		mutated = true;
 		const float ang = atan2f(cy - cenY, cx - cenX);
 		float dDeg = (ang - rotGrabAngle) * (180.0f / PI_F);
 		if (snap15)
@@ -1015,12 +1153,14 @@ private:
 		obs_sceneitem_get_box_transform(item, &m);
 		xf(m, 0.5f, 0.5f, cenX, cenY);
 		rotGrabAngle = atan2f(cy - cenY, cx - cenX);
+		capturePending();
 	}
 
 	void rotateTo(float cx, float cy, bool snap15)
 	{
 		if (!xfItem)
 			return;
+		mutated = true;
 		const float ang = atan2f(cy - cenY, cx - cenX);
 		float deg = startRot + (ang - rotGrabAngle) * (180.0f / PI_F);
 		if (snap15)
@@ -1130,12 +1270,14 @@ private:
 		obs_sceneitem_addref(xfItem);
 		cropIsBounds = boundsFit;
 		mode = Mode::Crop;
+		capturePending();
 	}
 
 	void cropTo(float cx, float cy)
 	{
 		if (!xfItem || mode != Mode::Crop)
 			return;
+		mutated = true;
 		const float mvx = cx - cropStartX, mvy = cy - cropStartY;
 		const float alongX = mvx * cropUxX + mvy * cropUxY; /* +x = local right */
 		const float alongY = mvx * cropUyX + mvy * cropUyY; /* +y = local down */
@@ -1327,6 +1469,7 @@ private:
 			}
 		}
 		buildSnapTargets();
+		capturePending();
 	}
 
 	/* nudge dx/dy so the selection bbox latches onto a snap target (a canvas
@@ -1383,6 +1526,7 @@ private:
 
 	void dragTo(float cx, float cy)
 	{
+		mutated = true;
 		float dx = cx - grabX;
 		float dy = cy - grabY;
 		computeSnap(dx, dy);
@@ -1397,6 +1541,22 @@ private:
 	/* end any interaction (move / resize / rotate); releases all held refs */
 	void endInteraction()
 	{
+		/* undo: commit the pre-interaction snapshot if this drag actually
+		   moved something, otherwise drop it (a plain selecting click) */
+		if (mutated && !pendingSnap.empty()) {
+			undoStack.push_back(std::move(pendingSnap));
+			if (undoStack.size() > kMaxUndo) {
+				for (ItemXf &s : undoStack.front())
+					obs_sceneitem_release(s.item);
+				undoStack.erase(undoStack.begin());
+			}
+		} else {
+			for (ItemXf &s : pendingSnap)
+				obs_sceneitem_release(s.item);
+		}
+		pendingSnap.clear();
+		mutated = false;
+
 		for (Held &h : held)
 			obs_sceneitem_release(h.item);
 		held.clear();

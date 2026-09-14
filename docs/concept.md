@@ -448,6 +448,15 @@ off-thesis: encoders, multi-output, NDI, VST, replay buffer.
   OBS logged an empty-locale warning on load. It now carries one real key (`dockx="DockX"`);
   all user-facing strings remain hardcoded in the C++ (single source of truth), the file exists
   only to satisfy OBS's locale loader.
+- **DockX Preview: Shift aspect-lock + Ctrl/Cmd+Z undo** (v0.55.0, Joey's ask). Holding **Shift**
+  while dragging a CORNER resize handle now scales uniformly (locks the aspect ratio), so a source
+  shrinks/grows without distortion (`resizeTo`/`groupResizeTo` gained a `keepAspect` arg; corner-only,
+  edges unchanged). **Ctrl+Z / Cmd+Z** undoes the last transform (move/resize/rotate/crop) in a
+  Preview dock: each interaction snapshots the affected items' pos/scale/rotation/bounds/crop before
+  it mutates (`capturePending`), commits to a per-dock undo stack on a real change (`endInteraction`,
+  cap 50), and `QKeySequence::Undo` restores + pops (`undo`). Undo history clears only on a genuine
+  scene change (setScene compares the resolved source, so refresh()'s per-event re-resolve does not
+  wipe it) and on teardown. Transforms only, not selection.
 - **Update an existing dock layout** (v0.54.0, Joey's ask): you can now overwrite a saved layout
   with your current arrangement instead of always making a new one ("tweak your Twitch stream
   layout, just save the preset you already have"). The Layouts tab primary button is now
