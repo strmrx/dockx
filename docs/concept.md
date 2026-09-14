@@ -448,6 +448,13 @@ off-thesis: encoders, multi-output, NDI, VST, replay buffer.
   OBS logged an empty-locale warning on load. It now carries one real key (`dockx="DockX"`);
   all user-facing strings remain hardcoded in the C++ (single source of truth), the file exists
   only to satisfy OBS's locale loader.
+- **Persistent brand + Ko-fi support bar** (v0.53.4): DockX is free, so the plugin doubles as the
+  marketing funnel. The always-visible bottom bar of the Tools > DockX dialog now shows
+  `DockX <version> · by StrmrX` (linking strmrx.com) plus a "Support on Ko-fi" button, on EVERY
+  tab (previously branding sat only on the Settings tab and there was no donation ask at all). The
+  first-run guide gained a closing Ko-fi support line. Donations point at the StrmrX brand Ko-fi via
+  a new `KOFI_URL` constant (`https://ko-fi.com/strmrx`, declared in dockx.hpp, defined beside
+  HELP_URL) = single source of truth shared with the website and repo README.
 - **Source tags + bulk ops** (demand #13, Joey 2026-09-11: "Source tagging is awesome,
   especially with the bulk ops") -- SHIPPED v0.50.0 (new file `src/dockx-tags.cpp`, new
   "Tags" tab next to Filters). Give any source your own labels (kept by source UUID in
