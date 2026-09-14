@@ -713,7 +713,7 @@ void showDialog(const QString &initialTab)
 	slv->addWidget(groupSub("Where your panels sit around the screen. Save one per way you stream.", savedBox));
 
 	QListWidget *layoutList = new HintList("No layouts saved yet.\n\nArrange your docks the way you like, "
-					       "then click Save current layout.",
+					       "then click Save as new.",
 					       savedBox);
 	slv->addWidget(layoutList, 1);
 
@@ -735,9 +735,14 @@ void showDialog(const QString &initialTab)
 	reloadLayouts();
 
 	QHBoxLayout *lb = new QHBoxLayout();
-	QPushButton *saveBtn = new QPushButton("Save current layout", layoutsTab);
+	QPushButton *saveBtn = new QPushButton("Save as new", layoutsTab);
 	makePrimary(saveBtn);
-	saveBtn->setToolTip("Snapshots which docks are open and where they sit right now.");
+	saveBtn->setToolTip("Save the current dock arrangement as a brand new layout.");
+	QPushButton *updateBtn = new QPushButton("Update selected", layoutsTab);
+	updateBtn->setToolTip("Overwrite the layout you picked with how your docks sit right now, "
+			      "keeping its name and hotkey. Use this when you tweak a layout you "
+			      "already saved instead of making a new one.");
+	updateBtn->setEnabled(false);
 	QPushButton *applyBtn = new QPushButton("Apply", layoutsTab);
 	applyBtn->setToolTip("Rearrange your docks to the selected layout. You can always undo. "
 			     "Double clicking a layout applies it too.");
@@ -746,6 +751,7 @@ void showDialog(const QString &initialTab)
 	undoBtn->setToolTip("Put the docks back the way they were before the last apply.");
 	QPushButton *moreBtn = new QPushButton("More", layoutsTab);
 	lb->addWidget(saveBtn);
+	lb->addWidget(updateBtn);
 	lb->addWidget(applyBtn);
 	lb->addWidget(undoBtn);
 	lb->addWidget(moreBtn);
@@ -756,6 +762,9 @@ void showDialog(const QString &initialTab)
 	   list: available, not shouting */
 	QMenu *layoutMenu = new QMenu(moreBtn);
 	layoutMenu->setToolTipsVisible(true);
+	QAction *actUpdate = layoutMenu->addAction("Update to current arrangement");
+	actUpdate->setToolTip("Overwrite the selected layout with how your docks sit right now.");
+	layoutMenu->addSeparator();
 	QAction *actHotkey = layoutMenu->addAction("Set hotkey...");
 	actHotkey->setToolTip("Bind a key that applies the selected layout; a Stream Deck can "
 			      "press that key for one tap changes.");
@@ -772,7 +781,11 @@ void showDialog(const QString &initialTab)
 				 layoutMenu->exec(layoutList->viewport()->mapToGlobal(pos));
 			 });
 	QObject::connect(layoutList, &QListWidget::itemSelectionChanged, applyBtn,
-			 [applyBtn, layoutList]() { applyBtn->setEnabled(layoutList->currentItem() != nullptr); });
+			 [applyBtn, updateBtn, layoutList]() {
+				 const bool has = layoutList->currentItem() != nullptr;
+				 applyBtn->setEnabled(has);
+				 updateBtn->setEnabled(has);
+			 });
 	QObject::connect(layoutList, &QListWidget::itemDoubleClicked, &dlg,
 			 [](QListWidgetItem *it) { panels::applyLayout(it->data(Qt::UserRole).toInt()); });
 
@@ -790,6 +803,30 @@ void showDialog(const QString &initialTab)
 		addLayout(name, m->saveState());
 		reloadLayouts();
 	});
+	/* overwrite the picked preset with the current arrangement (Joey: tweak a layout
+	   you already saved without making a brand new one). Shared by the button + menu.
+	   No reloadLayouts: name/hotkey are unchanged, so skipping it keeps the selection. */
+	auto doUpdateSelected = [&dlg, selectedLayoutId]() {
+		int id = selectedLayoutId();
+		Layout *l = id ? findLayout(id) : nullptr;
+		if (!l) {
+			QMessageBox::information(&dlg, "DockX", "Pick a layout to update first.");
+			return;
+		}
+		QMainWindow *m = mainWindow();
+		if (!m)
+			return;
+		auto answer = QMessageBox::question(
+			&dlg, "Update layout",
+			QString("Update \"%1\" to your current dock arrangement? This replaces what was "
+				"saved in it. Its name and hotkey stay the same.")
+				.arg(l->name));
+		if (answer != QMessageBox::Yes)
+			return;
+		updateLayout(id, m->saveState());
+	};
+	QObject::connect(updateBtn, &QPushButton::clicked, &dlg, doUpdateSelected);
+	QObject::connect(actUpdate, &QAction::triggered, &dlg, doUpdateSelected);
 	QObject::connect(applyBtn, &QPushButton::clicked, &dlg, [&dlg, selectedLayoutId]() {
 		int id = selectedLayoutId();
 		if (!id) {

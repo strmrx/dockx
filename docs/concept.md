@@ -448,6 +448,12 @@ off-thesis: encoders, multi-output, NDI, VST, replay buffer.
   OBS logged an empty-locale warning on load. It now carries one real key (`dockx="DockX"`);
   all user-facing strings remain hardcoded in the C++ (single source of truth), the file exists
   only to satisfy OBS's locale loader.
+- **Update an existing dock layout** (v0.54.0, Joey's ask): you can now overwrite a saved layout
+  with your current arrangement instead of always making a new one ("tweak your Twitch stream
+  layout, just save the preset you already have"). The Layouts tab primary button is now
+  "Save as new"; a new "Update selected" button (and a "Update to current arrangement" entry in
+  the More menu + right-click) overwrites the picked layout's saved state via `updateLayout(id, blob)`,
+  keeping its name and hotkey. Confirmed before overwrite; no reload after, so the selection stays.
 - **Persistent brand + Ko-fi support bar** (v0.53.4): DockX is free, so the plugin doubles as the
   marketing funnel. The always-visible bottom bar of the Tools > DockX dialog now shows
   `DockX <version> · by StrmrX` (linking strmrx.com) plus a "Support on Ko-fi" button, on EVERY

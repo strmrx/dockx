@@ -954,6 +954,16 @@ Layout &addLayout(const QString &name, const QByteArray &blob)
 	return stored;
 }
 
+void updateLayout(int id, const QByteArray &blob)
+{
+	/* overwrite an existing preset with the current arrangement; name + hotkey stay */
+	Layout *l = findLayout(id);
+	if (!l || blob.isEmpty())
+		return;
+	l->state = blob;
+	stateSave();
+}
+
 void removeLayout(int id)
 {
 	for (auto it = g_state.layouts.begin(); it != g_state.layouts.end(); ++it) {

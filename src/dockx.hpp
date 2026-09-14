@@ -261,6 +261,7 @@ void setObsReady(bool ready);
 
 Layout *findLayout(int id);
 Layout &addLayout(const QString &name, const QByteArray &blob);
+void updateLayout(int id, const QByteArray &blob); /* overwrite an existing layout's saved state */
 void removeLayout(int id);
 void renameLayout(int id, const QString &name);
 
