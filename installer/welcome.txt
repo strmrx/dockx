@@ -1,0 +1,21 @@
+DockX -- flexible dock layouts for OBS Studio
+
+DockX unlocks OBS's hidden dock nesting so you can build the layout you actually
+want: a full-height chat column beside a stack of panels, wide docks, saved
+layouts, source loadouts, tags, multi-monitor panels, and more. It lives inside
+OBS under Tools > DockX.
+
+DockX is free. If it saves you time, you can support development at the link on
+strmrx.com/dockx. Made by StrmrX.
+
+
+ABOUT THE WINDOWS SECURITY WARNING
+
+When you run this installer, Windows may show a blue "Windows protected your PC"
+box, and your antivirus may pause to scan it. This is normal for new software
+from a small publisher that has not yet paid for an expensive code-signing
+certificate. It does NOT mean the file is unsafe.
+
+DockX is open source -- you can read every line at github.com/strmrx/dockx -- and
+this installer only copies the plugin into your OBS folder. If Windows shows the
+box, click "More info" and then "Run anyway" to continue.
