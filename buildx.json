@@ -1,7 +1,7 @@
 {
-  "blurb": "Unlock OBS dock layouts: a native OBS plugin that lets docks sit in real columns, like a full height chat beside a stacked panel column. The layout OBS itself refuses to do.",
+  "blurb": "A whole suite of OBS upgrades in one native plugin: the dock layout OBS never allowed (full height chat beside stacked panels), a source search bar, saved layouts on a hotkey, color theming, scene folders, and far more. Everything streamers have asked OBS for, in one install.",
   "stack": "Native OBS plugin (C++ / Qt) · obs-plugintemplate",
-  "status": "prototype",
+  "status": "live",
   "category": "tool",
-  "url": ""
+  "url": "https://strmrx.com/dockx"
 }
