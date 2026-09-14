@@ -28,6 +28,7 @@ Diagrams are painted from the palette so they match any OBS theme.
 namespace dockx {
 
 const char *HELP_URL = "https://strmrx.com/dockx";
+const char *KOFI_URL = "https://ko-fi.com/strmrx";
 
 namespace hints {
 
@@ -212,6 +213,17 @@ void showGuide(QWidget *parent)
 		new QLabel(QString("More help and guides: <a href=\"%1\">strmrx.com/dockx</a>").arg(HELP_URL), dlg);
 	more->setOpenExternalLinks(true);
 	v->addWidget(more);
+
+	QLabel *support = new QLabel(
+		QString("DockX is free, with everything unlocked. If it earns a spot in your setup, you can "
+			"<a href=\"%1\">support development on Ko-fi</a>. No pressure, and nothing is ever "
+			"locked behind it.")
+			.arg(KOFI_URL),
+		dlg);
+	support->setWordWrap(true);
+	support->setOpenExternalLinks(true);
+	support->setTextFormat(Qt::RichText);
+	v->addWidget(support);
 
 	QHBoxLayout *bottom = new QHBoxLayout();
 	bottom->addStretch(1);

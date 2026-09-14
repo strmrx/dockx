@@ -3530,14 +3530,27 @@ void showDialog(const QString &initialTab)
 	sv->addLayout(helpRow);
 
 	sv->addStretch(1);
-	QLabel *about = new QLabel(
-		QString("DockX %1 · by <a href=\"https://strmrx.com\">StrmrX</a>").arg(PLUGIN_VERSION), settingsTab);
-	about->setOpenExternalLinks(true);
-	sv->addWidget(about);
+	/* branding used to live here; it now sits in the persistent bottom bar
+	   (built below) so it shows on every tab, not just Settings. */
 
 	tabs->addTab(settingsTab, "Settings");
 
+	/* persistent brand + support strip: shown on EVERY tab (the marketing funnel).
+	   Left: DockX version + a StrmrX link; then a Ko-fi support button; Close right. */
 	QHBoxLayout *bottom = new QHBoxLayout();
+	QLabel *brand = new QLabel(
+		QString("DockX %1 · by <a href=\"https://strmrx.com\">StrmrX</a>").arg(PLUGIN_VERSION), &dlg);
+	brand->setOpenExternalLinks(true);
+	brand->setTextInteractionFlags(Qt::TextBrowserInteraction);
+	brand->setToolTip("DockX is free. Visit strmrx.com for more streaming tools.");
+	bottom->addWidget(brand);
+
+	QPushButton *kofiBtn = new QPushButton(QString("Support on Ko-fi ") + QChar(0x2665), &dlg);
+	kofiBtn->setToolTip("DockX is free. A tip on Ko-fi keeps the updates coming. "
+			    "Opens ko-fi.com in your browser.");
+	QObject::connect(kofiBtn, &QPushButton::clicked, []() { QDesktopServices::openUrl(QUrl(KOFI_URL)); });
+	bottom->addWidget(kofiBtn);
+
 	bottom->addStretch(1);
 	QPushButton *closeBtn = new QPushButton("Close", &dlg);
 	QObject::connect(closeBtn, &QPushButton::clicked, &dlg, [&dlg]() { dlg.accept(); });

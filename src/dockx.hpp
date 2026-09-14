@@ -655,6 +655,9 @@ void showGuide(QWidget *parent); /* opens it on demand (Settings tab) */
 /* where the Help button and guide link send people */
 extern const char *HELP_URL;
 
+/* Ko-fi developer-donation link (single source of truth for every "support" surface) */
+extern const char *KOFI_URL;
+
 /* colored dot icon for a scene row; theme stylesheets cannot override icons,
    so the color always shows even when the theme repaints item text */
 QIcon colorDot(const QColor &c);
