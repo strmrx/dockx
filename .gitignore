@@ -25,10 +25,8 @@
 # Exclude CMake build number cache
 /cmake/.CMakeBuildNumber
 
-# StrmrX project files
+# StrmrX project files (CLAUDE.md + handoff.md are internal, local only)
 !buildx.json
-!CLAUDE.md
-!handoff.md
 !/docs
 !/installer
 !/brand

@@ -101,7 +101,7 @@ cmake --preset windows-x64
 cmake --build build_x64 --config RelWithDebInfo
 ```
 
-Output is `dockx.dll`. See `CLAUDE.md` and `docs/concept.md` for architecture and roadmap.
+Output is `dockx.dll`. See `docs/concept.md` for architecture and roadmap.
 
 ## License
 

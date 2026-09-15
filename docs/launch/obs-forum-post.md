@@ -1,7 +1,7 @@
 # OBS Forum Resource listing - DockX (draft for Joey to post)
 
-This is the copy for the obsproject.com **Resources** listing. You (Joey) create the
-resource from the StrmrX forum account. Claude does not post to moderated platforms.
+This is the copy for the obsproject.com **Resources** listing. Create the resource from
+the StrmrX forum account.
 
 ## Fields to fill in on the "Add resource" form
 
