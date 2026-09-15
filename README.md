@@ -33,7 +33,7 @@ streamers.
 - **Flexible dock nesting** - full-height columns beside stacked panels; build the layout OBS never allowed.
 - **Wide docks** - stretch a dock across a whole row, or across docks of your choosing.
 - **Scene Folders** - a collapsible, searchable folder tree over your scene list, with live thumbnails and a grid view.
-- **Pin any window** - dock an outside app (a TikTok Live Studio chat, a browser, a music player) into your OBS layout (Windows).
+- **Pin any window** - dock an outside app (a TikTok Live Studio chat, a browser, a music player) into your OBS layout. Windows only: macOS and Linux do not let one app adopt another app's window.
 - **Colors and themes** - recolor OBS to your liking. Customize it yourself and save the look, or use our premade one-click looks.
 - **DockX Preview** - a live, editable canvas inside a dock. Move, resize, rotate and crop sources from a panel, with snapping and studio-mode support. Per-dock zoom and pan. Replaces the base OBS scene preview, which is VERY limited in orientation, and lets you scale and move the preview however you like.
 - **Saved layouts and hotkeys** - snapshot any dock arrangement and bring it back with a hotkey, or auto-switch it with the scene. Lock a layout so it never drifts mid stream.
@@ -43,9 +43,11 @@ streamers.
 - **Second-screen container** - gather panels into one managed, nestable window on another monitor.
 - **Align and distribute** - line up, space evenly, and center on canvas from a proper Align tab.
 
-## Install (Windows)
+## Install
 
-DockX is a Windows plugin for now. Two ways to install:
+### Windows
+
+Two ways to install:
 
 1. **Installer (recommended):** download the `.exe` from [strmrx.com/dockx](https://strmrx.com/dockx)
    or the [Releases page](https://github.com/strmrx/dockx/releases). Close OBS, run it, done.
@@ -55,6 +57,16 @@ DockX is a Windows plugin for now. Two ways to install:
    `data\obs-plugins\dockx\locale\` inside your OBS folder).
 
 Then open OBS and look under **Tools > DockX**.
+
+### macOS and Linux (untested test builds)
+
+DockX builds clean for macOS and Linux, but we have not been able to test it on those
+systems yet, so consider these builds experimental. If you want to try one anyway, that
+would be genuinely helpful: grab the `.pkg` (macOS) or `.deb` (Ubuntu) from the
+[Releases page](https://github.com/strmrx/dockx/releases), and
+[tell us what worked and what did not](https://github.com/strmrx/dockx/issues). We would
+love the feedback. On macOS the package is unsigned, so right-click it and choose Open.
+Note that **Pin any window** is Windows only.
 
 ### About the Windows security warning
 

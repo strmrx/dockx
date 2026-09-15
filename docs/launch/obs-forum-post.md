@@ -42,14 +42,21 @@ DockX is free, with every feature unlocked.
 [*][B]Find any source[/B] - one search box scans every scene at once.
 [*][B]Source tags + bulk actions[/B] - label sources, then Show / Hide / Lock / Mute a whole group across every scene.
 [*][B]Wide docks[/B] - stretch a dock across a whole row.
-[*][B]Pin any window[/B] - dock an outside app (a TikTok Live Studio chat, a browser, a music player) into your OBS layout.
+[*][B]Pin any window[/B] - dock an outside app (a TikTok Live Studio chat, a browser, a music player) into your OBS layout. Windows only: macOS and Linux do not let one app adopt another app's window.
 [*][B]Second-screen container[/B] - gather panels into one managed, nestable window on another monitor.
 [*][B]Colors and themes[/B] - recolor OBS to your brand with one-click looks.
 [/LIST]
 
 [B]Install (Windows)[/B]
 Download the installer, close OBS, and run it. Or grab the zip and run install.bat as
-administrator. Then open OBS and look under Tools > DockX. DockX is a Windows plugin for now.
+administrator. Then open OBS and look under Tools > DockX.
+
+[B]macOS and Linux (untested test builds)[/B]
+DockX builds clean for macOS and Linux, but we have not been able to test it on those systems
+yet, so consider those builds experimental. If you want to try one anyway, grab the .pkg or
+.deb from the GitHub release and tell us what worked and what did not at
+https://github.com/strmrx/dockx/issues - we would love the feedback. On macOS the package is
+unsigned, so right-click it and choose Open.
 
 [B]A note on the Windows security prompt[/B]
 Windows may show a "Windows protected your PC" box because DockX is new software from a small
