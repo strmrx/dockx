@@ -1,0 +1,5 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="230" height="46" viewBox="0 0 230 46">
+  <rect x="1" y="1" width="228" height="44" rx="11" fill="#ff5e5b"/>
+  <rect x="1" y="1" width="228" height="22" rx="11" fill="#ffffff" opacity="0.10"/>
+  <text x="115" y="29" text-anchor="middle" font-family="Segoe UI, -apple-system, Roboto, Helvetica, Arial, sans-serif" font-size="17" font-weight="700" fill="#ffffff">Support on Ko-fi &#9829;</text>
+</svg>

@@ -1,18 +1,25 @@
-<picture>
-  <source media="(prefers-color-scheme: dark)" srcset="brand/dockx-logo.png">
-  <source media="(prefers-color-scheme: light)" srcset="brand/dockx-logo-light.png">
-  <img src="brand/dockx-logo.png" alt="DockX" width="280">
-</picture>
+<p align="center">
+  <picture>
+    <source media="(prefers-color-scheme: dark)" srcset="brand/dockx-logo.png">
+    <source media="(prefers-color-scheme: light)" srcset="brand/dockx-logo-light.png">
+    <img src="brand/dockx-logo.png" alt="DockX" width="300">
+  </picture>
+</p>
 
-**Flexible dock layouts for OBS Studio. Your OBS, your way.**
+<h3 align="center">Flexible dock layouts for OBS Studio. Your OBS, your way.</h3>
 
-DockX is a free, native OBS Studio plugin that unlocks the dock layouts OBS never let you
-build, then adds on the layout tools OBS always needed. It lives inside OBS under
-**Tools > DockX**.
+<p align="center">DockX is a free, native OBS Studio plugin that unlocks the dock layouts OBS never let you<br>
+build, then adds on the layout tools OBS always needed. It lives inside OBS under <b>Tools&nbsp;&gt;&nbsp;DockX</b>.</p>
 
-> **[Download DockX](https://strmrx.com/dockx)** &nbsp;·&nbsp; [Guides](https://strmrx.com/dockx) &nbsp;·&nbsp; [Support on Ko-fi](https://ko-fi.com/strmrx) &nbsp;·&nbsp; by [StrmrX](https://strmrx.com)
+<p align="center">
+  <a href="https://strmrx.com/dockx"><img src="brand/btn-download.svg" alt="Download DockX" height="46"></a>&nbsp;
+  <a href="https://ko-fi.com/strmrx"><img src="brand/btn-kofi.svg" alt="Support on Ko-fi" height="46"></a>
+</p>
+<p align="center">
+  <a href="https://strmrx.com"><img src="brand/btn-strmrx.svg" alt="More free and paid tools at strmrx.com" height="46"></a>
+</p>
 
-Free, with every feature unlocked, and it stays that way.
+<p align="center"><b>Free, with every feature unlocked, and it stays that way.</b></p>
 
 ---
 
@@ -78,9 +85,11 @@ reading its repo), and the installer only copies the plugin into your OBS folder
 
 ## Support development
 
-DockX is free and every feature is unlocked. If it earns a spot in your setup, a tip keeps
-the updates coming: **[Support on Ko-fi](https://ko-fi.com/strmrx)**. No pressure, and
-nothing is ever locked behind it.
+<p align="center"><b>DockX is free and every feature is unlocked.</b><br>
+If it earns a spot in your setup, a tip keeps the updates coming. No pressure, and nothing
+is ever locked behind it.</p>
+
+<p align="center"><a href="https://ko-fi.com/strmrx"><img src="brand/btn-kofi.svg" alt="Support on Ko-fi" height="46"></a></p>
 
 ## Build from source
 
@@ -100,4 +109,11 @@ GPL v2, inherited from OBS Studio and the plugin template. See [LICENSE](LICENSE
 
 ---
 
-Made by [StrmrX](https://strmrx.com) - tools built by streamers, for streamers.
+<h3 align="center">Part of the StrmrX family</h3>
+
+<p align="center">Tools built by streamers, for streamers: StreamPals, BingoX, RaidX, ControlX and more.</p>
+
+<p align="center">
+  <a href="https://strmrx.com"><img src="brand/btn-strmrx.svg" alt="More free and paid tools at strmrx.com" height="46"></a>&nbsp;
+  <a href="https://ko-fi.com/strmrx"><img src="brand/btn-kofi.svg" alt="Support on Ko-fi" height="46"></a>
+</p>
