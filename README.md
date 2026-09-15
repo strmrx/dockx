@@ -7,7 +7,7 @@
 **Flexible dock layouts for OBS Studio. Your OBS, your way.**
 
 DockX is a free, native OBS Studio plugin that unlocks the dock layouts OBS never let you
-build, then piles on the layout tools OBS always needed. It lives inside OBS under
+build, then adds on the layout tools OBS always needed. It lives inside OBS under
 **Tools > DockX**.
 
 > **[Download DockX](https://strmrx.com/dockx)** &nbsp;·&nbsp; [Guides](https://strmrx.com/dockx) &nbsp;·&nbsp; [Support on Ko-fi](https://ko-fi.com/strmrx) &nbsp;·&nbsp; by [StrmrX](https://strmrx.com)
@@ -24,22 +24,23 @@ From a dock system that is finally unlocked and fully customizable, to search to
 organization, and pinning third party apps directly into your OBS setup, DockX is such a
 glow up from base OBS that you will wonder how you ever streamed without it.
 
-And it is built by a streamer, around the details and pain points he runs into every single
-day. This is truly a plugin made to solve the everyday problems of streamers.
+And it is built by a streamer who uses OBS daily, inspired by the details and pain points he
+runs into every single day. This is truly a plugin made to solve the everyday problems of
+streamers.
 
 ## Features
 
 - **Flexible dock nesting** - full-height columns beside stacked panels; build the layout OBS never allowed.
-- **DockX Preview** - a live, editable canvas inside a dock. Move, resize, rotate and crop sources from a panel, with snapping and studio-mode support. Per-dock zoom and pan.
+- **Wide docks** - stretch a dock across a whole row, or across docks of your choosing.
 - **Scene Folders** - a collapsible, searchable folder tree over your scene list, with live thumbnails and a grid view.
+- **Pin any window** - dock an outside app (a TikTok Live Studio chat, a browser, a music player) into your OBS layout (Windows).
+- **Colors and themes** - recolor OBS to your liking. Customize it yourself and save the look, or use our premade one-click looks.
+- **DockX Preview** - a live, editable canvas inside a dock. Move, resize, rotate and crop sources from a panel, with snapping and studio-mode support. Per-dock zoom and pan. Replaces the base OBS scene preview, which is VERY limited in orientation, and lets you scale and move the preview however you like.
 - **Saved layouts and hotkeys** - snapshot any dock arrangement and bring it back with a hotkey, or auto-switch it with the scene. Lock a layout so it never drifts mid stream.
 - **Source loadouts** - save where every source sits and snap them all back in one click.
 - **Find any source** - one search box scans every scene at once; jump to a source, open its properties, clean up orphans.
 - **Source tags + bulk actions** - label sources, then Show / Hide / Lock / Mute a whole group across every scene at once.
-- **Wide docks** - stretch a dock across a whole row.
-- **Pin any window** - dock an outside app (a TikTok Live Studio chat, a browser, a music player) into your OBS layout (Windows).
 - **Second-screen container** - gather panels into one managed, nestable window on another monitor.
-- **Colors and themes** - recolor OBS to your brand, with one-click looks.
 - **Align and distribute** - line up, space evenly, and center on canvas from a proper Align tab.
 
 ## Install (Windows)
