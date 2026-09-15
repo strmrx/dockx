@@ -470,6 +470,13 @@ off-thesis: encoders, multi-output, NDI, VST, replay buffer.
   first-run guide gained a closing Ko-fi support line. Donations point at the StrmrX brand Ko-fi via
   a new `KOFI_URL` constant (`https://ko-fi.com/strmrx`, declared in dockx.hpp, defined beside
   HELP_URL) = single source of truth shared with the website and repo README.
+  - v0.55.1 redesign (Joey: the bare row "looks wrong", and "it's a sell"): the bar is now a
+    framed strip (subtle tinted QFrame + border + radius) so it reads as a deliberate surface;
+    the Ko-fi button is painted Ko-fi red (#FF5E5B) so it draws the eye; the copy actually
+    sells ("DockX is free for everyone. Tips keep the updates coming.") and the right side
+    hooks discovery: "DockX <version> · get more free and paid tools at strmrx.com". Joey
+    considered a top-level "Support" tab instead; call was the always-visible footer converts
+    better than a tab nobody clicks (a tab can still be added later).
 - **Source tags + bulk ops** (demand #13, Joey 2026-09-11: "Source tagging is awesome,
   especially with the bulk ops") -- SHIPPED v0.50.0 (new file `src/dockx-tags.cpp`, new
   "Tags" tab next to Filters). Give any source your own labels (kept by source UUID in

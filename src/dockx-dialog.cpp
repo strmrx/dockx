@@ -3573,26 +3573,45 @@ void showDialog(const QString &initialTab)
 	tabs->addTab(settingsTab, "Settings");
 
 	/* persistent brand + support strip: shown on EVERY tab (the marketing funnel).
-	   Left: DockX version + a StrmrX link; then a Ko-fi support button; Close right. */
-	QHBoxLayout *bottom = new QHBoxLayout();
-	QLabel *brand = new QLabel(
-		QString("DockX %1 · by <a href=\"https://strmrx.com\">StrmrX</a>").arg(PLUGIN_VERSION), &dlg);
-	brand->setOpenExternalLinks(true);
-	brand->setTextInteractionFlags(Qt::TextBrowserInteraction);
-	brand->setToolTip("DockX is free. Visit strmrx.com for more streaming tools.");
-	bottom->addWidget(brand);
+	   A framed bar so it reads as a deliberate surface, not stray widgets:
+	   left = the free-plugin sell + a Ko-fi-red support button, right = the
+	   more-tools hook (version + strmrx.com link) and Close. */
+	QFrame *bar = new QFrame(&dlg);
+	bar->setObjectName("dockxFooter");
+	bar->setStyleSheet("#dockxFooter { background: rgba(127,127,127,0.10); "
+			   "border: 1px solid rgba(127,127,127,0.28); border-radius: 6px; }");
+	QHBoxLayout *bottom = new QHBoxLayout(bar);
+	bottom->setContentsMargins(12, 8, 12, 8);
+	bottom->setSpacing(10);
 
-	QPushButton *kofiBtn = new QPushButton(QString("Support on Ko-fi ") + QChar(0x2665), &dlg);
-	kofiBtn->setToolTip("DockX is free. A tip on Ko-fi keeps the updates coming. "
-			    "Opens ko-fi.com in your browser.");
+	QLabel *sell = new QLabel("<b>DockX is free for everyone.</b> Tips keep the updates coming.", bar);
+	bottom->addWidget(sell);
+
+	QPushButton *kofiBtn = new QPushButton(QString("Support on Ko-fi ") + QChar(0x2665), bar);
+	kofiBtn->setToolTip("A tip on Ko-fi helps keep DockX free. Opens ko-fi.com in your browser.");
+	kofiBtn->setCursor(Qt::PointingHandCursor);
+	kofiBtn->setStyleSheet("QPushButton { background-color: #FF5E5B; color: #ffffff; border: none; "
+			       "border-radius: 4px; padding: 6px 14px; font-weight: 600; }"
+			       "QPushButton:hover { background-color: #FF7370; }"
+			       "QPushButton:pressed { background-color: #E04E4B; }");
 	QObject::connect(kofiBtn, &QPushButton::clicked, []() { QDesktopServices::openUrl(QUrl(KOFI_URL)); });
 	bottom->addWidget(kofiBtn);
 
 	bottom->addStretch(1);
-	QPushButton *closeBtn = new QPushButton("Close", &dlg);
+
+	QLabel *brand = new QLabel(QString("DockX %1 · get more free and paid tools at "
+					   "<a href=\"https://strmrx.com\">strmrx.com</a>")
+					   .arg(PLUGIN_VERSION),
+				   bar);
+	brand->setOpenExternalLinks(true);
+	brand->setTextInteractionFlags(Qt::TextBrowserInteraction);
+	brand->setToolTip("Visit strmrx.com for the rest of the StrmrX streaming tools");
+	bottom->addWidget(brand);
+
+	QPushButton *closeBtn = new QPushButton("Close", bar);
 	QObject::connect(closeBtn, &QPushButton::clicked, &dlg, [&dlg]() { dlg.accept(); });
 	bottom->addWidget(closeBtn);
-	root->addLayout(bottom);
+	root->addWidget(bar);
 
 	if (!initialTab.isEmpty()) {
 		for (int i = 0; i < tabs->count(); i++)
