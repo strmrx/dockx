@@ -18,10 +18,14 @@ Free, with every feature unlocked, and it stays that way.
 
 ## Why DockX
 
-OBS's dock system is row based: you cannot put a full-height chat column next to a second
-column of stacked panels. The window framework OBS is built on has supported nested docks
-for years. OBS just never turned it on. DockX turns it on from inside OBS, and makes the
-whole thing a product.
+Because streamers and broadcasters deserve a better experience.
+
+From a dock system that is finally unlocked and fully customizable, to search tools, folder
+organization, and pinning third party apps directly into your OBS setup, DockX is such a
+glow up from base OBS that you will wonder how you ever streamed without it.
+
+And it is built by a streamer, around the details and pain points he runs into every single
+day. This is truly a plugin made to solve the everyday problems of streamers.
 
 ## Features
 

@@ -8,8 +8,8 @@ resource from the StrmrX forum account. Claude does not post to moderated platfo
 - **Title:** `DockX - Flexible Dock Layouts for OBS`
 - **Tag line:** `Full-height chat beside stacked panels, saved layouts, editable preview dock, and more. Free.`
 - **Category:** Plugins (OBS Studio Plugins / Tools)
-- **Version:** `0.53.3` (match buildspec.json at launch)
-- **Icon:** the DockX logo (once we have one)
+- **Version:** `0.55.1` (match buildspec.json at launch)
+- **Icon:** attach `brand/dockx-icon-256.png`
 - **Screenshots (attach 3-5):** you will need these before posting -
   1. A full-height chat column beside a stacked panel column (the headline layout)
   2. The Tools > DockX window on the Layouts tab
